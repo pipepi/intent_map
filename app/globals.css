@@ -1185,45 +1185,18 @@ code,
 .root-legend i.event,
 .canvas-status-surface i.event { background: #f0b95b; box-shadow: 0 0 7px #f0b95b; }
 
-.focused-runtime-surface {
+.focused-runtime-content {
   z-index: 2;
   position: absolute;
-  left: 60px;
-  top: 72px;
-  display: grid;
-  grid-template-rows: 42px minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid rgba(85, 102, 165, 0.78);
-  border-radius: 14px;
-  background: rgba(12, 17, 37, 0.97);
-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.4);
-}
-
-.focused-runtime-surface > header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  border-bottom: 1px solid #2a3459;
-  background: #10162e;
-}
-
-.focused-runtime-surface > header span {
-  color: #46c7ff;
-  font-family: Consolas, monospace;
-  font-size: 9px;
-}
-
-.focused-runtime-surface > header small {
-  margin-left: auto;
-  color: #647198;
-  font-family: Consolas, monospace;
-  font-size: 9px;
-}
-
-.focused-runtime-surface > div {
-  min-height: 0;
+  left: 32px;
+  top: 64px;
   overflow: auto;
+}
+
+.focused-runtime-content > * {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .runtime-add-child {

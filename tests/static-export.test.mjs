@@ -63,6 +63,9 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /event\.key === "0"/);
   assert.match(page, /layoutLocked/);
   assert.match(page, /runtime-add-child/);
+  assert.match(page, /className="focused-runtime-content"/);
+  assert.doesNotMatch(page, /className="focused-runtime-surface"/);
+  assert.doesNotMatch(page, /focused-runtime-surface[\s\S]*<header>/);
   assert.match(shell, /scale < 0\.75/);
   assert.match(shell, /lod === "always-live"/);
   assert.match(shell, /runtime-node-titlebar/);
@@ -128,6 +131,9 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /updateOutputMapping/);
   assert.match(page, /moveBusinessNodeStart/);
   assert.match(page, /resizeBusinessNodeStart/);
+  assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);
+  assert.match(page, /scopeNode\.implementation\?\.key === "current-container"/);
+  assert.match(page, /expanded \? 1 : 0\.58/);
 });
 
 test("keeps node movement and automatic lanes inside the active root", async () => {

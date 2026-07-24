@@ -1327,11 +1327,17 @@ export default function Home() {
     const start = { ...node.position };
     const size = nodeSize(node);
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
+    const world = target.closest<HTMLElement>(".business-preview-world");
+    const renderedScale =
+      world && world.offsetWidth > 0
+        ? world.getBoundingClientRect().width / world.offsetWidth
+        : previewScale * cameraRef.current.scale;
+    const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
       const position = {
-        x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / previewScale)),
-        y: Math.max(70, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / previewScale)),
+        x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / pointerScale)),
+        y: Math.max(70, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / pointerScale)),
       };
       setDocumentState((active) => ({
         ...active,
@@ -1366,10 +1372,16 @@ export default function Home() {
     const startSize = nodeSize(node);
     const startPosition = { ...node.position };
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
+    const world = target.closest<HTMLElement>(".business-preview-world");
+    const renderedScale =
+      world && world.offsetWidth > 0
+        ? world.getBoundingClientRect().width / world.offsetWidth
+        : previewScale * cameraRef.current.scale;
+    const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
-      const dx = (moveEvent.clientX - origin.x) / previewScale;
-      const dy = (moveEvent.clientY - origin.y) / previewScale;
+      const dx = (moveEvent.clientX - origin.x) / pointerScale;
+      const dy = (moveEvent.clientY - origin.y) / pointerScale;
       let x = startPosition.x;
       let y = startPosition.y;
       let width = startSize.width;
@@ -1433,7 +1445,21 @@ export default function Home() {
 
   const renderBusinessCanvas = () => {
     const size = businessScope.canvasSize ?? { width: 1400, height: 850 };
-    const scale = Math.min(0.58, 650 / size.width, 360 / size.height);
+    const expanded =
+      scopePath.length > 1 &&
+      scopeNode.implementation?.key === "current-container";
+    const focusedCanvas = scopeNode.canvasSize ?? { width: 1200, height: 800 };
+    const availableWidth = expanded
+      ? Math.max(650, focusedCanvas.width - 80)
+      : 650;
+    const availableHeight = expanded
+      ? Math.max(360, focusedCanvas.height - 100)
+      : 360;
+    const scale = Math.min(
+      expanded ? 1 : 0.58,
+      availableWidth / size.width,
+      availableHeight / size.height,
+    );
     return (
       <div className="business-preview">
         <div
@@ -1862,9 +1888,14 @@ export default function Home() {
               />
             ))}
             {scopePath.length > 1 && (
-              <section className="focused-runtime-surface" style={{ width: Math.max(640, worldSize.width - 120), height: Math.max(420, worldSize.height - 140) }}>
-                <header><span>{scopeNode.kind.toUpperCase()}</span><strong>{scopeNode.name}</strong><small>{scopeNode.implementation?.key ?? "intent"}</small></header>
-                <div>{renderNodeContent(scopeNode)}</div>
+              <section
+                className="focused-runtime-content"
+                style={{
+                  width: Math.max(640, worldSize.width - 64),
+                  height: Math.max(420, worldSize.height - 96),
+                }}
+              >
+                {renderNodeContent(scopeNode)}
               </section>
             )}
             {(focusedLeaf || !visibleNodes.length) && (
