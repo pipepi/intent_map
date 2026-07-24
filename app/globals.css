@@ -956,6 +956,69 @@ code,
   margin-top: auto;
 }
 
+.node-interface-list {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.node-interface-port {
+  width: 82px;
+  height: 22px;
+  z-index: 5;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  border: 1px solid rgba(93, 112, 167, 0.78);
+  border-radius: 5px;
+  color: #b8c4e8;
+  background: rgba(11, 17, 38, 0.97);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.3);
+  font-family: Consolas, "Microsoft YaHei", monospace;
+  font-size: 8px;
+  line-height: 20px;
+}
+
+.input-interface-port {
+  left: -41px;
+  border-color: rgba(57, 167, 255, 0.68);
+}
+
+.output-interface-port {
+  right: -41px;
+  justify-content: flex-end;
+  border-color: rgba(139, 92, 246, 0.72);
+}
+
+.node-port-name {
+  width: 58px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output-interface-port .node-port-name {
+  text-align: right;
+}
+
+.node-port-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border: 2px solid var(--blue);
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 0 6px rgba(57, 167, 255, 0.5);
+}
+
+.output-interface-port .node-port-dot {
+  border-color: var(--purple);
+  box-shadow: 0 0 6px rgba(139, 92, 246, 0.52);
+}
+
 .resize-handle {
   z-index: 6;
   position: absolute;

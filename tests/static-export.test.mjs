@@ -19,6 +19,10 @@ test("exports a fully static entry page", async () => {
   assert.match(html, /resize-handle resize-s/);
   assert.match(html, /resize-handle resize-se/);
   assert.match(html, /resize-mode-toggle simple/);
+  assert.match(html, /node-interface-port input-interface-port/);
+  assert.match(html, /node-interface-port output-interface-port/);
+  assert.match(html, /title="业务约束"/);
+  assert.match(html, /title="场景序列与约束"/);
   assert.doesNotMatch(html, /resize-handle resize-nw/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
@@ -29,6 +33,20 @@ test("supports simple and full node resize modes", async () => {
   assert.match(page, /simpleResizeDirections = \["e", "s", "se"\]/);
   assert.match(page, /resizeDirections = \["nw", "n", "ne", "e", "se", "s", "sw", "w"\]/);
   assert.match(page, /resizeMode: getResizeMode\(child\) === "simple" \? "full" : "simple"/);
+});
+
+test("anchors derived edges to named node interface ports", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const css = await readFile(new URL("app/globals.css", root), "utf8");
+
+  assert.match(page, /getNodePortAnchorX\(source, "output"\)/);
+  assert.match(page, /getNodePortAnchorX\(target, "input"\)/);
+  assert.match(page, /target\.inputs\.findIndex/);
+  assert.match(page, /source\?\.outputs\.findIndex/);
+  assert.match(css, /\.input-interface-port\s*\{[^}]*left:\s*-41px/s);
+  assert.match(css, /\.output-interface-port\s*\{[^}]*right:\s*-41px/s);
+  assert.match(css, /text-overflow:\s*ellipsis/);
+  assert.match(css, /white-space:\s*nowrap/);
 });
 
 test("copies all deployment assets into the static output", async () => {

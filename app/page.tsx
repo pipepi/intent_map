@@ -104,11 +104,29 @@ const DEFAULT_NODE_SIZE = { width: 174, height: 102 };
 const MIN_NODE_SIZE = { width: 150, height: 96 };
 const MAX_NODE_SIZE = { width: 520, height: 360 };
 const NODE_BOUNDS = { left: 195, top: 62, right: 900, bottom: 590 };
+const NODE_PORT_SIZE = { width: 82, height: 22 };
+const NODE_PORT_ANCHOR_INSET = 10;
 const resizeDirections = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
 const simpleResizeDirections = ["e", "s", "se"] as const;
 type ResizeDirection = (typeof resizeDirections)[number];
 const getNodeSize = (node: IntentNode) => node.size ?? DEFAULT_NODE_SIZE;
 const getResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
+const getNodePortY = (index: number, count: number, height: number) => {
+  const first = 36;
+  const last = Math.max(first, height - 24);
+  if (count <= 1) return Math.round((first + last) / 2);
+  return Math.round(first + ((last - first) * index) / (count - 1));
+};
+const getNodePortAnchorX = (
+  node: IntentNode,
+  side: "input" | "output",
+) => {
+  const size = getNodeSize(node);
+  const outsideOffset = NODE_PORT_SIZE.width / 2 - NODE_PORT_ANCHOR_INSET;
+  return side === "input"
+    ? node.position.x - outsideOffset
+    : node.position.x + size.width + outsideOffset;
+};
 
 const sampleDocument = (): IntentDocument => {
   const scenarioFlow: IntentNode = {
@@ -1506,10 +1524,17 @@ export default function Home() {
     }
     const source = current.children?.find((node) => node.id === ref.nodeId);
     const sourceSize = source ? getNodeSize(source) : DEFAULT_NODE_SIZE;
+    const outputIndex = source?.outputs.findIndex((port) => port.id === ref.portId) ?? -1;
     return source
       ? {
-          x: source.position.x + sourceSize.width,
-          y: source.position.y + sourceSize.height / 2,
+          x: getNodePortAnchorX(source, "output"),
+          y:
+            source.position.y +
+            getNodePortY(
+              Math.max(outputIndex, 0),
+              Math.max(source.outputs.length, 1),
+              sourceSize.height,
+            ),
         }
       : { x: 0, y: 0 };
   };
@@ -1711,8 +1736,17 @@ export default function Home() {
                     const target = current.children?.find((node) => node.id === ref.targetId);
                     if (!target) return null;
                     const targetSize = getNodeSize(target);
-                    const tx = target.position.x;
-                    const ty = target.position.y + targetSize.height / 2;
+                    const targetPortIndex = target.inputs.findIndex(
+                      (port) => port.id === ref.targetPort,
+                    );
+                    const tx = getNodePortAnchorX(target, "input");
+                    const ty =
+                      target.position.y +
+                      getNodePortY(
+                        Math.max(targetPortIndex, 0),
+                        Math.max(target.inputs.length, 1),
+                        targetSize.height,
+                      );
                     const bend = Math.max(45, (tx - source.x) * 0.45);
                     return (
                       <path
@@ -1789,6 +1823,40 @@ export default function Home() {
                         <span className="node-ports">
                           <span>{node.inputs.length} in</span>
                           <span>{node.outputs.length} out</span>
+                        </span>
+                        <span className="node-interface-list input-interface-list">
+                          {node.inputs.map((port, portIndex) => (
+                            <span
+                              key={port.id}
+                              className="node-interface-port input-interface-port"
+                              style={{
+                                top:
+                                  getNodePortY(portIndex, node.inputs.length, size.height) -
+                                  NODE_PORT_SIZE.height / 2,
+                              }}
+                              title={port.name}
+                            >
+                              <span className="node-port-dot" />
+                              <span className="node-port-name">{port.name}</span>
+                            </span>
+                          ))}
+                        </span>
+                        <span className="node-interface-list output-interface-list">
+                          {node.outputs.map((port, portIndex) => (
+                            <span
+                              key={port.id}
+                              className="node-interface-port output-interface-port"
+                              style={{
+                                top:
+                                  getNodePortY(portIndex, node.outputs.length, size.height) -
+                                  NODE_PORT_SIZE.height / 2,
+                              }}
+                              title={port.name}
+                            >
+                              <span className="node-port-name">{port.name}</span>
+                              <span className="node-port-dot" />
+                            </span>
+                          ))}
                         </span>
                         {visibleDirections.map((direction) => (
                           <span
