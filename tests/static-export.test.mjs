@@ -10,6 +10,10 @@ test("exports a fully static entry page", async () => {
   assert.match(html, /<title>Intent Map｜分形意图编辑器<\/title>/);
   assert.match(html, /<main class="app-shell">/);
   assert.match(html, /○ Static|Intent Map/);
+  assert.match(html, /智能报价系统/);
+  assert.match(html, /报价编排/);
+  assert.match(html, /价格策略/);
+  assert.match(html, /应用会员折扣/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 

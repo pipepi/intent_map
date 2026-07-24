@@ -85,7 +85,7 @@ const sampleDocument = (): IntentDocument => {
   const customer: IntentNode = {
     id: "customer",
     name: "读取客户等级",
-    description: "将父意图的客户等级传递给定价流程。",
+    description: "读取当前作用域中的客户等级。",
     kind: "operator",
     operator: "identity",
     inputs: [
@@ -102,7 +102,7 @@ const sampleDocument = (): IntentDocument => {
   const subtotal: IntentNode = {
     id: "subtotal",
     name: "计算基础价",
-    description: "数量与单价相乘，生成折扣前金额。",
+    description: "将商品数量与单价相乘。",
     kind: "operator",
     operator: "multiply",
     inputs: [
@@ -124,7 +124,7 @@ const sampleDocument = (): IntentDocument => {
   };
   const discount: IntentNode = {
     id: "discount",
-    name: "应用折扣",
+    name: "应用会员折扣",
     description: "根据客户等级计算折后金额。",
     kind: "operator",
     operator: "discount",
@@ -147,8 +147,8 @@ const sampleDocument = (): IntentDocument => {
   };
   const quote: IntentNode = {
     id: "quote",
-    name: "生成报价",
-    description: "组合报价所需字段，形成可导出的结构化结果。",
+    name: "生成报价单",
+    description: "组合成交金额和客户等级。",
     kind: "operator",
     operator: "object",
     inputs: [
@@ -168,10 +168,70 @@ const sampleDocument = (): IntentDocument => {
     outputs: [{ id: "quote_out", name: "报价单", type: "object" }],
     position: { x: 745, y: 328 },
   };
+
+  // 第 3 层：策略容器；其直属算子构成第 4 层。
+  const pricingStrategy: IntentNode = {
+    id: "pricing_strategy",
+    name: "价格策略",
+    description: "第 3 层意图：组织基础价、会员折扣与报价单生成。",
+    kind: "composite",
+    inputs: [
+      { id: "quantity", name: "商品数量", type: "number" },
+      { id: "unit_price", name: "商品单价", type: "number" },
+      { id: "customer_level", name: "客户等级", type: "string" },
+    ],
+    outputs: [
+      {
+        id: "strategy_quote",
+        name: "策略报价",
+        type: "object",
+        mapping: { kind: "ref", nodeId: "quote", portId: "quote_out" },
+      },
+    ],
+    children: [customer, subtotal, discount, quote],
+    position: { x: 345, y: 190 },
+  };
+
+  // 第 2 层：编排容器，只能通过公开接口访问第 3 层。
+  const quoteOrchestration: IntentNode = {
+    id: "quote_orchestration",
+    name: "报价编排",
+    description: "第 2 层意图：绑定根环境并调用内部价格策略。",
+    kind: "composite",
+    inputs: [
+      { id: "quantity", name: "商品数量", type: "number" },
+      { id: "unit_price", name: "商品单价", type: "number" },
+      { id: "customer_level", name: "客户等级", type: "string" },
+    ],
+    outputs: [
+      {
+        id: "orchestration_quote",
+        name: "编排报价",
+        type: "object",
+        mapping: {
+          kind: "ref",
+          nodeId: "pricing_strategy",
+          portId: "strategy_quote",
+        },
+      },
+    ],
+    children: [
+      {
+        ...pricingStrategy,
+        inputs: pricingStrategy.inputs.map((port) => ({
+          ...port,
+          binding: { kind: "env", portId: port.id },
+        })),
+      },
+    ],
+    position: { x: 375, y: 190 },
+  };
+
+  // 第 1 层：根意图。默认树为 根 → 报价编排 → 价格策略 → 叶子算子。
   const root: IntentNode = {
     id: "root",
-    name: "智能报价",
-    description: "根据商品数量、单价和客户等级生成一致、可追踪的报价。",
+    name: "智能报价系统",
+    description: "第 1 层根意图：展示四层分形模块与逐层导出。",
     kind: "composite",
     inputs: [
       { id: "quantity", name: "商品数量", type: "number" },
@@ -183,22 +243,35 @@ const sampleDocument = (): IntentDocument => {
         id: "final_quote",
         name: "最终报价",
         type: "object",
-        mapping: { kind: "ref", nodeId: "quote", portId: "quote_out" },
+        mapping: {
+          kind: "ref",
+          nodeId: "quote_orchestration",
+          portId: "orchestration_quote",
+        },
       },
     ],
-    children: [customer, subtotal, discount, quote],
+    children: [
+      {
+        ...quoteOrchestration,
+        inputs: quoteOrchestration.inputs.map((port) => ({
+          ...port,
+          binding: { kind: "env", portId: port.id },
+        })),
+      },
+    ],
     position: { x: 0, y: 0 },
   };
+
   return {
     version: 1,
     rootIntent: root,
     publishedModules: [
       {
         moduleId: "pricing-core",
-        name: "基础定价",
-        version: 3,
-        publishedAt: "今天 10:32",
-        snapshot: structuredClone(subtotal),
+        name: "价格策略",
+        version: 4,
+        publishedAt: "刚刚",
+        snapshot: structuredClone(pricingStrategy),
       },
     ],
   };
