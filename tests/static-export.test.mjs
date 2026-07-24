@@ -22,7 +22,7 @@ test("exports a fully static entry page", async () => {
   assert.match(html, /node-interface-port input-interface-port/);
   assert.match(html, /node-interface-port output-interface-port/);
   assert.match(html, /node-interface-section/);
-  assert.match(html, /height:171px/);
+  assert.match(html, /height:173px/);
   assert.match(html, /title="业务约束"/);
   assert.match(html, /title="场景序列与约束"/);
   assert.doesNotMatch(html, /resize-handle resize-nw/);
@@ -54,7 +54,7 @@ test("anchors derived edges to named node interface ports", async () => {
 
   assert.match(page, /getNodePortAnchorX\(source, "output"\)/);
   assert.match(page, /getNodePortAnchorX\(target, "input"\)/);
-  assert.match(page, /NODE_PORT_SECTION_TOP = 81/);
+  assert.match(page, /NODE_PORT_SECTION_TOP = 83/);
   assert.match(
     page,
     /NODE_PORT_SECTION_TOP \+ NODE_PORT_SIZE\.height \/ 2 \+ index \* NODE_PORT_ROW_GAP/,
