@@ -67,8 +67,11 @@ test("anchors derived edges to named node interface ports", async () => {
   assert.match(css, /\.node-interface-section\s*\{[^}]*position:\s*relative[^}]*flex:\s*0 0 auto/s);
   assert.match(page, /target\.inputs\.findIndex/);
   assert.match(page, /source\?\.outputs\.findIndex/);
-  assert.match(css, /\.input-interface-port\s*\{[^}]*left:\s*-41px/s);
-  assert.match(css, /\.output-interface-port\s*\{[^}]*right:\s*-41px/s);
+  assert.match(page, /NODE_PORT_ANCHOR_OUTSET = 5\.5/);
+  assert.match(css, /\.input-interface-port\s*\{[^}]*left:\s*0/s);
+  assert.match(css, /\.output-interface-port\s*\{[^}]*right:\s*0/s);
+  assert.match(css, /\.input-interface-port \.node-port-dot\s*\{[^}]*left:\s*-9px/s);
+  assert.match(css, /\.output-interface-port \.node-port-dot\s*\{[^}]*right:\s*-9px/s);
   assert.match(css, /\.node-port-name\s*\{[^}]*flex:\s*0 0 56px/s);
   assert.match(css, /text-overflow:\s*ellipsis/);
   assert.match(css, /white-space:\s*nowrap/);

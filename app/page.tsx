@@ -104,8 +104,8 @@ const DEFAULT_NODE_SIZE = { width: 174, height: 102 };
 const MIN_NODE_SIZE = { width: 150, height: 96 };
 const MAX_NODE_SIZE = { width: 520, height: 360 };
 const NODE_BOUNDS = { left: 195, top: 62, right: 900, bottom: 590 };
-const NODE_PORT_SIZE = { width: 82, height: 22 };
-const NODE_PORT_ANCHOR_INSET = 10.5;
+const NODE_PORT_SIZE = { width: 72, height: 22 };
+const NODE_PORT_ANCHOR_OUTSET = 5.5;
 const NODE_PORT_SECTION_TOP = 76;
 const NODE_PORT_ROW_GAP = 28;
 const NODE_FOOTER_SPACE = 34;
@@ -132,10 +132,9 @@ const getNodePortAnchorX = (
   side: "input" | "output",
 ) => {
   const size = getNodeSize(node);
-  const outsideOffset = NODE_PORT_SIZE.width / 2 - NODE_PORT_ANCHOR_INSET;
   return side === "input"
-    ? node.position.x - outsideOffset
-    : node.position.x + size.width + outsideOffset;
+    ? node.position.x - NODE_PORT_ANCHOR_OUTSET
+    : node.position.x + size.width + NODE_PORT_ANCHOR_OUTSET;
 };
 
 const sampleDocument = (): IntentDocument => {
