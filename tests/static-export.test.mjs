@@ -15,9 +15,20 @@ test("exports a fully static entry page", async () => {
   assert.match(html, /场景匹配的 UI Demo 与流程共识/);
   assert.match(html, /业务流程匹配的数据库表结构/);
   assert.match(html, /基于表结构的业务逻辑与 UI API/);
-  assert.match(html, /resize-handle resize-nw/);
   assert.match(html, /resize-handle resize-e/);
+  assert.match(html, /resize-handle resize-s/);
+  assert.match(html, /resize-handle resize-se/);
+  assert.match(html, /resize-mode-toggle simple/);
+  assert.doesNotMatch(html, /resize-handle resize-nw/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
+});
+
+test("supports simple and full node resize modes", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+
+  assert.match(page, /simpleResizeDirections = \["e", "s", "se"\]/);
+  assert.match(page, /resizeDirections = \["nw", "n", "ne", "e", "se", "s", "sw", "w"\]/);
+  assert.match(page, /resizeMode: getResizeMode\(child\) === "simple" \? "full" : "simple"/);
 });
 
 test("copies all deployment assets into the static output", async () => {

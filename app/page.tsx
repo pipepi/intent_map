@@ -3,6 +3,7 @@
 import {
   ChangeEvent,
   CSSProperties,
+  Fragment,
   PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
@@ -53,6 +54,7 @@ type IntentNode = {
   children?: IntentNode[];
   position: { x: number; y: number };
   size?: { width: number; height: number };
+  resizeMode?: "simple" | "full";
   moduleRef?: { moduleId: string; version: number };
 };
 
@@ -103,8 +105,10 @@ const MIN_NODE_SIZE = { width: 150, height: 96 };
 const MAX_NODE_SIZE = { width: 520, height: 360 };
 const NODE_BOUNDS = { left: 195, top: 62, right: 900, bottom: 590 };
 const resizeDirections = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
+const simpleResizeDirections = ["e", "s", "se"] as const;
 type ResizeDirection = (typeof resizeDirections)[number];
 const getNodeSize = (node: IntentNode) => node.size ?? DEFAULT_NODE_SIZE;
+const getResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
 
 const sampleDocument = (): IntentDocument => {
   const scenarioFlow: IntentNode = {
@@ -1169,6 +1173,21 @@ export default function Home() {
     handle.addEventListener("pointercancel", onUp);
   };
 
+  const toggleResizeMode = (nodeId: string) => {
+    updateCurrent((scope) => ({
+      ...scope,
+      children: scope.children?.map((child) =>
+        child.id === nodeId
+          ? {
+              ...child,
+              resizeMode: getResizeMode(child) === "simple" ? "full" : "simple",
+            }
+          : child,
+      ),
+    }));
+    setSelectedId(nodeId);
+  };
+
   const addOperator = () => {
     if (current.kind === "linkedModule") return;
     const node: IntentNode = {
@@ -1294,6 +1313,7 @@ export default function Home() {
               name: node.name.replace(" 实例", ""),
               position: node.position,
               size: node.size,
+              resizeMode: node.resizeMode,
               inputs: node.inputs,
               moduleRef: undefined,
               kind: module.snapshot.kind,
@@ -1740,42 +1760,71 @@ export default function Home() {
                   ))}
                 </div>
 
-                {(current.children ?? []).map((node) => (
-                  <button
-                    key={node.id}
-                    className={`intent-node graph-node kind-${node.kind} ${selectedId === node.id ? "selected" : ""} ${trace.some((item) => item.name === node.name && item.status === "success") ? "executed" : ""}`}
-                    style={{
-                      left: node.position.x,
-                      top: node.position.y,
-                      width: getNodeSize(node).width,
-                      height: getNodeSize(node).height,
-                    }}
-                    onClick={() => setSelectedId(node.id)}
-                    onDoubleClick={() => enterNode(node)}
-                    onPointerDown={(event) => moveNode(node.id, event)}
-                  >
-                    <span className="node-topline">
-                      <b>{node.kind === "operator" ? node.operator?.toUpperCase() : node.kind === "linkedModule" ? "LINKED" : "COMPOSITE"}</b>
-                      {node.moduleRef ? <em>v{node.moduleRef.version}</em> : <i />}
-                    </span>
-                    <strong>{node.name}</strong>
-                    <small>{node.description}</small>
-                    <span className="node-ports">
-                      <span>{node.inputs.length} in</span>
-                      <span>{node.outputs.length} out</span>
-                    </span>
-                    {resizeDirections.map((direction) => (
-                      <span
-                        key={direction}
-                        className={`resize-handle resize-${direction}`}
-                        aria-hidden="true"
-                        onClick={(event) => event.stopPropagation()}
-                        onDoubleClick={(event) => event.stopPropagation()}
-                        onPointerDown={(event) => resizeNode(node.id, direction, event)}
-                      />
-                    ))}
-                  </button>
-                ))}
+                {(current.children ?? []).map((node) => {
+                  const size = getNodeSize(node);
+                  const resizeMode = getResizeMode(node);
+                  const visibleDirections =
+                    resizeMode === "full" ? resizeDirections : simpleResizeDirections;
+                  const isSelected = selectedId === node.id;
+                  return (
+                    <Fragment key={node.id}>
+                      <button
+                        className={`intent-node graph-node kind-${node.kind} ${isSelected ? "selected" : ""} ${trace.some((item) => item.name === node.name && item.status === "success") ? "executed" : ""}`}
+                        style={{
+                          left: node.position.x,
+                          top: node.position.y,
+                          width: size.width,
+                          height: size.height,
+                        }}
+                        onClick={() => setSelectedId(node.id)}
+                        onDoubleClick={() => enterNode(node)}
+                        onPointerDown={(event) => moveNode(node.id, event)}
+                      >
+                        <span className="node-topline">
+                          <b>{node.kind === "operator" ? node.operator?.toUpperCase() : node.kind === "linkedModule" ? "LINKED" : "COMPOSITE"}</b>
+                          {node.moduleRef ? <em>v{node.moduleRef.version}</em> : <i />}
+                        </span>
+                        <strong>{node.name}</strong>
+                        <small>{node.description}</small>
+                        <span className="node-ports">
+                          <span>{node.inputs.length} in</span>
+                          <span>{node.outputs.length} out</span>
+                        </span>
+                        {visibleDirections.map((direction) => (
+                          <span
+                            key={direction}
+                            className={`resize-handle resize-${direction}`}
+                            aria-hidden="true"
+                            onClick={(event) => event.stopPropagation()}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => resizeNode(node.id, direction, event)}
+                          />
+                        ))}
+                      </button>
+                      <button
+                        className={`resize-mode-toggle ${resizeMode} ${isSelected ? "selected" : ""}`}
+                        style={{
+                          left: node.position.x + size.width - 30,
+                          top: node.position.y + size.height + 5,
+                        }}
+                        aria-label={
+                          resizeMode === "simple"
+                            ? `将「${node.name}」切换为四边四角缩放`
+                            : `将「${node.name}」切换为右边、下边和右下角缩放`
+                        }
+                        title={
+                          resizeMode === "simple"
+                            ? "当前：右边、下边、右下角 · 点击切换为八向"
+                            : "当前：四边四角 · 点击切换为三向"
+                        }
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={() => toggleResizeMode(node.id)}
+                      >
+                        {resizeMode === "simple" ? "┘" : "⤢"}
+                      </button>
+                    </Fragment>
+                  );
+                })}
 
                 <div className="output-stack">
                   <div className="stack-label">父级输出</div>
