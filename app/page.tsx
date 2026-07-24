@@ -98,183 +98,141 @@ const uid = (prefix = "id") =>
   `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 
 const sampleDocument = (): IntentDocument => {
-  const customer: IntentNode = {
-    id: "customer",
-    name: "读取客户等级",
-    description: "读取当前作用域中的客户等级。",
-    kind: "operator",
-    operator: "identity",
-    inputs: [
-      {
-        id: "level_in",
-        name: "客户等级",
-        type: "string",
-        binding: { kind: "env", portId: "customer_level" },
-      },
-    ],
-    outputs: [{ id: "level_out", name: "等级", type: "string" }],
-    position: { x: 270, y: 86 },
-  };
-  const subtotal: IntentNode = {
-    id: "subtotal",
-    name: "计算基础价",
-    description: "将商品数量与单价相乘。",
-    kind: "operator",
-    operator: "multiply",
-    inputs: [
-      {
-        id: "quantity_in",
-        name: "数量",
-        type: "number",
-        binding: { kind: "env", portId: "quantity" },
-      },
-      {
-        id: "price_in",
-        name: "单价",
-        type: "number",
-        binding: { kind: "env", portId: "unit_price" },
-      },
-    ],
-    outputs: [{ id: "subtotal_out", name: "基础金额", type: "number" }],
-    position: { x: 270, y: 270 },
-  };
-  const discount: IntentNode = {
-    id: "discount",
-    name: "应用会员折扣",
-    description: "根据客户等级计算折后金额。",
-    kind: "operator",
-    operator: "discount",
-    inputs: [
-      {
-        id: "amount_in",
-        name: "基础金额",
-        type: "number",
-        binding: { kind: "ref", nodeId: "subtotal", portId: "subtotal_out" },
-      },
-      {
-        id: "tier_in",
-        name: "等级",
-        type: "string",
-        binding: { kind: "ref", nodeId: "customer", portId: "level_out" },
-      },
-    ],
-    outputs: [{ id: "discounted_out", name: "折后金额", type: "number" }],
-    position: { x: 545, y: 176 },
-  };
-  const quote: IntentNode = {
-    id: "quote",
-    name: "生成报价单",
-    description: "组合成交金额和客户等级。",
+  const scenarioFlow: IntentNode = {
+    id: "scenario_flow",
+    name: "核心物流动场景序列与约束",
+    description: "识别核心业务流动场景、参与者、前后置条件、主序列、异常分支与约束。",
     kind: "operator",
     operator: "object",
     inputs: [
       {
-        id: "total_in",
-        name: "成交金额",
-        type: "number",
-        binding: { kind: "ref", nodeId: "discount", portId: "discounted_out" },
-      },
-      {
-        id: "tier_quote",
-        name: "客户等级",
+        id: "scenario_goal",
+        name: "产品目标",
         type: "string",
-        binding: { kind: "ref", nodeId: "customer", portId: "level_out" },
+        binding: { kind: "env", portId: "product_goal" },
+      },
+      {
+        id: "scenario_constraints",
+        name: "业务约束",
+        type: "object",
+        binding: { kind: "env", portId: "business_constraints" },
       },
     ],
-    outputs: [{ id: "quote_out", name: "报价单", type: "object" }],
-    position: { x: 745, y: 328 },
+    outputs: [{ id: "scenario_spec", name: "场景序列与约束", type: "object" }],
+    position: { x: 205, y: 105 },
   };
 
-  // 第 3 层：策略容器；其直属算子构成第 4 层。
-  const pricingStrategy: IntentNode = {
-    id: "pricing_strategy",
-    name: "价格策略",
-    description: "第 3 层意图：组织基础价、会员折扣与报价单生成。",
-    kind: "composite",
+  const uiDemo: IntentNode = {
+    id: "ui_demo",
+    name: "场景匹配的 UI Demo 与流程共识",
+    description: "用与场景匹配的 UI 界面组成可操作 Demo，使需求方和实现方对业务处理流程达成共识。",
+    kind: "operator",
+    operator: "object",
     inputs: [
-      { id: "quantity", name: "商品数量", type: "number" },
-      { id: "unit_price", name: "商品单价", type: "number" },
-      { id: "customer_level", name: "客户等级", type: "string" },
-    ],
-    outputs: [
       {
-        id: "strategy_quote",
-        name: "策略报价",
+        id: "demo_scenarios",
+        name: "场景序列",
         type: "object",
-        mapping: { kind: "ref", nodeId: "quote", portId: "quote_out" },
-      },
-    ],
-    children: [customer, subtotal, discount, quote],
-    position: { x: 345, y: 190 },
-  };
-
-  // 第 2 层：编排容器，只能通过公开接口访问第 3 层。
-  const quoteOrchestration: IntentNode = {
-    id: "quote_orchestration",
-    name: "报价编排",
-    description: "第 2 层意图：绑定根环境并调用内部价格策略。",
-    kind: "composite",
-    inputs: [
-      { id: "quantity", name: "商品数量", type: "number" },
-      { id: "unit_price", name: "商品单价", type: "number" },
-      { id: "customer_level", name: "客户等级", type: "string" },
-    ],
-    outputs: [
-      {
-        id: "orchestration_quote",
-        name: "编排报价",
-        type: "object",
-        mapping: {
+        binding: {
           kind: "ref",
-          nodeId: "pricing_strategy",
-          portId: "strategy_quote",
+          nodeId: "scenario_flow",
+          portId: "scenario_spec",
+        },
+      },
+      {
+        id: "demo_stakeholders",
+        name: "协作角色",
+        type: "array",
+        binding: { kind: "env", portId: "stakeholders" },
+      },
+    ],
+    outputs: [{ id: "demo_consensus", name: "UI Demo 与流程共识", type: "object" }],
+    position: { x: 385, y: 285 },
+  };
+
+  const databaseSchema: IntentNode = {
+    id: "database_schema",
+    name: "业务流程匹配的数据库表结构",
+    description: "根据已确认的业务流程和约束，抽象出实体、关系、状态与完整性规则匹配的数据库表结构。",
+    kind: "operator",
+    operator: "object",
+    inputs: [
+      {
+        id: "schema_scenarios",
+        name: "业务流程",
+        type: "object",
+        binding: {
+          kind: "ref",
+          nodeId: "scenario_flow",
+          portId: "scenario_spec",
+        },
+      },
+      {
+        id: "schema_constraints",
+        name: "业务约束",
+        type: "object",
+        binding: { kind: "env", portId: "business_constraints" },
+      },
+    ],
+    outputs: [{ id: "schema_model", name: "数据库表结构", type: "object" }],
+    position: { x: 555, y: 105 },
+  };
+
+  const businessApi: IntentNode = {
+    id: "business_api",
+    name: "基于表结构的业务逻辑与 UI API",
+    description: "根据数据库表结构实现业务处理逻辑，并输出 UI 界面需要的稳定 API 契约。",
+    kind: "operator",
+    operator: "object",
+    inputs: [
+      {
+        id: "api_schema",
+        name: "数据库表结构",
+        type: "object",
+        binding: {
+          kind: "ref",
+          nodeId: "database_schema",
+          portId: "schema_model",
+        },
+      },
+      {
+        id: "api_ui_contract",
+        name: "UI 交互契约",
+        type: "object",
+        binding: {
+          kind: "ref",
+          nodeId: "ui_demo",
+          portId: "demo_consensus",
         },
       },
     ],
-    children: [
-      {
-        ...pricingStrategy,
-        inputs: pricingStrategy.inputs.map((port) => ({
-          ...port,
-          binding: { kind: "env", portId: port.id },
-        })),
-      },
-    ],
-    position: { x: 375, y: 190 },
+    outputs: [{ id: "api_contract", name: "业务逻辑与 UI API", type: "object" }],
+    position: { x: 725, y: 285 },
   };
 
-  // 第 1 层：根意图。默认树为 根 → 报价编排 → 价格策略 → 叶子算子。
   const root: IntentNode = {
     id: "root",
-    name: "智能报价系统",
-    description: "第 1 层根意图：展示四层分形模块与逐层导出。",
+    name: "Agentic 软件开发框架",
+    description: "从核心场景共识出发，依次形成 UI Demo、数据库表结构以及可供 UI 使用的业务 API。",
     kind: "composite",
     inputs: [
-      { id: "quantity", name: "商品数量", type: "number" },
-      { id: "unit_price", name: "商品单价", type: "number" },
-      { id: "customer_level", name: "客户等级", type: "string" },
+      { id: "product_goal", name: "产品目标", type: "string" },
+      { id: "business_constraints", name: "业务约束", type: "object" },
+      { id: "stakeholders", name: "协作角色", type: "array" },
     ],
     outputs: [
       {
-        id: "final_quote",
-        name: "最终报价",
+        id: "delivery_blueprint",
+        name: "可实施软件交付蓝图",
         type: "object",
         mapping: {
           kind: "ref",
-          nodeId: "quote_orchestration",
-          portId: "orchestration_quote",
+          nodeId: "business_api",
+          portId: "api_contract",
         },
       },
     ],
-    children: [
-      {
-        ...quoteOrchestration,
-        inputs: quoteOrchestration.inputs.map((port) => ({
-          ...port,
-          binding: { kind: "env", portId: port.id },
-        })),
-      },
-    ],
+    children: [scenarioFlow, uiDemo, databaseSchema, businessApi],
     position: { x: 0, y: 0 },
   };
 
@@ -283,11 +241,11 @@ const sampleDocument = (): IntentDocument => {
     rootIntent: root,
     publishedModules: [
       {
-        moduleId: "pricing-core",
-        name: "价格策略",
-        version: 4,
+        moduleId: "scenario-flow-core",
+        name: "核心场景建模",
+        version: 1,
         publishedAt: "刚刚",
-        snapshot: structuredClone(pricingStrategy),
+        snapshot: structuredClone(scenarioFlow),
       },
     ],
   };
@@ -488,7 +446,7 @@ const statusText: Record<Trace["status"], string> = {
 export default function Home() {
   const [doc, setDoc] = useState<IntentDocument>(() => sampleDocument());
   const [path, setPath] = useState<string[]>(["root"]);
-  const [selectedId, setSelectedId] = useState<string>("discount");
+  const [selectedId, setSelectedId] = useState<string>("scenario_flow");
   const [history, setHistory] = useState<IntentDocument[]>([]);
   const [future, setFuture] = useState<IntentDocument[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -497,9 +455,13 @@ export default function Home() {
   const [trace, setTrace] = useState<Trace[]>([]);
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
-    quantity: 24,
-    unit_price: 128,
-    customer_level: "VIP",
+    product_goal: "构建一个需求方与实现方可共同验证、可持续演进的业务应用",
+    business_constraints: {
+      deterministic: true,
+      auditable: true,
+      moduleBoundary: "strict",
+    },
+    stakeholders: ["需求方", "产品设计", "工程实现"],
   });
   const [activeTab, setActiveTab] = useState<"properties" | "run">("properties");
   const [toast, setToast] = useState("");

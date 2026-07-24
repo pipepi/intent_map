@@ -10,10 +10,11 @@ test("exports a fully static entry page", async () => {
   assert.match(html, /<title>Intent Map｜分形意图编辑器<\/title>/);
   assert.match(html, /<main class="app-shell">/);
   assert.match(html, /○ Static|Intent Map/);
-  assert.match(html, /智能报价系统/);
-  assert.match(html, /报价编排/);
-  assert.match(html, /价格策略/);
-  assert.match(html, /应用会员折扣/);
+  assert.match(html, /Agentic 软件开发框架/);
+  assert.match(html, /核心物流动场景序列与约束/);
+  assert.match(html, /场景匹配的 UI Demo 与流程共识/);
+  assert.match(html, /业务流程匹配的数据库表结构/);
+  assert.match(html, /基于表结构的业务逻辑与 UI API/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 
