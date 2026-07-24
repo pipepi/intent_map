@@ -24,13 +24,15 @@ export type RuntimeRenderer = (props: RuntimeRendererProps) => ReactNode;
 
 const summaryRenderer =
   (eyebrow: string, detail: string): RuntimeRenderer =>
-  ({ node }) => (
-    <div className="runtime-summary">
-      <span>{eyebrow}</span>
-      <strong>{node.name}</strong>
-      <small>{detail}</small>
-    </div>
-  );
+  function SummaryRenderer({ node }) {
+    return (
+      <div className="runtime-summary">
+        <span>{eyebrow}</span>
+        <strong>{node.name}</strong>
+        <small>{detail}</small>
+      </div>
+    );
+  };
 
 const builtInRenderers: Record<string, RuntimeRenderer> = {
   "application-root": summaryRenderer("ROOT", "全屏节点运行时"),

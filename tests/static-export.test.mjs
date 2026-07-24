@@ -89,8 +89,32 @@ test("routes interface commands through the state node and event clock", async (
   assert.match(page, /dispatchRuntimeEvent\("NAVIGATE_SCOPE"/);
   assert.match(page, /dispatchRuntimeEvent\("SET_LAYOUT_LOCK"/);
   assert.match(page, /dispatchRuntimeEvent\("DOCUMENT_CHANGED"/);
-  assert.match(page, /commandHandlerRef\.current/);
+  assert.match(page, /lastCommands\.forEach/);
   assert.match(page, /runtime-mini-trace/);
+});
+
+test("protects core composition and preserves business editing", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+
+  assert.match(page, /selected\.implementation\?\.core/);
+  assert.match(page, /window\.confirm\(`「\$\{selected\.name\}」是核心节点/);
+  assert.match(page, /重置应用节点图/);
+  assert.match(page, /createApplicationDocument\(clone\(businessRoot\)/);
+  assert.match(page, /bindingOptionsFor/);
+  assert.match(page, /updateInputBinding/);
+  assert.match(page, /updateOutputMapping/);
+  assert.match(page, /moveBusinessNodeStart/);
+  assert.match(page, /resizeBusinessNodeStart/);
+});
+
+test("keeps node movement and automatic lanes inside the active root", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+
+  assert.match(page, /bounds\.width - size\.width - 20/);
+  assert.match(page, /bounds\.height - size\.height - 20/);
+  assert.match(page, /interface: \[500, 950, 1400\]/);
+  assert.match(page, /laneHeights\[lane\]\.indexOf/);
+  assert.match(page, /height: Math\.max\(1500, maximumBottom\)/);
 });
 
 test("copies all deployment assets into the static output", async () => {

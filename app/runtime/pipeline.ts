@@ -55,6 +55,9 @@ const commandTypes: Record<string, string> = {
   ADD_BUSINESS_CHILD: "ADD_BUSINESS_CHILD",
   DUPLICATE_NODE: "DUPLICATE_NODE",
   DELETE_NODE: "DELETE_NODE",
+  DUPLICATE_APP_NODE: "DUPLICATE_APP_NODE",
+  DELETE_APP_NODE: "DELETE_APP_NODE",
+  RESET_APP_GRAPH: "RESET_APP_GRAPH",
 };
 
 const commandFor = (
@@ -82,7 +85,7 @@ export const processEventBatch = (
       `事件时钟 tick ${tick} 超出安全上限：${events.length}/${maxEvents}`,
     );
   }
-  let state = { ...currentState };
+  const state = { ...currentState };
   const commands: RuntimeCommand[] = [];
   const nextTick: RuntimeEvent[] = [];
   const trace: PipelineTraceEntry[] = [];

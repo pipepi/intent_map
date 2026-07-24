@@ -22,7 +22,6 @@ import {
   type Expression,
   type IntentDocumentV2,
   type IntentNode,
-  type IntentPort,
   type JsonValue,
   type PublishedModule,
 } from "./runtime/model";
@@ -450,6 +449,7 @@ export default function Home() {
   const [pendingEvents, setPendingEvents] = useState<RuntimeEvent[]>([]);
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceEntry[]>([]);
   const [lastCommands, setLastCommands] = useState<PipelineCommand[]>([]);
+  const [eventTick, setEventTick] = useState(0);
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
     product_goal: "构建可验证、可持续演进的业务应用",
     business_constraints: "确定性、可审计、严格模块边界",
@@ -459,9 +459,6 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRunRef = useRef(false);
   const cameraRef = useRef(camera);
-  const eventTickRef = useRef(0);
-  const commandHandlerRef = useRef<(command: PipelineCommand) => void>(() => undefined);
-  cameraRef.current = camera;
   const businessScopeId = runtimeState.scopeId;
   const selectedBusinessNodeId = runtimeState.selectionId;
   const layoutLocked = runtimeState.layoutLocked;
@@ -494,20 +491,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!pendingEvents.length) return;
-    const tick = eventTickRef.current + 1;
-    eventTickRef.current = tick;
+    const tick = eventTick + 1;
+    // The event clock intentionally commits one atomic batch per effect turn.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEventTick(tick);
     try {
       const batch = processEventBatch(pendingEvents, runtimeState, tick);
       setPendingEvents(batch.nextTick);
       setRuntimeState(batch.state);
       setPipelineTrace((entries) => [...entries.slice(-95), ...batch.trace]);
       setLastCommands(batch.commands);
-      batch.commands.forEach((command) => commandHandlerRef.current(command));
     } catch (error) {
       setPendingEvents([]);
       setToast(error instanceof Error ? error.message : String(error));
     }
-  }, [pendingEvents, runtimeState]);
+  }, [eventTick, pendingEvents, runtimeState]);
 
   const appRoot = documentState.rootIntent;
   const scopeNode = useMemo(
@@ -523,7 +521,7 @@ export default function Home() {
     findNode(businessRoot, selectedBusinessNodeId) ?? businessScope;
   const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
   const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
-  const visibleNodes = scopeNode.children ?? [];
+  const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
 
   const commit = useCallback(
     (next: IntentDocumentV2) => {
@@ -583,8 +581,11 @@ export default function Home() {
 
   useEffect(() => {
     const saved = documentState.viewState.cameras[scopeNode.id];
-    if (saved) setScopeCamera(saved);
-    else fitScope();
+    const frame = window.requestAnimationFrame(() => {
+      if (saved) setScopeCamera(saved);
+      else fitScope();
+    });
+    return () => window.cancelAnimationFrame(frame);
     // Scope identity is the intentional trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeNode.id]);
@@ -705,14 +706,16 @@ export default function Home() {
   ) => {
     if (layoutLocked || event.button !== 0) return;
     const start = { ...node.position };
+    const size = nodeSize(node);
+    const bounds = scopeNode.canvasSize ?? { width: 2400, height: 1500 };
     const origin = { x: event.clientX, y: event.clientY };
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     let latest = start;
     const move = (moveEvent: PointerEvent) => {
       latest = {
-        x: Math.max(20, start.x + (moveEvent.clientX - origin.x) / cameraRef.current.scale),
-        y: Math.max(20, start.y + (moveEvent.clientY - origin.y) / cameraRef.current.scale),
+        x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / cameraRef.current.scale)),
+        y: Math.max(56, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / cameraRef.current.scale)),
       };
       setDocumentState((active) => ({
         ...active,
@@ -742,6 +745,7 @@ export default function Home() {
     if (layoutLocked || event.button !== 0) return;
     const startSize = nodeSize(node);
     const startPosition = { ...node.position };
+    const bounds = scopeNode.canvasSize ?? { width: 2400, height: 1500 };
     const origin = { x: event.clientX, y: event.clientY };
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
@@ -752,15 +756,17 @@ export default function Home() {
       let y = startPosition.y;
       let width = startSize.width;
       let height = startSize.height;
-      if (direction.includes("e")) width = Math.max(NODE_MIN_SIZE.width, Math.min(NODE_MAX_SIZE.width, startSize.width + dx));
-      if (direction.includes("s")) height = Math.max(NODE_MIN_SIZE.height, Math.min(NODE_MAX_SIZE.height, startSize.height + dy));
+      if (direction.includes("e")) width = Math.max(NODE_MIN_SIZE.width, Math.min(NODE_MAX_SIZE.width, bounds.width - startPosition.x - 20, startSize.width + dx));
+      if (direction.includes("s")) height = Math.max(NODE_MIN_SIZE.height, Math.min(NODE_MAX_SIZE.height, bounds.height - startPosition.y - 20, startSize.height + dy));
       if (direction.includes("w")) {
         width = Math.max(NODE_MIN_SIZE.width, Math.min(NODE_MAX_SIZE.width, startSize.width - dx));
-        x = startPosition.x + startSize.width - width;
+        x = Math.max(20, startPosition.x + startSize.width - width);
+        width = startPosition.x + startSize.width - x;
       }
       if (direction.includes("n")) {
         height = Math.max(NODE_MIN_SIZE.height, Math.min(NODE_MAX_SIZE.height, startSize.height - dy));
-        y = startPosition.y + startSize.height - height;
+        y = Math.max(56, startPosition.y + startSize.height - height);
+        height = startPosition.y + startSize.height - y;
       }
       setDocumentState((active) => ({
         ...active,
@@ -784,22 +790,36 @@ export default function Home() {
   };
 
   const autoLayout = () => {
-    const lanes = { runtime: 90, interface: 780, output: 1840 };
-    const laneIndexes = { runtime: 0, interface: 0, output: 0 };
+    const laneColumns = {
+      runtime: [90],
+      interface: [500, 950, 1400],
+      output: [1880],
+    };
+    const laneHeights = {
+      runtime: [80],
+      interface: [80, 80, 80],
+      output: [80],
+    };
+    let maximumBottom = 0;
     updateDocumentNode(scopeNode.id, (scope) => ({
       ...scope,
       children: scope.children?.map((node) => {
-        const lane = String(node.implementation?.config?.lane ?? "interface") as keyof typeof lanes;
-        const index = laneIndexes[lane]++;
+        const lane = String(node.implementation?.config?.lane ?? "interface") as keyof typeof laneColumns;
         const size = nodeSize(node);
+        const column = laneHeights[lane].indexOf(Math.min(...laneHeights[lane]));
+        const x = laneColumns[lane][column];
+        const y = laneHeights[lane][column];
+        laneHeights[lane][column] += size.height + 48;
+        maximumBottom = Math.max(maximumBottom, y + size.height + 80);
         return {
           ...node,
-          position: {
-            x: lanes[lane],
-            y: 80 + index * Math.max(190, size.height + 54),
-          },
+          position: { x, y },
         };
       }),
+      canvasSize: {
+        width: Math.max(scope.canvasSize?.width ?? 0, 2400),
+        height: Math.max(1500, maximumBottom),
+      },
     }));
     setTimeout(fitScope, 0);
   };
@@ -846,7 +866,7 @@ export default function Home() {
     const existing = documentState.publishedModules.filter(
       (module) => module.moduleId === selectedBusinessNode.id,
     );
-    const module: PublishedModule = {
+    const published: PublishedModule = {
       moduleId: selectedBusinessNode.id,
       name: selectedBusinessNode.name,
       version: Math.max(0, ...existing.map((item) => item.version)) + 1,
@@ -855,9 +875,9 @@ export default function Home() {
     };
     commit({
       ...documentState,
-      publishedModules: [...documentState.publishedModules, module],
+      publishedModules: [...documentState.publishedModules, published],
     });
-    setToast(`已发布 ${module.name} v${module.version}`);
+    setToast(`已发布 ${published.name} v${published.version}`);
   };
 
   const insertModule = (module: PublishedModule) => {
@@ -948,6 +968,56 @@ export default function Home() {
     setSelectedBusinessNodeId(businessScope.id);
   };
 
+  const duplicateAppNode = () => {
+    const selected = findNode(scopeNode, selectedAppNodeId);
+    if (!selected || selected.id === scopeNode.id) return;
+    const duplicate: IntentNode = {
+      ...clone(selected),
+      id: uid("view"),
+      name: `${selected.name} · 副本`,
+      position: {
+        x: selected.position.x + 42,
+        y: selected.position.y + 42,
+      },
+      implementation: selected.implementation
+        ? { ...selected.implementation, core: false }
+        : undefined,
+    };
+    updateDocumentNode(scopeNode.id, (scope) => ({
+      ...scope,
+      children: [...(scope.children ?? []), duplicate],
+    }));
+    setSelectedAppNodeId(duplicate.id);
+  };
+
+  const deleteAppNode = () => {
+    const selected = findNode(scopeNode, selectedAppNodeId);
+    if (!selected || selected.id === scopeNode.id) return;
+    if (
+      selected.implementation?.core &&
+      !window.confirm(`「${selected.name}」是核心节点。确认删除？可通过“重置应用节点图”恢复。`)
+    ) {
+      return;
+    }
+    updateDocumentNode(scopeNode.id, (scope) => removeNode(scope, selected.id));
+    setSelectedAppNodeId(scopeNode.children?.[0]?.id ?? scopeNode.id);
+  };
+
+  const resetApplicationGraph = () => {
+    if (!window.confirm("重置全部应用节点布局和系统绑定？业务意图与模块快照会保留。")) return;
+    const reset = createApplicationDocument(clone(businessRoot), clone(documentState.publishedModules));
+    setHistory((items) => [...items.slice(-29), documentState]);
+    setFuture([]);
+    setDocumentState(reset);
+    setScopePath([reset.rootIntent.id]);
+    setSelectedAppNodeId("current_container");
+    dispatchRuntimeEvent("DOCUMENT_LOADED", "application_root", {
+      scopeId: reset.businessRootId,
+      selectionId: reset.businessRootId,
+    });
+    setDirty(true);
+  };
+
   const run = async () => {
     setRunState("running");
     setTrace([]);
@@ -989,26 +1059,37 @@ export default function Home() {
     setDirty(false);
   };
 
-  commandHandlerRef.current = (command) => {
-    if (command.type === "NEW_DOCUMENT") newDocument();
-    if (command.type === "IMPORT_REQUEST") fileInputRef.current?.click();
-    if (command.type === "EXPORT_V2")
-      downloadJson("intent-map-v2.intent-map.json", documentState);
-    if (command.type === "EXPORT_V1")
-      downloadJson(
-        "intent-map-v1-compatible.intent-map.json",
-        exportCompatibleV1(documentState),
-      );
-    if (command.type === "UNDO") undo();
-    if (command.type === "REDO") redo();
-    if (command.type === "AUTO_LAYOUT") autoLayout();
-    if (command.type === "PUBLISH_MODULE") publishModule();
-    if (command.type === "RUN_BUSINESS") void run();
-    if (command.type === "STOP_BUSINESS") stop();
-    if (command.type === "ADD_BUSINESS_CHILD") addBusinessChild();
-    if (command.type === "DUPLICATE_NODE") duplicateSelected();
-    if (command.type === "DELETE_NODE") deleteSelected();
-  };
+  useEffect(() => {
+    if (!lastCommands.length) return;
+    const timer = window.setTimeout(() => {
+      lastCommands.forEach((command) => {
+        if (command.type === "NEW_DOCUMENT") newDocument();
+        if (command.type === "IMPORT_REQUEST") fileInputRef.current?.click();
+        if (command.type === "EXPORT_V2")
+          downloadJson("intent-map-v2.intent-map.json", documentState);
+        if (command.type === "EXPORT_V1")
+          downloadJson(
+            "intent-map-v1-compatible.intent-map.json",
+            exportCompatibleV1(documentState),
+          );
+        if (command.type === "UNDO") undo();
+        if (command.type === "REDO") redo();
+        if (command.type === "AUTO_LAYOUT") autoLayout();
+        if (command.type === "PUBLISH_MODULE") publishModule();
+        if (command.type === "RUN_BUSINESS") void run();
+        if (command.type === "STOP_BUSINESS") stop();
+        if (command.type === "ADD_BUSINESS_CHILD") addBusinessChild();
+        if (command.type === "DUPLICATE_NODE") duplicateSelected();
+        if (command.type === "DELETE_NODE") deleteSelected();
+        if (command.type === "DUPLICATE_APP_NODE") duplicateAppNode();
+        if (command.type === "DELETE_APP_NODE") deleteAppNode();
+        if (command.type === "RESET_APP_GRAPH") resetApplicationGraph();
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Commands intentionally execute once for each immutable batch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastCommands]);
 
   const emit = (command: RuntimeCommand) => {
     dispatchRuntimeEvent(command.type, command.source ?? "renderer", command.payload);
@@ -1036,6 +1117,162 @@ export default function Home() {
         {node.children?.map((child) => renderTree(child, depth + 1))}
       </Fragment>
     );
+  };
+
+  const parentScopeFor = (nodeId: string) =>
+    findPath(businessRoot, nodeId)?.at(-2) ?? businessRoot;
+
+  const bindingOptionsFor = (nodeId: string) => {
+    const parent = parentScopeFor(nodeId);
+    return [
+      ...parent.inputs.map((input) => ({
+        value: `env:${input.id}`,
+        label: `环境 · ${input.name}`,
+      })),
+      ...(parent.children ?? [])
+        .filter((child) => child.id !== nodeId)
+        .flatMap((child) =>
+          child.outputs.map((output) => ({
+            value: `ref:${child.id}:${output.id}`,
+            label: `${child.name} · ${output.name}`,
+          })),
+        ),
+    ];
+  };
+
+  const updateInputBinding = (
+    nodeId: string,
+    portId: string,
+    value: string,
+  ) => {
+    let binding: Expression | undefined;
+    if (value.startsWith("env:")) {
+      binding = { kind: "ref", portId: value.slice(4), env: true };
+    } else if (value.startsWith("ref:")) {
+      const [, nodeIdValue, portIdValue] = value.split(":");
+      binding = {
+        kind: "ref",
+        nodeId: nodeIdValue,
+        portId: portIdValue,
+      };
+    }
+    updateDocumentNode(nodeId, (node) => ({
+      ...node,
+      inputs: node.inputs.map((input) =>
+        input.id === portId ? { ...input, binding } : input,
+      ),
+    }));
+  };
+
+  const outputMappingOptionsFor = (node: IntentNode) => [
+    ...node.inputs.map((input) => ({
+      value: `env:${input.id}`,
+      label: `输入 · ${input.name}`,
+    })),
+    ...(node.children ?? []).flatMap((child) =>
+      child.outputs.map((output) => ({
+        value: `ref:${child.id}:${output.id}`,
+        label: `${child.name} · ${output.name}`,
+      })),
+    ),
+  ];
+
+  const updateOutputMapping = (
+    nodeId: string,
+    portId: string,
+    value: string,
+  ) => {
+    let mapping: Expression | undefined;
+    if (value.startsWith("env:")) {
+      mapping = { kind: "ref", portId: value.slice(4), env: true };
+    } else if (value.startsWith("ref:")) {
+      const [, nodeIdValue, portIdValue] = value.split(":");
+      mapping = {
+        kind: "ref",
+        nodeId: nodeIdValue,
+        portId: portIdValue,
+      };
+    }
+    updateDocumentNode(nodeId, (node) => ({
+      ...node,
+      outputs: node.outputs.map((output) =>
+        output.id === portId ? { ...output, mapping } : output,
+      ),
+    }));
+  };
+
+  const moveBusinessNodeStart = (
+    node: IntentNode,
+    previewScale: number,
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    if (layoutLocked || event.button !== 0) return;
+    const target = event.currentTarget;
+    const origin = { x: event.clientX, y: event.clientY };
+    const start = { ...node.position };
+    const size = nodeSize(node);
+    const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
+    target.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent) => {
+      const position = {
+        x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / previewScale)),
+        y: Math.max(70, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / previewScale)),
+      };
+      setDocumentState((active) => ({
+        ...active,
+        rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
+          ...item,
+          position,
+        })),
+      }));
+    };
+    const up = () => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      setHistory((items) => [...items.slice(-29), documentState]);
+      setFuture([]);
+      setDirty(true);
+      dispatchRuntimeEvent("DOCUMENT_CHANGED", "current_container");
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
+  };
+
+  const resizeBusinessNodeStart = (
+    node: IntentNode,
+    previewScale: number,
+    event: ReactPointerEvent<HTMLSpanElement>,
+  ) => {
+    event.stopPropagation();
+    if (layoutLocked || event.button !== 0) return;
+    const target = event.currentTarget;
+    const origin = { x: event.clientX, y: event.clientY };
+    const start = nodeSize(node);
+    const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
+    target.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent) => {
+      const size = {
+        width: Math.max(NODE_MIN_SIZE.width, Math.min(520, bounds.width - node.position.x - 20, start.width + (moveEvent.clientX - origin.x) / previewScale)),
+        height: Math.max(NODE_MIN_SIZE.height, Math.min(420, bounds.height - node.position.y - 20, start.height + (moveEvent.clientY - origin.y) / previewScale)),
+      };
+      setDocumentState((active) => ({
+        ...active,
+        rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
+          ...item,
+          size,
+        })),
+      }));
+    };
+    const up = () => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      setHistory((items) => [...items.slice(-29), documentState]);
+      setFuture([]);
+      setDirty(true);
+      dispatchRuntimeEvent("DOCUMENT_CHANGED", "current_container");
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
   };
 
   const renderBusinessCanvas = () => {
@@ -1079,6 +1316,7 @@ export default function Home() {
                 key={node.id}
                 onClick={() => setSelectedBusinessNodeId(node.id)}
                 onDoubleClick={() => setBusinessScopeId(node.id)}
+                onPointerDown={(event) => moveBusinessNodeStart(node, scale, event)}
               >
                 <span>{node.kind.toUpperCase()}</span>
                 <strong>{node.name}</strong>
@@ -1087,6 +1325,7 @@ export default function Home() {
                   {node.inputs.map((port, index) => <i className="input" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
                   {node.outputs.map((port, index) => <i className="output" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
                 </div>
+                {!layoutLocked && <span className="business-resize" onPointerDown={(event) => resizeBusinessNodeStart(node, scale, event)} />}
               </button>
             );
           })}
@@ -1126,7 +1365,7 @@ export default function Home() {
       return (
         <div className="runtime-inspector-surface">
           <span>EVENT CLOCK</span>
-          <strong>tick {eventTickRef.current}</strong>
+          <strong>tick {eventTick}</strong>
           <small>当前队列：{pendingEvents.length}</small>
           <small>最近事件：{runtimeState.lastEventType}</small>
           <div className="runtime-mini-trace">
@@ -1240,8 +1479,26 @@ export default function Home() {
           <label>名称<input value={selectedBusinessNode.name} onChange={(event) => updateDocumentNode(selectedBusinessNode.id, (item) => ({ ...item, name: event.target.value }))} /></label>
           <label>描述<textarea rows={3} value={selectedBusinessNode.description} onChange={(event) => updateDocumentNode(selectedBusinessNode.id, (item) => ({ ...item, description: event.target.value }))} /></label>
           {selectedBusinessNode.kind === "operator" && <label>内置算子<select value={selectedBusinessNode.operator ?? "identity"} onChange={(event) => updateDocumentNode(selectedBusinessNode.id, (item) => ({ ...item, operator: event.target.value }))}><option value="identity">identity</option><option value="object">object</option><option value="array">array</option><option value="concat">concat</option></select></label>}
-          <div className="property-ports"><strong>输入</strong>{selectedBusinessNode.inputs.map((port) => <span key={port.id}><i />{port.name}<small>{port.type}</small></span>)}</div>
-          <div className="property-ports outputs"><strong>输出</strong>{selectedBusinessNode.outputs.map((port) => <span key={port.id}><i />{port.name}<small>{port.type}</small></span>)}</div>
+          <div className="property-ports"><strong>输入</strong>{selectedBusinessNode.inputs.map((port) => {
+            const reference = collectRefs(port.binding)[0];
+            const value = reference?.env
+              ? `env:${reference.portId}`
+              : reference?.nodeId
+                ? `ref:${reference.nodeId}:${reference.portId}`
+                : "";
+            return <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateInputBinding(selectedBusinessNode.id, port.id, event.target.value)}><option value="">未绑定</option>{bindingOptionsFor(selectedBusinessNode.id).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>;
+          })}</div>
+          <div className="property-ports outputs"><strong>输出</strong>{selectedBusinessNode.outputs.map((port) => {
+            const reference = collectRefs(port.mapping)[0];
+            const value = reference?.env
+              ? `env:${reference.portId}`
+              : reference?.nodeId
+                ? `ref:${reference.nodeId}:${reference.portId}`
+                : "";
+            return selectedBusinessNode.kind === "composite"
+              ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputMapping(selectedBusinessNode.id, port.id, event.target.value)}><option value="">未映射</option>{outputMappingOptionsFor(selectedBusinessNode).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
+              : <span key={port.id}><i />{port.name}<small>{port.type}</small></span>;
+          })}</div>
           <div className="property-actions"><button onClick={() => dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={selectedBusinessNode.id === businessRoot.id}>创建副本</button><button className="danger" onClick={() => dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={selectedBusinessNode.id === businessRoot.id}>删除</button></div>
         </div>
       );
@@ -1336,6 +1593,9 @@ export default function Home() {
           <span>{scopePath.map((id) => findNode(appRoot, id)?.name ?? id).join(" / ")}</span>
           <button onClick={() => dispatchRuntimeEvent("SET_LAYOUT_LOCK", "root_hud", { locked: !layoutLocked })}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
           <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "root_hud")}>泳道布局</button>
+          <button onClick={() => dispatchRuntimeEvent("DUPLICATE_APP_NODE", "root_hud")} disabled={!findNode(scopeNode, selectedAppNodeId)}>复制节点</button>
+          <button onClick={() => dispatchRuntimeEvent("DELETE_APP_NODE", "root_hud")} disabled={!findNode(scopeNode, selectedAppNodeId)}>删除节点</button>
+          <button onClick={() => dispatchRuntimeEvent("RESET_APP_GRAPH", "root_hud")}>重置节点图</button>
           <button onClick={fitScope}>适应</button>
           <button onClick={() => setScopeCamera({ scale: 1, x: 0, y: 0 }, true)}>{Math.round(camera.scale * 100)}%</button>
         </div>

@@ -1710,6 +1710,18 @@ code,
   box-shadow: 0 0 0 3px rgba(57, 167, 255, 0.14);
 }
 
+.business-resize {
+  width: 15px;
+  height: 15px;
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  border: 2px solid #8b5cf6;
+  border-radius: 3px;
+  background: #111832;
+  cursor: nwse-resize;
+}
+
 .business-node > span {
   color: #39a7ff;
   font-family: Consolas, monospace;
@@ -1864,6 +1876,22 @@ code,
 
 .property-ports.outputs > span i { border-color: #8b5cf6; }
 .property-ports > span small { color: #647198; font-family: Consolas, monospace; font-size: 8px; }
+
+.property-ports > span.binding-port-row {
+  grid-template-columns: 12px 84px minmax(0, 1fr);
+  gap: 4px;
+}
+
+.binding-port-row select {
+  min-width: 0;
+  height: 23px;
+  padding: 0 4px;
+  border: 1px solid #2d3860;
+  border-radius: 4px;
+  color: #9eacd0;
+  background: #090f22;
+  font-size: 8px;
+}
 
 .property-actions {
   display: flex;
