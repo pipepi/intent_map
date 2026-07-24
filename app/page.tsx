@@ -489,6 +489,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"properties" | "run">("properties");
   const [toast, setToast] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const canvasViewport = useRef<HTMLDivElement>(null);
   const cancelRun = useRef(false);
 
   const current = useMemo(() => getNodeAtPath(doc.rootIntent, path), [doc, path]);
@@ -543,6 +544,7 @@ export default function Home() {
   const navigateTo = (targetPath: string[]) => {
     setPath(targetPath);
     setZoom(1);
+    requestAnimationFrame(() => canvasViewport.current?.scrollTo({ left: 0, top: 0 }));
     const node = getNodeAtPath(doc.rootIntent, targetPath);
     setSelectedId(node.children?.[0]?.id ?? node.id);
   };
@@ -559,8 +561,75 @@ export default function Home() {
     if (target.kind === "composite" || target.children?.length) {
       setPath((items) => [...items, node.id]);
       setZoom(1);
+      requestAnimationFrame(() => canvasViewport.current?.scrollTo({ left: 0, top: 0 }));
       setSelectedId(target.children?.[0]?.id ?? target.id);
     }
+  };
+
+  const getZoomAnchor = (
+    viewport: HTMLDivElement,
+    pointer?: { x: number; y: number },
+  ) => {
+    const viewportRect = viewport.getBoundingClientRect();
+    const stage = viewport.querySelector<HTMLElement>(".canvas-stage");
+    const stageRect = stage?.getBoundingClientRect() ?? viewportRect;
+    const visibleLeft = Math.max(viewportRect.left, stageRect.left);
+    const visibleTop = Math.max(viewportRect.top, stageRect.top);
+    const visibleRight = Math.min(viewportRect.right, stageRect.right);
+    const visibleBottom = Math.min(viewportRect.bottom, stageRect.bottom);
+    const hasVisibleStage = visibleRight > visibleLeft && visibleBottom > visibleTop;
+    const pointerIsVisible =
+      pointer &&
+      hasVisibleStage &&
+      pointer.x >= visibleLeft &&
+      pointer.x <= visibleRight &&
+      pointer.y >= visibleTop &&
+      pointer.y <= visibleBottom;
+    const anchorClientX = pointerIsVisible
+      ? pointer.x
+      : hasVisibleStage
+        ? (visibleLeft + visibleRight) / 2
+        : (viewportRect.left + viewportRect.right) / 2;
+    const anchorClientY = pointerIsVisible
+      ? pointer.y
+      : hasVisibleStage
+        ? (visibleTop + visibleBottom) / 2
+        : (viewportRect.top + viewportRect.bottom) / 2;
+
+    return {
+      stageX: Math.max(0, Math.min(1000, (anchorClientX - stageRect.left) / zoom)),
+      stageY: Math.max(0, Math.min(650, (anchorClientY - stageRect.top) / zoom)),
+      viewportX: anchorClientX - viewportRect.left,
+      viewportY: anchorClientY - viewportRect.top,
+      stageOffsetX: stageRect.left - viewportRect.left + viewport.scrollLeft,
+      stageOffsetY: stageRect.top - viewportRect.top + viewport.scrollTop,
+    };
+  };
+
+  const applyAnchoredZoom = (
+    viewport: HTMLDivElement,
+    nextZoom: number,
+    anchor: ReturnType<typeof getZoomAnchor>,
+  ) => {
+    setZoom(nextZoom);
+    requestAnimationFrame(() => {
+      const desiredLeft =
+        anchor.stageOffsetX + anchor.stageX * nextZoom - anchor.viewportX;
+      const desiredTop =
+        anchor.stageOffsetY + anchor.stageY * nextZoom - anchor.viewportY;
+      const maxLeft = Math.max(
+        0,
+        anchor.stageOffsetX + 1000 * nextZoom - viewport.clientWidth,
+      );
+      const maxTop = Math.max(
+        0,
+        anchor.stageOffsetY + 650 * nextZoom - viewport.clientHeight,
+      );
+      viewport.scrollTo({
+        left: Math.max(0, Math.min(maxLeft, desiredLeft)),
+        top: Math.max(0, Math.min(maxTop, desiredTop)),
+      });
+    });
   };
 
   const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
@@ -569,22 +638,20 @@ export default function Home() {
 
     const direction = event.deltaY < 0 ? 1 : -1;
     const nextZoom = Math.max(0.5, Math.min(2, zoom + direction * 0.1));
+    const viewport = event.currentTarget;
+    const anchor = getZoomAnchor(viewport, { x: event.clientX, y: event.clientY });
 
     if (direction > 0 && nextZoom >= 2) {
       const candidates = current.children ?? [];
 
       if (candidates.length > 0) {
-        const viewport = event.currentTarget;
-        const rect = viewport.getBoundingClientRect();
-        const pointerX = (event.clientX - rect.left + viewport.scrollLeft) / zoom;
-        const pointerY = (event.clientY - rect.top + viewport.scrollTop) / zoom;
         const nearest = candidates.reduce((closest, node) => {
           const closestDistance =
-            (closest.position.x + 89 - pointerX) ** 2 +
-            (closest.position.y + 52 - pointerY) ** 2;
+            (closest.position.x + 89 - anchor.stageX) ** 2 +
+            (closest.position.y + 52 - anchor.stageY) ** 2;
           const nodeDistance =
-            (node.position.x + 89 - pointerX) ** 2 +
-            (node.position.y + 52 - pointerY) ** 2;
+            (node.position.x + 89 - anchor.stageX) ** 2 +
+            (node.position.y + 52 - anchor.stageY) ** 2;
           return nodeDistance < closestDistance ? node : closest;
         });
         navigateTo([...path, nearest.id]);
@@ -597,7 +664,7 @@ export default function Home() {
       return;
     }
 
-    setZoom(nextZoom);
+    applyAnchoredZoom(viewport, nextZoom, anchor);
   };
 
   const sourceOptions = (scope: IntentNode) => [
@@ -1142,6 +1209,7 @@ export default function Home() {
             </div>
           </div>
           <div
+            ref={canvasViewport}
             className="canvas-viewport"
             onWheel={handleCanvasWheel}
           >

@@ -600,7 +600,6 @@ code,
   width: 1000px;
   height: 650px;
   transform-origin: top left;
-  transition: transform 180ms ease;
 }
 
 .canvas-stage {
