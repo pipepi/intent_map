@@ -65,8 +65,14 @@ test("gives the current container the same resize modes as child nodes", async (
   assert.match(page, /y: child\.position\.y \+ contentShift\.y/);
   assert.match(page, /startSize\.width - startOffset\.x/);
   assert.match(page, /startSize\.height - startOffset\.y/);
-  assert.match(page, /left: 23 \+ canvasContentOffset\.x/);
-  assert.match(page, /top: 76 \+ canvasContentOffset\.y/);
+  assert.doesNotMatch(page, /left: 23 \+ canvasContentOffset\.x/);
+  assert.doesNotMatch(page, /left: 26 \+ canvasContentOffset\.x/);
+  assert.doesNotMatch(page, /top: 76 \+ canvasContentOffset\.y/);
+  assert.doesNotMatch(page, /170 \+ canvasContentOffset\.y/);
+  assert.doesNotMatch(page, /178 \+ canvasContentOffset\.x/);
+  assert.match(page, /x: child\.position\.x \+ contentShift\.x/);
+  assert.match(page, /y: child\.position\.y \+ contentShift\.y/);
+  assert.match(page, /left: 410 \+ canvasContentOffset\.x/);
   assert.match(page, /viewBox=\{`0 0 \$\{canvasSize\.width\} \$\{canvasSize\.height\}`\}/);
   assert.match(page, /viewport\.clientWidth \/ activeCanvasSize\.width/);
   assert.match(page, /viewport\.clientHeight \/ activeCanvasSize\.height/);

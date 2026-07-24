@@ -1759,8 +1759,8 @@ export default function Home() {
     if (ref.env) {
       const index = current.inputs.findIndex((port) => port.id === ref.portId);
       return {
-        x: 178 + canvasContentOffset.x,
-        y: 115 + canvasContentOffset.y + Math.max(index, 0) * 116,
+        x: 178,
+        y: 115 + Math.max(index, 0) * 116,
       };
     }
     const source = current.children?.find((node) => node.id === ref.nodeId);
@@ -2002,8 +2002,7 @@ export default function Home() {
                   {current.outputs.flatMap((port, outputIndex) =>
                     collectRefs(port.mapping).map((ref, index) => {
                       const source = sourcePosition(ref);
-                      const targetY =
-                        170 + canvasContentOffset.y + outputIndex * 116;
+                      const targetY = 170 + outputIndex * 116;
                       return (
                         <path
                           key={`output-${port.id}-${index}`}
@@ -2016,25 +2015,13 @@ export default function Home() {
                   )}
                 </svg>
 
-                <div
-                  className="container-caption"
-                  style={{
-                    left: 23 + canvasContentOffset.x,
-                    top: 17 + canvasContentOffset.y,
-                  }}
-                >
+                <div className="container-caption">
                   <span>当前容器</span>
                   <strong>{current.name}</strong>
                   <small>{current.description}</small>
                 </div>
 
-                <div
-                  className="environment-stack"
-                  style={{
-                    left: 26 + canvasContentOffset.x,
-                    top: 76 + canvasContentOffset.y,
-                  }}
-                >
+                <div className="environment-stack">
                   <div className="stack-label">环境输入</div>
                   {current.inputs.map((port) => (
                     <button
@@ -2149,10 +2136,7 @@ export default function Home() {
                   );
                 })}
 
-                <div
-                  className="output-stack"
-                  style={{ top: 76 + canvasContentOffset.y }}
-                >
+                <div className="output-stack">
                   <div className="stack-label">父级输出</div>
                   {current.outputs.map((port) => (
                     <button
