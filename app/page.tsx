@@ -27,7 +27,7 @@ import {
 } from "./runtime/model";
 import {
   NodeRenderer,
-  RUNTIME_RESIZE_DIRECTIONS,
+  resizeDirectionsFor,
   type ResizeDirection,
 } from "./runtime/node-renderer";
 import {
@@ -160,7 +160,7 @@ const sampleBusinessRoot = (): IntentNode => {
         : undefined,
     position: step.position,
     size: { width: 220, height: 150 },
-    resizeMode: "full",
+    resizeMode: "simple",
   }));
 
   return {
@@ -184,7 +184,7 @@ const sampleBusinessRoot = (): IntentNode => {
     children,
     position: { x: 0, y: 0 },
     canvasSize: { width: 1400, height: 850 },
-    resizeMode: "full",
+    resizeMode: "simple",
   };
 };
 
@@ -238,6 +238,7 @@ const collectRefs = (expression?: Expression): Array<Extract<Expression, { kind:
 };
 
 const nodeSize = (node: IntentNode) => node.size ?? { width: 320, height: 220 };
+const nodeResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
 
 const deriveEdges = (scope: IntentNode): DerivedEdge[] =>
   (scope.children ?? []).flatMap((target) =>
@@ -546,6 +547,17 @@ export default function Home() {
       });
     },
     [commit, documentState],
+  );
+
+  const toggleNodeResizeMode = useCallback(
+    (node: IntentNode) => {
+      updateDocumentNode(node.id, (item) => ({
+        ...item,
+        resizeMode: nodeResizeMode(item) === "simple" ? "full" : "simple",
+      }));
+      setSelectedAppNodeId(node.id);
+    },
+    [updateDocumentNode],
   );
 
   const setScopeCamera = useCallback(
@@ -1007,7 +1019,7 @@ export default function Home() {
       outputs: [{ id: uid("output"), name: "输出", type: "any" }],
       position: { x: 320, y: 240 },
       size: { width: 220, height: 150 },
-      resizeMode: "full",
+      resizeMode: "simple",
     };
     updateDocumentNode(businessScope.id, (scope) => ({
       ...scope,
@@ -1027,7 +1039,7 @@ export default function Home() {
       children: [],
       position: { x: 180, y: 150 },
       size: { width: 280, height: 180 },
-      resizeMode: "full",
+      resizeMode: "simple",
     };
     updateDocumentNode(scopeNode.id, (scope) => ({
       ...scope,
@@ -1343,6 +1355,7 @@ export default function Home() {
 
   const resizeBusinessNodeStart = (
     node: IntentNode,
+    direction: ResizeDirection,
     previewScale: number,
     event: ReactPointerEvent<HTMLSpanElement>,
   ) => {
@@ -1350,25 +1363,56 @@ export default function Home() {
     if (layoutLocked || event.button !== 0) return;
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
-    const start = nodeSize(node);
+    const startSize = nodeSize(node);
+    const startPosition = { ...node.position };
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
-      const size = {
-        width: Math.max(NODE_MIN_SIZE.width, Math.min(520, bounds.width - node.position.x - 20, start.width + (moveEvent.clientX - origin.x) / previewScale)),
-        height: Math.max(NODE_MIN_SIZE.height, Math.min(420, bounds.height - node.position.y - 20, start.height + (moveEvent.clientY - origin.y) / previewScale)),
-      };
+      const dx = (moveEvent.clientX - origin.x) / previewScale;
+      const dy = (moveEvent.clientY - origin.y) / previewScale;
+      let x = startPosition.x;
+      let y = startPosition.y;
+      let width = startSize.width;
+      let height = startSize.height;
+      if (direction.includes("e")) {
+        width = Math.max(
+          NODE_MIN_SIZE.width,
+          Math.min(520, bounds.width - startPosition.x - 20, startSize.width + dx),
+        );
+      }
+      if (direction.includes("s")) {
+        height = Math.max(
+          NODE_MIN_SIZE.height,
+          Math.min(420, bounds.height - startPosition.y - 20, startSize.height + dy),
+        );
+      }
+      if (direction.includes("w")) {
+        width = Math.max(
+          NODE_MIN_SIZE.width,
+          Math.min(520, startPosition.x + startSize.width - 20, startSize.width - dx),
+        );
+        x = startPosition.x + startSize.width - width;
+      }
+      if (direction.includes("n")) {
+        height = Math.max(
+          NODE_MIN_SIZE.height,
+          Math.min(420, startPosition.y + startSize.height - 70, startSize.height - dy),
+        );
+        y = startPosition.y + startSize.height - height;
+      }
       setDocumentState((active) => ({
         ...active,
         rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
           ...item,
-          size,
+          position: { x, y },
+          size: { width, height },
         })),
       }));
     };
     const up = () => {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
+      target.removeEventListener("pointercancel", up);
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
@@ -1376,6 +1420,15 @@ export default function Home() {
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", up);
+    target.addEventListener("pointercancel", up);
+  };
+
+  const toggleBusinessResizeMode = (node: IntentNode) => {
+    updateDocumentNode(node.id, (item) => ({
+      ...item,
+      resizeMode: nodeResizeMode(item) === "simple" ? "full" : "simple",
+    }));
+    setSelectedBusinessNodeId(node.id);
   };
 
   const renderBusinessCanvas = () => {
@@ -1412,24 +1465,62 @@ export default function Home() {
           </svg>
           {(businessScope.children ?? []).map((node) => {
             const size = nodeSize(node);
+            const resizeMode = nodeResizeMode(node);
+            const visibleDirections = resizeDirectionsFor(resizeMode);
+            const selected = selectedBusinessNodeId === node.id;
             return (
-              <button
-                className={`business-node ${selectedBusinessNodeId === node.id ? "selected" : ""}`}
-                style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
-                key={node.id}
-                onClick={() => setSelectedBusinessNodeId(node.id)}
-                onDoubleClick={() => setBusinessScopeId(node.id)}
-                onPointerDown={(event) => moveBusinessNodeStart(node, scale, event)}
-              >
-                <span>{node.kind.toUpperCase()}</span>
-                <strong>{node.name}</strong>
-                <small>{node.description}</small>
-                <div className="business-node-ports">
-                  {node.inputs.map((port, index) => <i className="input" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
-                  {node.outputs.map((port, index) => <i className="output" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
-                </div>
-                {!layoutLocked && <span className="business-resize" onPointerDown={(event) => resizeBusinessNodeStart(node, scale, event)} />}
-              </button>
+              <Fragment key={node.id}>
+                <button
+                  className={`business-node ${selected ? "selected" : ""}`}
+                  style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
+                  onClick={() => setSelectedBusinessNodeId(node.id)}
+                  onDoubleClick={() => setBusinessScopeId(node.id)}
+                  onPointerDown={(event) => moveBusinessNodeStart(node, scale, event)}
+                >
+                  <span>{node.kind.toUpperCase()}</span>
+                  <strong>{node.name}</strong>
+                  <small>{node.description}</small>
+                  <div className="business-node-ports">
+                    {node.inputs.map((port, index) => <i className="input" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
+                    {node.outputs.map((port, index) => <i className="output" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
+                  </div>
+                  {!layoutLocked &&
+                    visibleDirections.map((direction) => (
+                      <span
+                        className={`resize-handle resize-${direction}`}
+                        key={direction}
+                        onClick={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) =>
+                          resizeBusinessNodeStart(node, direction, scale, event)
+                        }
+                      />
+                    ))}
+                </button>
+                {!layoutLocked && (
+                  <button
+                    className={`resize-mode-toggle business-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
+                    style={{
+                      left: node.position.x + size.width - 30,
+                      top: node.position.y + size.height + 5,
+                    }}
+                    aria-label={
+                      resizeMode === "simple"
+                        ? `将「${node.name}」切换为四边四角缩放`
+                        : `将「${node.name}」切换为右边、下边和右下角缩放`
+                    }
+                    title={
+                      resizeMode === "simple"
+                        ? "当前：右边、下边、右下角 · 点击切换为八向"
+                        : "当前：四边四角 · 点击切换为三向"
+                    }
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => toggleBusinessResizeMode(node)}
+                  >
+                    {resizeMode === "simple" ? "┘" : "⤢"}
+                  </button>
+                )}
+              </Fragment>
             );
           })}
           {!businessScope.children?.length && (
@@ -1767,6 +1858,7 @@ export default function Home() {
                 onEnter={enterNode}
                 onMoveStart={moveNodeStart}
                 onResizeStart={resizeNodeStart}
+                onResizeModeToggle={toggleNodeResizeMode}
               />
             ))}
             {scopePath.length > 1 && (
@@ -1778,17 +1870,48 @@ export default function Home() {
             {(focusedLeaf || !visibleNodes.length) && (
               <button className="runtime-add-child" onClick={addRuntimeChild}>＋ 添加子节点</button>
             )}
-            {!layoutLocked &&
-              RUNTIME_RESIZE_DIRECTIONS.map((direction) => (
+            {!layoutLocked && (
+              <>
                 <span
-                  className={`root-resize root-resize-${direction}`}
-                  key={direction}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    resizeScopeCanvasStart(direction, event);
+                  className={`container-resize-layer ${selectedAppNodeId === scopeNode.id ? "selected" : ""}`}
+                  aria-hidden="true"
+                >
+                  {resizeDirectionsFor(nodeResizeMode(scopeNode)).map(
+                    (direction) => (
+                      <span
+                        className={`resize-handle resize-${direction}`}
+                        key={direction}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          resizeScopeCanvasStart(direction, event);
+                        }}
+                      />
+                    ),
+                  )}
+                </span>
+                <button
+                  className={`resize-mode-toggle container-mode-toggle ${nodeResizeMode(scopeNode)} ${selectedAppNodeId === scopeNode.id ? "selected" : ""}`}
+                  style={{
+                    left: worldSize.width - 30,
+                    top: worldSize.height + 5,
                   }}
-                />
-              ))}
+                  aria-label={
+                    nodeResizeMode(scopeNode) === "simple"
+                      ? `将当前容器「${scopeNode.name}」切换为四边四角缩放`
+                      : `将当前容器「${scopeNode.name}」切换为右边、下边和右下角缩放`
+                  }
+                  title={
+                    nodeResizeMode(scopeNode) === "simple"
+                      ? "当前容器：右边、下边、右下角 · 点击切换为八向"
+                      : "当前容器：四边四角 · 点击切换为三向"
+                  }
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => toggleNodeResizeMode(scopeNode)}
+                >
+                  {nodeResizeMode(scopeNode) === "simple" ? "┘" : "⤢"}
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="root-legend">

@@ -66,17 +66,26 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(shell, /scale < 0\.75/);
   assert.match(shell, /lod === "always-live"/);
   assert.match(shell, /runtime-node-titlebar/);
-  assert.match(shell, /runtime-resize-\$\{direction\}/);
+  assert.match(shell, /simpleResizeDirections = \["e", "s", "se"\]/);
+  assert.match(shell, /resize-handle resize-\$\{direction\}/);
+  assert.match(shell, /resize-mode-toggle runtime-mode-toggle/);
+  assert.match(page, /resizeDirectionsFor\(nodeResizeMode\(scopeNode\)\)/);
+  assert.match(page, /business-mode-toggle/);
+  assert.match(page, /container-mode-toggle/);
+  assert.match(page, /toggleBusinessResizeMode/);
+  assert.match(page, /toggleNodeResizeMode/);
   assert.match(page, /resizeScopeCanvasStart/);
-  assert.match(page, /RUNTIME_RESIZE_DIRECTIONS\.map/);
   assert.match(page, /ROOT_CANVAS_MIN_SIZE/);
   assert.match(page, /ROOT_CANVAS_MAX_SIZE/);
   assert.match(page, /scope-canvas-resize/);
   assert.doesNotMatch(page, /className="root-hud"/);
   assert.doesNotMatch(css, /\.root-hud/);
-  ["nw", "n", "ne", "e", "se", "s", "sw", "w"].forEach((direction) =>
-    assert.match(css, new RegExp(`\\.root-resize-${direction}`)),
-  );
+  assert.match(css, /\.resize-mode-toggle\.simple/);
+  assert.match(css, /\.resize-mode-toggle\.full/);
+  assert.match(css, /\.resize-handle::after/);
+  assert.doesNotMatch(css, /\.runtime-resize/);
+  assert.doesNotMatch(css, /\.root-resize/);
+  assert.doesNotMatch(css, /\.business-resize/);
   assert.match(css, /\.root-node-viewport\s*\{[^}]*width:\s*100%[^}]*height:\s*100%/s);
   assert.match(css, /\.runtime-node-titlebar\s*\{[^}]*cursor:\s*grab/s);
 });

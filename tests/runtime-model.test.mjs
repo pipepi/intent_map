@@ -51,6 +51,11 @@ test("migrates v1 without changing the business tree", () => {
     APPLICATION_NODE_IDS,
   );
   assert.equal(APPLICATION_NODE_IDS.length, 15);
+  assert.equal(v2.rootIntent.resizeMode, "simple");
+  assert.equal(
+    v2.rootIntent.children.every((node) => node.resizeMode === "simple"),
+    true,
+  );
 });
 
 test("exports a v1 document that the stable runtime can reopen", () => {

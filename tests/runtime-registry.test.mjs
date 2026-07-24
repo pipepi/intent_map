@@ -43,5 +43,8 @@ test("provides one recursive shell for all node implementations", async () => {
   assert.match(source, /layoutLocked/);
   assert.match(source, /runtime-port-input/);
   assert.match(source, /runtime-port-output/);
-  assert.match(source, /resizeDirections\.map/);
+  assert.match(source, /simpleResizeDirections = \["e", "s", "se"\]/);
+  assert.match(source, /visibleDirections\.map/);
+  assert.match(source, /resize-mode-toggle runtime-mode-toggle/);
+  assert.match(source, /resizeMode === "simple" \? "┘" : "⤢"/);
 });

@@ -5,7 +5,9 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type { IntentNode } from "./model";
 
 const resizeDirections = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
+const simpleResizeDirections = ["e", "s", "se"] as const;
 export type ResizeDirection = (typeof resizeDirections)[number];
+export type ResizeMode = "simple" | "full";
 
 export type NodeRendererProps = {
   node: IntentNode;
@@ -25,6 +27,7 @@ export type NodeRendererProps = {
     direction: ResizeDirection,
     event: ReactPointerEvent<HTMLSpanElement>,
   ) => void;
+  onResizeModeToggle: (node: IntentNode) => void;
 };
 
 const portRows = (node: IntentNode) =>
@@ -41,11 +44,15 @@ export function NodeRenderer({
   onEnter,
   onMoveStart,
   onResizeStart,
+  onResizeModeToggle,
 }: NodeRendererProps) {
   const size = node.size ?? { width: 320, height: 220 };
   const alwaysLive = node.implementation?.config?.lod === "always-live";
   const summary = scale < 0.75 && !active && !alwaysLive;
   const rows = portRows(node);
+  const resizeMode = node.resizeMode ?? "simple";
+  const visibleDirections =
+    resizeMode === "full" ? resizeDirections : simpleResizeDirections;
   return (
     <article
       className={[
@@ -125,9 +132,9 @@ export function NodeRenderer({
       )}
 
       {!layoutLocked &&
-        resizeDirections.map((direction) => (
+        visibleDirections.map((direction) => (
           <span
-            className={`runtime-resize runtime-resize-${direction}`}
+            className={`resize-handle resize-${direction}`}
             key={direction}
             onPointerDown={(event) => {
               event.stopPropagation();
@@ -135,8 +142,33 @@ export function NodeRenderer({
             }}
           />
         ))}
+      {!layoutLocked && (
+        <button
+          className={`resize-mode-toggle runtime-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
+          aria-label={
+            resizeMode === "simple"
+              ? `将「${node.name}」切换为四边四角缩放`
+              : `将「${node.name}」切换为右边、下边和右下角缩放`
+          }
+          title={
+            resizeMode === "simple"
+              ? "当前：右边、下边、右下角 · 点击切换为八向"
+              : "当前：四边四角 · 点击切换为三向"
+          }
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onResizeModeToggle(node);
+          }}
+        >
+          {resizeMode === "simple" ? "┘" : "⤢"}
+        </button>
+      )}
     </article>
   );
 }
 
 export const RUNTIME_RESIZE_DIRECTIONS = resizeDirections;
+export const SIMPLE_RESIZE_DIRECTIONS = simpleResizeDirections;
+export const resizeDirectionsFor = (mode: ResizeMode) =>
+  mode === "full" ? resizeDirections : simpleResizeDirections;

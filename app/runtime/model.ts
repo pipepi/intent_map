@@ -391,7 +391,7 @@ export const createApplicationDocument = (
       definition.id === "document_loader" ? [safeBusinessRoot] : undefined,
     position: definition.position,
     size: definition.size,
-    resizeMode: "full" as const,
+    resizeMode: "simple" as const,
       implementation: {
         key: definition.key,
         core: true,
@@ -423,7 +423,7 @@ export const createApplicationDocument = (
       children,
       position: { x: 0, y: 0 },
       canvasSize: { width: 2400, height: 1500 },
-      resizeMode: "full",
+      resizeMode: "simple",
       implementation: {
         key: "application-root",
         core: true,

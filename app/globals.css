@@ -1086,63 +1086,6 @@ code,
   box-shadow: 0 0 8px rgba(240, 185, 91, 0.6);
 }
 
-.runtime-resize {
-  z-index: 12;
-  position: absolute;
-  display: block;
-  touch-action: none;
-}
-
-.runtime-resize-n,
-.runtime-resize-s {
-  height: 10px;
-  left: 12px;
-  right: 12px;
-  cursor: ns-resize;
-}
-
-.runtime-resize-n { top: -5px; }
-.runtime-resize-s { bottom: -5px; }
-
-.runtime-resize-e,
-.runtime-resize-w {
-  width: 10px;
-  top: 12px;
-  bottom: 12px;
-  cursor: ew-resize;
-}
-
-.runtime-resize-e { right: -5px; }
-.runtime-resize-w { left: -5px; }
-
-.runtime-resize-nw,
-.runtime-resize-ne,
-.runtime-resize-se,
-.runtime-resize-sw {
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgba(112, 86, 229, 0.78);
-  border-radius: 3px;
-  background: #10162e;
-  opacity: 0;
-}
-
-.runtime-node:hover .runtime-resize-nw,
-.runtime-node:hover .runtime-resize-ne,
-.runtime-node:hover .runtime-resize-se,
-.runtime-node:hover .runtime-resize-sw,
-.runtime-node.selected .runtime-resize-nw,
-.runtime-node.selected .runtime-resize-ne,
-.runtime-node.selected .runtime-resize-se,
-.runtime-node.selected .runtime-resize-sw {
-  opacity: 1;
-}
-
-.runtime-resize-nw { left: -7px; top: -7px; cursor: nwse-resize; }
-.runtime-resize-ne { right: -7px; top: -7px; cursor: nesw-resize; }
-.runtime-resize-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
-.runtime-resize-sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
-
 .runtime-edges,
 .business-edges {
   width: 100%;
@@ -1241,61 +1184,6 @@ code,
 .canvas-status-surface i.data { background: #39a7ff; box-shadow: 0 0 7px #39a7ff; }
 .root-legend i.event,
 .canvas-status-surface i.event { background: #f0b95b; box-shadow: 0 0 7px #f0b95b; }
-
-.root-resize {
-  z-index: 28;
-  position: absolute;
-  display: block;
-  touch-action: none;
-}
-
-.root-resize-n,
-.root-resize-s {
-  left: 18px;
-  width: calc(100% - 36px);
-  height: 14px;
-  cursor: ns-resize;
-}
-
-.root-resize-n { top: -7px; }
-.root-resize-s { bottom: -7px; }
-
-.root-resize-e,
-.root-resize-w {
-  top: 18px;
-  width: 14px;
-  height: calc(100% - 36px);
-  cursor: ew-resize;
-}
-
-.root-resize-e { right: -7px; }
-.root-resize-w { left: -7px; }
-
-.root-resize-nw,
-.root-resize-ne,
-.root-resize-se,
-.root-resize-sw {
-  width: 18px;
-  height: 18px;
-}
-
-.root-resize-nw { left: -9px; top: -9px; cursor: nwse-resize; }
-.root-resize-ne { right: -9px; top: -9px; cursor: nesw-resize; }
-.root-resize-se { right: -9px; bottom: -9px; cursor: nwse-resize; }
-.root-resize-sw { left: -9px; bottom: -9px; cursor: nesw-resize; }
-
-.root-resize-nw::after,
-.root-resize-ne::after,
-.root-resize-se::after,
-.root-resize-sw::after {
-  position: absolute;
-  inset: 3px;
-  border: 1px solid #9c83ff;
-  border-radius: 3px;
-  background: #141b3c;
-  box-shadow: 0 0 9px rgba(139, 92, 246, 0.58);
-  content: "";
-}
 
 .focused-runtime-surface {
   z-index: 2;
@@ -1768,18 +1656,6 @@ code,
 .business-node.selected {
   border-color: #39a7ff;
   box-shadow: 0 0 0 3px rgba(57, 167, 255, 0.14);
-}
-
-.business-resize {
-  width: 15px;
-  height: 15px;
-  position: absolute;
-  right: -7px;
-  bottom: -7px;
-  border: 2px solid #8b5cf6;
-  border-radius: 3px;
-  background: #111832;
-  cursor: nwse-resize;
 }
 
 .business-node > span {
@@ -2348,6 +2224,22 @@ code,
 .graph-node.selected .resize-ne,
 .graph-node.selected .resize-se,
 .graph-node.selected .resize-sw,
+.runtime-node:hover .resize-nw,
+.runtime-node:hover .resize-ne,
+.runtime-node:hover .resize-se,
+.runtime-node:hover .resize-sw,
+.runtime-node.selected .resize-nw,
+.runtime-node.selected .resize-ne,
+.runtime-node.selected .resize-se,
+.runtime-node.selected .resize-sw,
+.business-node:hover .resize-nw,
+.business-node:hover .resize-ne,
+.business-node:hover .resize-se,
+.business-node:hover .resize-sw,
+.business-node.selected .resize-nw,
+.business-node.selected .resize-ne,
+.business-node.selected .resize-se,
+.business-node.selected .resize-sw,
 .canvas-scale:hover .container-resize-layer .resize-nw,
 .canvas-scale:hover .container-resize-layer .resize-ne,
 .canvas-scale:hover .container-resize-layer .resize-se,
@@ -2355,7 +2247,11 @@ code,
 .container-resize-layer.selected .resize-nw,
 .container-resize-layer.selected .resize-ne,
 .container-resize-layer.selected .resize-se,
-.container-resize-layer.selected .resize-sw {
+.container-resize-layer.selected .resize-sw,
+.root-boundary:hover .container-resize-layer .resize-nw,
+.root-boundary:hover .container-resize-layer .resize-ne,
+.root-boundary:hover .container-resize-layer .resize-se,
+.root-boundary:hover .container-resize-layer .resize-sw {
   opacity: 1 !important;
 }
 
@@ -2371,6 +2267,15 @@ code,
 }
 
 .container-mode-toggle {
+  z-index: 8;
+}
+
+.runtime-mode-toggle {
+  right: 0;
+  top: calc(100% + 5px);
+}
+
+.business-mode-toggle {
   z-index: 8;
 }
 
