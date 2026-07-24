@@ -993,8 +993,9 @@ code,
 }
 
 .node-port-name {
-  width: 58px;
+  width: 56px;
   min-width: 0;
+  flex: 0 0 56px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
