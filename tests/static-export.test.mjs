@@ -31,10 +31,15 @@ test("exports a fully static entry page", async () => {
 
 test("supports simple and full node resize modes", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const css = await readFile(new URL("app/globals.css", root), "utf8");
 
   assert.match(page, /simpleResizeDirections = \["e", "s", "se"\]/);
   assert.match(page, /resizeDirections = \["nw", "n", "ne", "e", "se", "s", "sw", "w"\]/);
   assert.match(page, /resizeMode: getResizeMode\(child\) === "simple" \? "full" : "simple"/);
+  assert.match(page, /onPointerDown=\{\(event\) => resizeNode\(node\.id, direction, event\)\}/);
+  assert.match(css, /\.resize-handle\s*\{[^}]*opacity:\s*0 !important/s);
+  assert.doesNotMatch(css, /\.graph-node:hover \.resize-handle/);
+  assert.doesNotMatch(css, /\.graph-node\.selected \.resize-handle/);
 });
 
 test("anchors derived edges to named node interface ports", async () => {

@@ -1042,14 +1042,8 @@ code,
   position: absolute;
   display: block;
   padding: 0;
-  opacity: 0;
+  opacity: 0 !important;
   touch-action: none;
-  transition: opacity 100ms ease;
-}
-
-.graph-node:hover .resize-handle,
-.graph-node.selected .resize-handle {
-  opacity: 1;
 }
 
 .resize-mode-toggle {
