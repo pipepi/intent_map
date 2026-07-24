@@ -52,6 +52,7 @@ type IntentNode = {
   outputs: Port[];
   children?: IntentNode[];
   position: { x: number; y: number };
+  size?: { width: number; height: number };
   moduleRef?: { moduleId: string; version: number };
 };
 
@@ -96,6 +97,14 @@ type ZoomCue = {
 
 const uid = (prefix = "id") =>
   `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
+
+const DEFAULT_NODE_SIZE = { width: 174, height: 102 };
+const MIN_NODE_SIZE = { width: 150, height: 96 };
+const MAX_NODE_SIZE = { width: 520, height: 360 };
+const NODE_BOUNDS = { left: 195, top: 62, right: 900, bottom: 590 };
+const resizeDirections = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
+type ResizeDirection = (typeof resizeDirections)[number];
+const getNodeSize = (node: IntentNode) => node.size ?? DEFAULT_NODE_SIZE;
 
 const sampleDocument = (): IntentDocument => {
   const scenarioFlow: IntentNode = {
@@ -679,12 +688,14 @@ export default function Home() {
       const candidates = current.children ?? [];
       const nearest = candidates.length
         ? candidates.reduce((closest, node) => {
+            const closestSize = getNodeSize(closest);
+            const nodeSize = getNodeSize(node);
             const closestDistance =
-              (closest.position.x + 89 - anchor.stageX) ** 2 +
-              (closest.position.y + 52 - anchor.stageY) ** 2;
+              (closest.position.x + closestSize.width / 2 - anchor.stageX) ** 2 +
+              (closest.position.y + closestSize.height / 2 - anchor.stageY) ** 2;
             const nodeDistance =
-              (node.position.x + 89 - anchor.stageX) ** 2 +
-              (node.position.y + 52 - anchor.stageY) ** 2;
+              (node.position.x + nodeSize.width / 2 - anchor.stageX) ** 2 +
+              (node.position.y + nodeSize.height / 2 - anchor.stageY) ** 2;
             return nodeDistance < closestDistance ? node : closest;
           })
         : undefined;
@@ -850,12 +861,14 @@ export default function Home() {
       applyAnchoredZoom(2, anchor);
       if (candidates.length > 0) {
         const nearest = candidates.reduce((closest, node) => {
+          const closestSize = getNodeSize(closest);
+          const nodeSize = getNodeSize(node);
           const closestDistance =
-            (closest.position.x + 89 - anchor.stageX) ** 2 +
-            (closest.position.y + 52 - anchor.stageY) ** 2;
+            (closest.position.x + closestSize.width / 2 - anchor.stageX) ** 2 +
+            (closest.position.y + closestSize.height / 2 - anchor.stageY) ** 2;
           const nodeDistance =
-            (node.position.x + 89 - anchor.stageX) ** 2 +
-            (node.position.y + 52 - anchor.stageY) ** 2;
+            (node.position.x + nodeSize.width / 2 - anchor.stageX) ** 2 +
+            (node.position.y + nodeSize.height / 2 - anchor.stageY) ** 2;
           return nodeDistance < closestDistance ? node : closest;
         });
         const intent = thresholdIsConfirmed(direction, event.deltaY);
@@ -970,6 +983,27 @@ export default function Home() {
     }));
   };
 
+  const previewNodeFrame = (
+    nodeId: string,
+    position: { x: number; y: number },
+    size?: { width: number; height: number },
+  ) =>
+    setDoc((activeDocument) => ({
+      ...activeDocument,
+      rootIntent: updateAtPath(activeDocument.rootIntent, path, (scope) => ({
+        ...scope,
+        children: scope.children?.map((child) =>
+          child.id === nodeId
+            ? {
+                ...child,
+                position,
+                size: size ?? child.size,
+              }
+            : child,
+        ),
+      })),
+    }));
+
   const moveNode = (
     nodeId: string,
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -981,24 +1015,37 @@ export default function Home() {
     if (!node) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const start = node.position;
+    const size = getNodeSize(node);
     const target = event.currentTarget;
+    const positionFromEvent = (pointerEvent: PointerEvent) => ({
+      x: Math.max(
+        NODE_BOUNDS.left,
+        Math.min(
+          NODE_BOUNDS.right - size.width,
+          start.x + (pointerEvent.clientX - originX) / cameraRef.current.scale,
+        ),
+      ),
+      y: Math.max(
+        NODE_BOUNDS.top,
+        Math.min(
+          NODE_BOUNDS.bottom - size.height,
+          start.y + (pointerEvent.clientY - originY) / cameraRef.current.scale,
+        ),
+      ),
+    });
+    let latestPosition = { ...start };
     const onMove = (moveEvent: PointerEvent) => {
-      target.style.left = `${start.x + (moveEvent.clientX - originX) / cameraRef.current.scale}px`;
-      target.style.top = `${start.y + (moveEvent.clientY - originY) / cameraRef.current.scale}px`;
+      latestPosition = positionFromEvent(moveEvent);
+      target.style.left = `${latestPosition.x}px`;
+      target.style.top = `${latestPosition.y}px`;
+      previewNodeFrame(nodeId, latestPosition);
     };
     const onUp = (upEvent: PointerEvent) => {
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onUp);
-      const nextPosition = {
-        x: Math.max(
-          195,
-          Math.min(760, start.x + (upEvent.clientX - originX) / cameraRef.current.scale),
-        ),
-        y: Math.max(
-          62,
-          Math.min(520, start.y + (upEvent.clientY - originY) / cameraRef.current.scale),
-        ),
-      };
+      target.removeEventListener("pointercancel", onUp);
+      const nextPosition =
+        upEvent.type === "pointercancel" ? latestPosition : positionFromEvent(upEvent);
       updateCurrent((scope) => ({
         ...scope,
         children: scope.children?.map((child) =>
@@ -1008,6 +1055,118 @@ export default function Home() {
     };
     target.addEventListener("pointermove", onMove);
     target.addEventListener("pointerup", onUp);
+    target.addEventListener("pointercancel", onUp);
+  };
+
+  const resizeNode = (
+    nodeId: string,
+    direction: ResizeDirection,
+    event: ReactPointerEvent<HTMLSpanElement>,
+  ) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const node = current.children?.find((child) => child.id === nodeId);
+    if (!node) return;
+
+    const handle = event.currentTarget;
+    const target = handle.parentElement as HTMLButtonElement | null;
+    if (!target) return;
+    handle.setPointerCapture(event.pointerId);
+    const originX = event.clientX;
+    const originY = event.clientY;
+    const startSize = getNodeSize(node);
+    const startLeft = node.position.x;
+    const startTop = node.position.y;
+    const startRight = startLeft + startSize.width;
+    const startBottom = startTop + startSize.height;
+
+    const rectFromEvent = (pointerEvent: PointerEvent) => {
+      const dx = (pointerEvent.clientX - originX) / cameraRef.current.scale;
+      const dy = (pointerEvent.clientY - originY) / cameraRef.current.scale;
+      let left = startLeft;
+      let right = startRight;
+      let top = startTop;
+      let bottom = startBottom;
+
+      if (direction.includes("w")) {
+        left = Math.max(
+          NODE_BOUNDS.left,
+          Math.min(startRight - MIN_NODE_SIZE.width, startLeft + dx),
+        );
+        if (startRight - left > MAX_NODE_SIZE.width)
+          left = startRight - MAX_NODE_SIZE.width;
+      }
+      if (direction.includes("e")) {
+        right = Math.min(
+          NODE_BOUNDS.right,
+          Math.max(startLeft + MIN_NODE_SIZE.width, startRight + dx),
+        );
+        if (right - startLeft > MAX_NODE_SIZE.width)
+          right = startLeft + MAX_NODE_SIZE.width;
+      }
+      if (direction.includes("n")) {
+        top = Math.max(
+          NODE_BOUNDS.top,
+          Math.min(startBottom - MIN_NODE_SIZE.height, startTop + dy),
+        );
+        if (startBottom - top > MAX_NODE_SIZE.height)
+          top = startBottom - MAX_NODE_SIZE.height;
+      }
+      if (direction.includes("s")) {
+        bottom = Math.min(
+          NODE_BOUNDS.bottom,
+          Math.max(startTop + MIN_NODE_SIZE.height, startBottom + dy),
+        );
+        if (bottom - startTop > MAX_NODE_SIZE.height)
+          bottom = startTop + MAX_NODE_SIZE.height;
+      }
+
+      return {
+        position: { x: left, y: top },
+        size: { width: right - left, height: bottom - top },
+      };
+    };
+
+    const applyRect = (rect: ReturnType<typeof rectFromEvent>) => {
+      target.style.left = `${rect.position.x}px`;
+      target.style.top = `${rect.position.y}px`;
+      target.style.width = `${rect.size.width}px`;
+      target.style.height = `${rect.size.height}px`;
+    };
+    let latestRect = {
+      position: { x: startLeft, y: startTop },
+      size: { ...startSize },
+    };
+    const onMove = (moveEvent: PointerEvent) => {
+      latestRect = rectFromEvent(moveEvent);
+      applyRect(latestRect);
+      previewNodeFrame(nodeId, latestRect.position, latestRect.size);
+    };
+    const onUp = (upEvent: PointerEvent) => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      const nextRect =
+        upEvent.type === "pointercancel" ? latestRect : rectFromEvent(upEvent);
+      applyRect(nextRect);
+      updateCurrent((scope) => ({
+        ...scope,
+        children: scope.children?.map((child) =>
+          child.id === nodeId
+            ? {
+                ...child,
+                position: nextRect.position,
+                size: nextRect.size,
+              }
+            : child,
+        ),
+      }));
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
   };
 
   const addOperator = () => {
@@ -1134,6 +1293,7 @@ export default function Home() {
               id: node.id,
               name: node.name.replace(" 实例", ""),
               position: node.position,
+              size: node.size,
               inputs: node.inputs,
               moduleRef: undefined,
               kind: module.snapshot.kind,
@@ -1325,8 +1485,12 @@ export default function Home() {
       return { x: 178, y: 115 + Math.max(index, 0) * 116 };
     }
     const source = current.children?.find((node) => node.id === ref.nodeId);
+    const sourceSize = source ? getNodeSize(source) : DEFAULT_NODE_SIZE;
     return source
-      ? { x: source.position.x + 172, y: source.position.y + 51 }
+      ? {
+          x: source.position.x + sourceSize.width,
+          y: source.position.y + sourceSize.height / 2,
+        }
       : { x: 0, y: 0 };
   };
 
@@ -1367,7 +1531,7 @@ export default function Home() {
             setHistory((items) => [...items, doc]);
             setDoc(next);
             setPath(["root"]);
-            setSelectedId("customer");
+            setSelectedId(next.rootIntent.children?.[0]?.id ?? next.rootIntent.id);
             setDirty(false);
           }}>新建</button>
           <button onClick={() => fileInput.current?.click()}>导入</button>
@@ -1526,8 +1690,9 @@ export default function Home() {
                     const source = sourcePosition(ref);
                     const target = current.children?.find((node) => node.id === ref.targetId);
                     if (!target) return null;
+                    const targetSize = getNodeSize(target);
                     const tx = target.position.x;
-                    const ty = target.position.y + 50;
+                    const ty = target.position.y + targetSize.height / 2;
                     const bend = Math.max(45, (tx - source.x) * 0.45);
                     return (
                       <path
@@ -1579,7 +1744,12 @@ export default function Home() {
                   <button
                     key={node.id}
                     className={`intent-node graph-node kind-${node.kind} ${selectedId === node.id ? "selected" : ""} ${trace.some((item) => item.name === node.name && item.status === "success") ? "executed" : ""}`}
-                    style={{ left: node.position.x, top: node.position.y }}
+                    style={{
+                      left: node.position.x,
+                      top: node.position.y,
+                      width: getNodeSize(node).width,
+                      height: getNodeSize(node).height,
+                    }}
                     onClick={() => setSelectedId(node.id)}
                     onDoubleClick={() => enterNode(node)}
                     onPointerDown={(event) => moveNode(node.id, event)}
@@ -1594,6 +1764,16 @@ export default function Home() {
                       <span>{node.inputs.length} in</span>
                       <span>{node.outputs.length} out</span>
                     </span>
+                    {resizeDirections.map((direction) => (
+                      <span
+                        key={direction}
+                        className={`resize-handle resize-${direction}`}
+                        aria-hidden="true"
+                        onClick={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => resizeNode(node.id, direction, event)}
+                      />
+                    ))}
                   </button>
                 ))}
 

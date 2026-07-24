@@ -15,6 +15,8 @@ test("exports a fully static entry page", async () => {
   assert.match(html, /场景匹配的 UI Demo 与流程共识/);
   assert.match(html, /业务流程匹配的数据库表结构/);
   assert.match(html, /基于表结构的业务逻辑与 UI API/);
+  assert.match(html, /resize-handle resize-nw/);
+  assert.match(html, /resize-handle resize-e/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 
