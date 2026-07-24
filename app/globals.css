@@ -947,9 +947,12 @@ code,
 }
 
 .graph-node > small {
-  height: auto;
+  height: 28px;
   min-height: 28px;
-  flex: 1;
+  flex: 0 0 28px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .graph-node > .node-ports {
