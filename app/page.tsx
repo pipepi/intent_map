@@ -479,6 +479,7 @@ export default function Home() {
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
   const [zoom, setZoom] = useState(1);
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
   const [trace, setTrace] = useState<Trace[]>([]);
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
@@ -544,6 +545,7 @@ export default function Home() {
   const navigateTo = (targetPath: string[]) => {
     setPath(targetPath);
     setZoom(1);
+    setCanvasOffset({ x: 0, y: 0 });
     requestAnimationFrame(() => canvasViewport.current?.scrollTo({ left: 0, top: 0 }));
     const node = getNodeAtPath(doc.rootIntent, targetPath);
     setSelectedId(node.children?.[0]?.id ?? node.id);
@@ -561,6 +563,7 @@ export default function Home() {
     if (target.kind === "composite" || target.children?.length) {
       setPath((items) => [...items, node.id]);
       setZoom(1);
+      setCanvasOffset({ x: 0, y: 0 });
       requestAnimationFrame(() => canvasViewport.current?.scrollTo({ left: 0, top: 0 }));
       setSelectedId(target.children?.[0]?.id ?? target.id);
     }
@@ -601,8 +604,6 @@ export default function Home() {
       stageY: Math.max(0, Math.min(650, (anchorClientY - stageRect.top) / zoom)),
       viewportX: anchorClientX - viewportRect.left,
       viewportY: anchorClientY - viewportRect.top,
-      stageOffsetX: stageRect.left - viewportRect.left + viewport.scrollLeft,
-      stageOffsetY: stageRect.top - viewportRect.top + viewport.scrollTop,
     };
   };
 
@@ -611,23 +612,39 @@ export default function Home() {
     nextZoom: number,
     anchor: ReturnType<typeof getZoomAnchor>,
   ) => {
+    const placeAxis = (
+      viewportAnchor: number,
+      stageCoordinate: number,
+      stageSize: number,
+      viewportSize: number,
+    ) => {
+      const placement = viewportAnchor - stageCoordinate * nextZoom;
+      const maxScroll = Math.max(0, stageSize * nextZoom - viewportSize);
+      if (placement > 0) return { offset: placement, scroll: 0 };
+      if (placement < -maxScroll) {
+        return { offset: placement + maxScroll, scroll: maxScroll };
+      }
+      return { offset: 0, scroll: -placement };
+    };
+    const horizontal = placeAxis(
+      anchor.viewportX,
+      anchor.stageX,
+      1000,
+      viewport.clientWidth,
+    );
+    const vertical = placeAxis(
+      anchor.viewportY,
+      anchor.stageY,
+      650,
+      viewport.clientHeight,
+    );
+
     setZoom(nextZoom);
+    setCanvasOffset({ x: horizontal.offset, y: vertical.offset });
     requestAnimationFrame(() => {
-      const desiredLeft =
-        anchor.stageOffsetX + anchor.stageX * nextZoom - anchor.viewportX;
-      const desiredTop =
-        anchor.stageOffsetY + anchor.stageY * nextZoom - anchor.viewportY;
-      const maxLeft = Math.max(
-        0,
-        anchor.stageOffsetX + 1000 * nextZoom - viewport.clientWidth,
-      );
-      const maxTop = Math.max(
-        0,
-        anchor.stageOffsetY + 650 * nextZoom - viewport.clientHeight,
-      );
       viewport.scrollTo({
-        left: Math.max(0, Math.min(maxLeft, desiredLeft)),
-        top: Math.max(0, Math.min(maxTop, desiredTop)),
+        left: horizontal.scroll,
+        top: vertical.scroll,
       });
     });
   };
@@ -1213,7 +1230,12 @@ export default function Home() {
             className="canvas-viewport"
             onWheel={handleCanvasWheel}
           >
-            <div className="canvas-scale" style={{ transform: `scale(${zoom})` }}>
+            <div
+              className="canvas-scale"
+              style={{
+                transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoom})`,
+              }}
+            >
               <div className="canvas-stage" aria-label={`${current.name} 内部意图地图`}>
                 <svg className="edges" viewBox="0 0 1000 650" role="img" aria-label="由输入绑定动态推导的依赖连线">
                   <defs>
