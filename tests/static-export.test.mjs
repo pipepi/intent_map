@@ -132,6 +132,10 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /moveBusinessNodeStart/);
   assert.match(page, /resizeBusinessNodeStart/);
   assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);
+  assert.match(
+    page,
+    /const moveBusinessNodeStart = \([\s\S]*?event\.stopPropagation\(\);[\s\S]*?if \(layoutLocked/,
+  );
   assert.match(page, /scopeNode\.implementation\?\.key === "current-container"/);
   assert.match(page, /expanded \? 1 : 0\.58/);
 });

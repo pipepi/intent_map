@@ -1321,6 +1321,7 @@ export default function Home() {
     previewScale: number,
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
+    event.stopPropagation();
     if (layoutLocked || event.button !== 0) return;
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
