@@ -116,6 +116,10 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(css, /\.runtime-node-titlebar\s*\{[^}]*cursor:\s*grab/s);
   assert.match(css, /\.runtime-node\.minimized/);
   assert.match(css, /\.business-node\.minimized/);
+  assert.match(css, /\.business-container-node/);
+  assert.match(css, /\.business-container-header/);
+  assert.match(css, /\.business-container-interfaces/);
+  assert.match(css, /\.business-container-node > footer/);
   assert.match(css, /\.root-minimized-node/);
   assert.match(css, /\.node-display-toggle/);
 });
@@ -168,10 +172,12 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /const businessNodeMinimumHeight/);
   assert.match(page, /rows \* BUSINESS_PORT_ROW \+/);
   assert.match(page, /const businessNodeSize/);
-  assert.match(page, /const isBusinessNodeMinimized = useCallback/);
-  assert.match(page, /node\.displayMode[\s\S]*selectedBusinessNodeId !== node\.id/);
-  assert.match(page, /businessNodeSize\(node, isBusinessNodeMinimized\(node\)\)/);
-  assert.match(page, /isBusinessNodeMinimized\(item\) \? "expanded" : "minimized"/);
+  assert.match(page, /className="business-container-node"/);
+  assert.match(page, /aria-label=\{`当前业务容器：\$\{businessScope\.name\}`\}/);
+  assert.match(page, /businessScope\.description/);
+  assert.match(page, /businessScope\.inputs\.map/);
+  assert.match(page, /businessScope\.outputs\.map/);
+  assert.match(page, /businessScope\.children\?\.length/);
   assert.match(page, /Math\.max\(size\.height, businessNodeMinimumHeight\(node\)\)/);
   assert.match(page, /const minimumHeight = businessNodeMinimumHeight\(node\)/);
   assert.match(page, /style=\{\{ top: BUSINESS_PORT_TOP \}\}/);

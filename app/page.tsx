@@ -260,12 +260,9 @@ const businessNodeMinimumHeight = (node: IntentNode) => {
       : NODE_MIN_SIZE.height,
   );
 };
-const businessNodeSize = (
-  node: IntentNode,
-  minimized = nodeDisplayMode(node) === "minimized",
-) => {
+const businessNodeSize = (node: IntentNode) => {
   const size = nodeSize(node);
-  if (minimized) {
+  if (nodeDisplayMode(node) === "minimized") {
     return {
       width: Math.min(size.width, 220),
       height: 52,
@@ -568,13 +565,6 @@ export default function Home() {
   );
   const selectedBusinessNode =
     findNode(businessRoot, selectedBusinessNodeId) ?? businessScope;
-  const isBusinessNodeMinimized = useCallback(
-    (node: IntentNode) =>
-      node.displayMode
-        ? node.displayMode === "minimized"
-        : selectedBusinessNodeId !== node.id,
-    [selectedBusinessNodeId],
-  );
   const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
   const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
@@ -1483,7 +1473,7 @@ export default function Home() {
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
     const start = { ...node.position };
-    const size = businessNodeSize(node, isBusinessNodeMinimized(node));
+    const size = businessNodeSize(node);
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const world = target.closest<HTMLElement>(".business-preview-world");
     const renderedScale =
@@ -1527,7 +1517,7 @@ export default function Home() {
     if (layoutLocked || event.button !== 0) return;
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
-    const startSize = businessNodeSize(node, isBusinessNodeMinimized(node));
+    const startSize = businessNodeSize(node);
     const minimumHeight = businessNodeMinimumHeight(node);
     const startPosition = { ...node.position };
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
@@ -1606,7 +1596,7 @@ export default function Home() {
     updateDocumentNode(node.id, (item) => ({
       ...item,
       displayMode:
-        isBusinessNodeMinimized(item) ? "expanded" : "minimized",
+        nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
     }));
     setSelectedBusinessNodeId(node.id);
   };
@@ -1638,19 +1628,47 @@ export default function Home() {
             transform: `scale(${scale})`,
           }}
         >
-          <div className="business-caption">
-            <span>当前业务容器</span>
-            <strong>{businessScope.name}</strong>
-          </div>
+          <section
+            className="business-container-node"
+            aria-label={`当前业务容器：${businessScope.name}`}
+          >
+            <header className="business-container-header">
+              <span>{businessScope.kind.toUpperCase()}</span>
+              <div>
+                <strong>{businessScope.name}</strong>
+                <small>{businessScope.description}</small>
+              </div>
+              <i aria-hidden="true" />
+            </header>
+            <div className="business-container-interfaces">
+              <div className="business-container-inputs">
+                {businessScope.inputs.map((port) => (
+                  <span key={port.id}><i />{port.name}</span>
+                ))}
+              </div>
+              <div className="business-container-outputs">
+                {businessScope.outputs.map((port) => (
+                  <span key={port.id}>{port.name}<i /></span>
+                ))}
+              </div>
+            </div>
+            <footer>
+              <span>{businessScope.inputs.length} in</span>
+              <span>{businessScope.children?.length ?? 0} children</span>
+              <span>{businessScope.outputs.length} out</span>
+            </footer>
+          </section>
           <svg className="business-edges" viewBox={`0 0 ${size.width} ${size.height}`}>
             {deriveEdges(businessScope).map((edge) => {
               const source = findNode(businessScope, edge.sourceId);
               const target = findNode(businessScope, edge.targetId);
               if (!source || !target) return null;
-              const sourceMinimized = isBusinessNodeMinimized(source);
-              const targetMinimized = isBusinessNodeMinimized(target);
-              const sourceSize = businessNodeSize(source, sourceMinimized);
-              const targetSize = businessNodeSize(target, targetMinimized);
+              const sourceSize = businessNodeSize(source);
+              const targetSize = businessNodeSize(target);
+              const sourceMinimized =
+                nodeDisplayMode(source) === "minimized";
+              const targetMinimized =
+                nodeDisplayMode(target) === "minimized";
               const sourceIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
               const targetIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
               const sx =
@@ -1678,11 +1696,11 @@ export default function Home() {
             })}
           </svg>
           {(businessScope.children ?? []).map((node) => {
-            const minimized = isBusinessNodeMinimized(node);
-            const size = businessNodeSize(node, minimized);
+            const size = businessNodeSize(node);
             const resizeMode = nodeResizeMode(node);
             const visibleDirections = resizeDirectionsFor(resizeMode);
             const selected = selectedBusinessNodeId === node.id;
+            const minimized = nodeDisplayMode(node) === "minimized";
             return (
               <Fragment key={node.id}>
                 <article
