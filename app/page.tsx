@@ -478,8 +478,7 @@ export default function Home() {
   const [future, setFuture] = useState<IntentDocument[]>([]);
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
-  const [zoom, setZoom] = useState(1);
-  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [camera, setCamera] = useState({ scale: 1, x: 0, y: 0 });
   const [trace, setTrace] = useState<Trace[]>([]);
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
@@ -491,7 +490,9 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasViewport = useRef<HTMLDivElement>(null);
+  const cameraTouched = useRef(false);
   const cancelRun = useRef(false);
+  const zoom = camera.scale;
 
   const current = useMemo(() => getNodeAtPath(doc.rootIntent, path), [doc, path]);
   const selected =
@@ -542,11 +543,34 @@ export default function Home() {
     setDoc(next);
   };
 
+  const resetCamera = () => {
+    const viewport = canvasViewport.current;
+    cameraTouched.current = false;
+    setCamera({
+      scale: 1,
+      x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
+      y: viewport ? (viewport.clientHeight - 650) / 2 : 0,
+    });
+  };
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(resetCamera);
+    const viewport = canvasViewport.current;
+    const observer = viewport
+      ? new ResizeObserver(() => {
+          if (!cameraTouched.current) resetCamera();
+        })
+      : undefined;
+    if (viewport && observer) observer.observe(viewport);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, []);
+
   const navigateTo = (targetPath: string[]) => {
     setPath(targetPath);
-    setZoom(1);
-    setCanvasOffset({ x: 0, y: 0 });
-    requestAnimationFrame(() => canvasViewport.current?.scrollTo({ left: 0, top: 0 }));
+    resetCamera();
     const node = getNodeAtPath(doc.rootIntent, targetPath);
     setSelectedId(node.children?.[0]?.id ?? node.id);
   };
@@ -562,9 +586,7 @@ export default function Home() {
     }
     if (target.kind === "composite" || target.children?.length) {
       setPath((items) => [...items, node.id]);
-      setZoom(1);
-      setCanvasOffset({ x: 0, y: 0 });
-      requestAnimationFrame(() => canvasViewport.current?.scrollTo({ left: 0, top: 0 }));
+      resetCamera();
       setSelectedId(target.children?.[0]?.id ?? target.id);
     }
   };
@@ -600,61 +622,57 @@ export default function Home() {
         : (viewportRect.top + viewportRect.bottom) / 2;
 
     return {
-      stageX: Math.max(0, Math.min(1000, (anchorClientX - stageRect.left) / zoom)),
-      stageY: Math.max(0, Math.min(650, (anchorClientY - stageRect.top) / zoom)),
+      stageX: hasVisibleStage
+        ? Math.max(0, Math.min(1000, (anchorClientX - stageRect.left) / zoom))
+        : 500,
+      stageY: hasVisibleStage
+        ? Math.max(0, Math.min(650, (anchorClientY - stageRect.top) / zoom))
+        : 325,
       viewportX: anchorClientX - viewportRect.left,
       viewportY: anchorClientY - viewportRect.top,
     };
   };
 
   const applyAnchoredZoom = (
-    viewport: HTMLDivElement,
     nextZoom: number,
     anchor: ReturnType<typeof getZoomAnchor>,
   ) => {
-    const placeAxis = (
-      viewportAnchor: number,
-      stageCoordinate: number,
-      stageSize: number,
-      viewportSize: number,
-    ) => {
-      const placement = viewportAnchor - stageCoordinate * nextZoom;
-      const maxScroll = Math.max(0, stageSize * nextZoom - viewportSize);
-      if (placement > 0) return { offset: placement, scroll: 0 };
-      if (placement < -maxScroll) {
-        return { offset: placement + maxScroll, scroll: maxScroll };
-      }
-      return { offset: 0, scroll: -placement };
-    };
-    const horizontal = placeAxis(
-      anchor.viewportX,
-      anchor.stageX,
-      1000,
-      viewport.clientWidth,
-    );
-    const vertical = placeAxis(
-      anchor.viewportY,
-      anchor.stageY,
-      650,
-      viewport.clientHeight,
-    );
-
-    setZoom(nextZoom);
-    setCanvasOffset({ x: horizontal.offset, y: vertical.offset });
-    requestAnimationFrame(() => {
-      viewport.scrollTo({
-        left: horizontal.scroll,
-        top: vertical.scroll,
-      });
+    cameraTouched.current = true;
+    setCamera({
+      scale: nextZoom,
+      x: anchor.viewportX - anchor.stageX * nextZoom,
+      y: anchor.viewportY - anchor.stageY * nextZoom,
     });
   };
 
+  const zoomFromControls = (delta: number) => {
+    const viewport = canvasViewport.current;
+    if (!viewport) return;
+    const nextZoom = Math.max(0.5, Math.min(2, zoom + delta));
+    applyAnchoredZoom(nextZoom, getZoomAnchor(viewport));
+  };
+
   const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey) return;
     event.preventDefault();
 
+    if (!event.ctrlKey) {
+      const horizontalDelta =
+        event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX;
+      const verticalDelta = event.shiftKey ? 0 : event.deltaY;
+      cameraTouched.current = true;
+      setCamera((value) => ({
+        ...value,
+        x: value.x - horizontalDelta,
+        y: value.y - verticalDelta,
+      }));
+      return;
+    }
+
     const direction = event.deltaY < 0 ? 1 : -1;
-    const nextZoom = Math.max(0.5, Math.min(2, zoom + direction * 0.1));
+    const nextZoom = Math.max(
+      0.5,
+      Math.min(2, zoom * Math.exp(-event.deltaY * 0.002)),
+    );
     const viewport = event.currentTarget;
     const anchor = getZoomAnchor(viewport, { x: event.clientX, y: event.clientY });
 
@@ -681,7 +699,7 @@ export default function Home() {
       return;
     }
 
-    applyAnchoredZoom(viewport, nextZoom, anchor);
+    applyAnchoredZoom(nextZoom, anchor);
   };
 
   const sourceOptions = (scope: IntentNode) => [
@@ -1220,9 +1238,9 @@ export default function Home() {
             <span>{current.inputs.length} 输入</span>
             <span>{current.outputs.length} 输出</span>
             <div className="zoom-controls">
-              <button onClick={() => setZoom((value) => Math.max(0.5, value - 0.1))}>−</button>
+              <button onClick={() => zoomFromControls(-0.1)}>−</button>
               <span>{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom((value) => Math.min(2, value + 0.1))}>＋</button>
+              <button onClick={() => zoomFromControls(0.1)}>＋</button>
             </div>
           </div>
           <div
@@ -1233,7 +1251,7 @@ export default function Home() {
             <div
               className="canvas-scale"
               style={{
-                transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoom})`,
+                transform: `translate(${camera.x}px, ${camera.y}px) scale(${zoom})`,
               }}
             >
               <div className="canvas-stage" aria-label={`${current.name} 内部意图地图`}>

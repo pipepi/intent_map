@@ -584,7 +584,7 @@ code,
 
 .canvas-viewport {
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   position: relative;
   background:
     linear-gradient(rgba(49, 60, 105, 0.11) 1px, transparent 1px),
