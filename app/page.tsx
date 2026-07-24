@@ -134,15 +134,13 @@ const getCanvasSize = (node: IntentNode) => node.canvasSize ?? DEFAULT_CANVAS_SI
 const getCanvasContentOffset = (node: IntentNode) =>
   node.canvasContentOffset ?? { x: 0, y: 0 };
 const getCanvasMinimumSize = (node: IntentNode) => {
-  const contentOffset = getCanvasContentOffset(node);
   const childRight = Math.max(
     0,
     ...(node.children ?? []).map(
       (child) =>
         child.position.x +
         getNodeSize(child).width +
-        CANVAS_NODE_MARGIN.right -
-        contentOffset.x,
+        CANVAS_NODE_MARGIN.right,
     ),
   );
   const childBottom = Math.max(
@@ -151,8 +149,7 @@ const getCanvasMinimumSize = (node: IntentNode) => {
       (child) =>
         child.position.y +
         getNodeSize(child).height +
-        CANVAS_NODE_MARGIN.bottom -
-        contentOffset.y,
+        CANVAS_NODE_MARGIN.bottom,
     ),
   );
   return {
@@ -162,10 +159,9 @@ const getCanvasMinimumSize = (node: IntentNode) => {
 };
 const getNodeBounds = (scope: IntentNode) => {
   const canvasSize = getCanvasSize(scope);
-  const contentOffset = getCanvasContentOffset(scope);
   return {
-    left: CANVAS_NODE_MARGIN.left + contentOffset.x,
-    top: CANVAS_NODE_MARGIN.top + contentOffset.y,
+    left: CANVAS_NODE_MARGIN.left,
+    top: CANVAS_NODE_MARGIN.top,
     right: canvasSize.width - CANVAS_NODE_MARGIN.right,
     bottom: canvasSize.height - CANVAS_NODE_MARGIN.bottom,
   };
@@ -1310,13 +1306,29 @@ export default function Home() {
       position: { ...child.position },
     }));
     const minimumSize = getCanvasMinimumSize(current);
+    const minimumChildLeft = Math.min(
+      startSize.width,
+      ...(startChildren ?? []).map((child) => child.position.x),
+    );
+    const minimumChildTop = Math.min(
+      startSize.height,
+      ...(startChildren ?? []).map((child) => child.position.y),
+    );
     const westMinimumWidth = Math.max(
-      minimumSize.width,
+      MIN_CANVAS_SIZE.width,
       startSize.width - startOffset.x,
+      Math.min(
+        startSize.width,
+        startSize.width + CANVAS_NODE_MARGIN.left - minimumChildLeft,
+      ),
     );
     const northMinimumHeight = Math.max(
-      minimumSize.height,
+      MIN_CANVAS_SIZE.height,
       startSize.height - startOffset.y,
+      Math.min(
+        startSize.height,
+        startSize.height + CANVAS_NODE_MARGIN.top - minimumChildTop,
+      ),
     );
     const startCamera = { ...cameraRef.current };
 

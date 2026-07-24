@@ -76,6 +76,34 @@ test("gives the current container the same resize modes as child nodes", async (
   assert.match(page, /viewBox=\{`0 0 \$\{canvasSize\.width\} \$\{canvasSize\.height\}`\}/);
   assert.match(page, /viewport\.clientWidth \/ activeCanvasSize\.width/);
   assert.match(page, /viewport\.clientHeight \/ activeCanvasSize\.height/);
+  assert.match(
+    page,
+    /left: CANVAS_NODE_MARGIN\.left,\s+top: CANVAS_NODE_MARGIN\.top,/,
+  );
+  assert.doesNotMatch(
+    page,
+    /left: CANVAS_NODE_MARGIN\.left \+ contentOffset\.x/,
+  );
+  assert.doesNotMatch(
+    page,
+    /top: CANVAS_NODE_MARGIN\.top \+ contentOffset\.y/,
+  );
+  assert.match(
+    page,
+    /startSize\.width \+ CANVAS_NODE_MARGIN\.left - minimumChildLeft/,
+  );
+  assert.match(
+    page,
+    /startSize\.height \+ CANVAS_NODE_MARGIN\.top - minimumChildTop/,
+  );
+  assert.match(
+    page,
+    /child\.position\.x \+\s+getNodeSize\(child\)\.width \+\s+CANVAS_NODE_MARGIN\.right/,
+  );
+  assert.match(
+    page,
+    /child\.position\.y \+\s+getNodeSize\(child\)\.height \+\s+CANVAS_NODE_MARGIN\.bottom/,
+  );
   assert.match(html, /container-resize-layer/);
   assert.match(html, /resize-mode-toggle container-mode-toggle simple/);
   assert.match(css, /\.container-resize-layer\s*\{[^}]*position:\s*absolute/s);
