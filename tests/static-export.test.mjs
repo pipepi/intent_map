@@ -153,6 +153,10 @@ test("routes interface commands through the state node and event clock", async (
 test("protects core composition and preserves business editing", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
   const css = await readFile(new URL("app/globals.css", root), "utf8");
+  const businessGeometry = await readFile(
+    new URL("app/runtime/business-canvas.ts", root),
+    "utf8",
+  );
 
   assert.match(page, /selected\.implementation\?\.core/);
   assert.match(page, /window\.confirm\(`「\$\{selected\.name\}」是核心节点/);
@@ -164,29 +168,30 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /moveBusinessNodeStart/);
   assert.match(page, /resizeBusinessNodeStart/);
   assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);
-  assert.match(page, /const BUSINESS_PORT_TOP = 112/);
-  assert.match(page, /const BUSINESS_PORT_ROW = 28/);
-  assert.match(page, /const BUSINESS_PORT_HEIGHT = 24/);
-  assert.match(page, /const BUSINESS_NODE_BORDER_WIDTH = 2/);
-  assert.match(page, /const BUSINESS_NODE_BOTTOM_PADDING = 12/);
-  assert.match(page, /const businessNodeMinimumHeight/);
-  assert.match(page, /rows \* BUSINESS_PORT_ROW \+/);
-  assert.match(page, /const businessNodeSize/);
+  assert.match(businessGeometry, /BUSINESS_PORT_TOP = 112/);
+  assert.match(businessGeometry, /BUSINESS_PORT_ROW = 28/);
+  assert.match(businessGeometry, /BUSINESS_PORT_HEIGHT = 24/);
+  assert.match(businessGeometry, /BUSINESS_PORT_DOT_OFFSET = 9/);
+  assert.match(businessGeometry, /BUSINESS_NODE_BOTTOM_PADDING = 12/);
+  assert.match(businessGeometry, /businessNodeMinimumHeight/);
+  assert.match(businessGeometry, /rows \* BUSINESS_PORT_ROW \+/);
+  assert.match(businessGeometry, /businessNodeSize/);
   assert.match(page, /className="business-container-node"/);
   assert.match(page, /aria-label=\{`当前业务容器：\$\{businessScope\.name\}`\}/);
   assert.match(page, /businessScope\.description/);
   assert.match(page, /businessScope\.inputs\.map/);
   assert.match(page, /businessScope\.outputs\.map/);
   assert.match(page, /businessScope\.children\?\.length/);
-  assert.match(page, /Math\.max\(size\.height, businessNodeMinimumHeight\(node\)\)/);
-  assert.match(page, /const minimumHeight = businessNodeMinimumHeight\(node\)/);
+  assert.match(businessGeometry, /Math\.max\(size\.height, businessNodeMinimumHeight\(node\)\)/);
+  assert.match(businessGeometry, /const minimumHeight = businessNodeMinimumHeight\(node\)/);
   assert.match(page, /style=\{\{ top: BUSINESS_PORT_TOP \}\}/);
-  assert.match(page, /BUSINESS_PORT_TOP \+\s*BUSINESS_NODE_BORDER_WIDTH \+/);
-  assert.match(page, /BUSINESS_PORT_HEIGHT \/ 2/);
-  assert.match(
-    page,
-    /sourceSize\.width \+\s*\(sourceMinimized \? 0 : BUSINESS_PORT_DOT_OFFSET\)/,
-  );
+  assert.match(page, /businessEdgeGeometry/);
+  assert.match(page, /deriveBusinessVisualEdges/);
+  assert.match(businessGeometry, /BUSINESS_PORT_TOP \+\s*BUSINESS_PORT_HEIGHT \/ 2/);
+  assert.match(businessGeometry, /sourceSize!\.width \+\s*\(sourceMinimized \? 0 : BUSINESS_PORT_DOT_OFFSET\)/);
+  assert.match(page, /scopeNode\.id !== node\.id/);
+  assert.match(page, /nearestBusinessNode/);
+  assert.match(page, /businessScopePath\.length > 1/);
   assert.match(css, /\.business-node-ports i::before/);
   assert.match(css, /\.business-node-ports i\.input\s*\{\s*left:\s*8px/);
   assert.match(css, /\.business-node-ports i\.input::before\s*\{\s*left:\s*-21px/);

@@ -38,6 +38,16 @@ import {
   type RuntimeCommand,
 } from "./runtime/registry";
 import {
+  BUSINESS_CONTAINER_PORT_TOP,
+  BUSINESS_PORT_ROW,
+  BUSINESS_PORT_TOP,
+  businessEdgeGeometry,
+  businessNodeSize,
+  clampBusinessNodePosition,
+  deriveBusinessVisualEdges,
+  resizeBusinessNodeGeometry,
+} from "./runtime/business-canvas";
+import {
   createRuntimeEvent,
   processEventBatch,
   type ApplicationRuntimeState,
@@ -80,12 +90,6 @@ const ROOT_CANVAS_MAX_SIZE = { width: 8000, height: 6000 };
 const ROOT_CANVAS_PADDING = 40;
 const PORT_ROW = 26;
 const PORT_TOP = 65;
-const BUSINESS_PORT_TOP = 112;
-const BUSINESS_PORT_ROW = 28;
-const BUSINESS_PORT_HEIGHT = 24;
-const BUSINESS_NODE_BORDER_WIDTH = 2;
-const BUSINESS_PORT_DOT_OFFSET = 7;
-const BUSINESS_NODE_BOTTOM_PADDING = 12;
 
 const uid = (prefix = "id") =>
   `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
@@ -248,32 +252,6 @@ const collectRefs = (expression?: Expression): Array<Extract<Expression, { kind:
 
 const nodeSize = (node: IntentNode) => node.size ?? { width: 320, height: 220 };
 const nodeResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
-const businessNodeMinimumHeight = (node: IntentNode) => {
-  const rows = Math.max(node.inputs.length, node.outputs.length);
-  return Math.max(
-    NODE_MIN_SIZE.height,
-    rows > 0
-      ? BUSINESS_PORT_TOP +
-          BUSINESS_NODE_BORDER_WIDTH +
-          rows * BUSINESS_PORT_ROW +
-          BUSINESS_NODE_BOTTOM_PADDING
-      : NODE_MIN_SIZE.height,
-  );
-};
-const businessNodeSize = (node: IntentNode) => {
-  const size = nodeSize(node);
-  if (nodeDisplayMode(node) === "minimized") {
-    return {
-      width: Math.min(size.width, 220),
-      height: 52,
-    };
-  }
-  return {
-    width: size.width,
-    height: Math.max(size.height, businessNodeMinimumHeight(node)),
-  };
-};
-
 const deriveEdges = (scope: IntentNode): DerivedEdge[] =>
   (scope.children ?? []).flatMap((target) =>
     target.inputs.flatMap((input) =>
@@ -501,6 +479,7 @@ export default function Home() {
   const touchPointersRef = useRef(
     new Map<number, { x: number; y: number }>(),
   );
+
   const touchGestureRef = useRef<{
     startCamera: CameraState;
     startCenter: { x: number; y: number };
@@ -562,6 +541,10 @@ export default function Home() {
   const businessScope = useMemo(
     () => findNode(businessRoot, businessScopeId) ?? businessRoot,
     [businessRoot, businessScopeId],
+  );
+  const businessScopePath = useMemo(
+    () => findPath(businessRoot, businessScope.id) ?? [businessRoot],
+    [businessRoot, businessScope.id],
   );
   const selectedBusinessNode =
     findNode(businessRoot, selectedBusinessNodeId) ?? businessScope;
@@ -723,6 +706,30 @@ export default function Home() {
     }, undefined);
   };
 
+  const nearestBusinessNode = (clientX: number, clientY: number) => {
+    const viewport = viewportRef.current;
+    const nodes = businessScope.children ?? [];
+    const world = viewport?.querySelector<HTMLElement>(".business-preview-world");
+    if (!world || !nodes.length || world.offsetWidth <= 0) return undefined;
+    const rect = world.getBoundingClientRect();
+    const renderedScale = rect.width / world.offsetWidth;
+    if (renderedScale <= 0) return undefined;
+    const x = (clientX - rect.left) / renderedScale;
+    const y = (clientY - rect.top) / renderedScale;
+    return nodes.reduce<IntentNode | undefined>((closest, node) => {
+      if (!closest) return node;
+      const size = businessNodeSize(node);
+      const closestSize = businessNodeSize(closest);
+      const distance =
+        (node.position.x + size.width / 2 - x) ** 2 +
+        (node.position.y + size.height / 2 - y) ** 2;
+      const closestDistance =
+        (closest.position.x + closestSize.width / 2 - x) ** 2 +
+        (closest.position.y + closestSize.height / 2 - y) ** 2;
+      return distance < closestDistance ? node : closest;
+    }, undefined);
+  };
+
   const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
     const viewport = viewportRef.current;
@@ -749,6 +756,16 @@ export default function Home() {
     const direction = event.deltaY < 0 ? 1 : -1;
     const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, old.scale * Math.exp(-event.deltaY * 0.002)));
     if (direction > 0 && nextScale >= MAX_SCALE) {
+      if (scopeNode.implementation?.key === "current-container") {
+        const businessTarget = nearestBusinessNode(event.clientX, event.clientY);
+        if (businessTarget) {
+          setBusinessScopeId(businessTarget.id);
+          setSelectedBusinessNodeId(businessTarget.id);
+          setScopeCamera(DEFAULT_CAMERA, true);
+          setToast(`进入「${businessTarget.name}」`);
+          return;
+        }
+      }
       const target = nearestNode(event.clientX, event.clientY);
       if (target) {
         enterNode(target);
@@ -756,6 +773,19 @@ export default function Home() {
         return;
       }
       setToast("当前叶子没有更深层节点，可使用“添加子节点”扩展");
+    }
+    if (
+      direction < 0 &&
+      nextScale <= MIN_SCALE &&
+      scopeNode.implementation?.key === "current-container" &&
+      businessScopePath.length > 1
+    ) {
+      const parent = businessScopePath.at(-2)!;
+      setBusinessScopeId(parent.id);
+      setSelectedBusinessNodeId(businessScope.id);
+      setScopeCamera(DEFAULT_CAMERA, true);
+      setToast("返回上级业务意图");
+      return;
     }
     if (direction < 0 && nextScale <= MIN_SCALE && scopePath.length > 1) {
       setScopePath((path) => path.slice(0, -1));
@@ -1483,10 +1513,16 @@ export default function Home() {
     const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
-      const position = {
-        x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / pointerScale)),
-        y: Math.max(70, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / pointerScale)),
-      };
+      const position = clampBusinessNodePosition(
+        start,
+        {
+          x: moveEvent.clientX - origin.x,
+          y: moveEvent.clientY - origin.y,
+        },
+        pointerScale,
+        size,
+        bounds,
+      );
       setDocumentState((active) => ({
         ...active,
         rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
@@ -1498,6 +1534,7 @@ export default function Home() {
     const up = () => {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
+      target.removeEventListener("pointercancel", up);
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
@@ -1505,6 +1542,7 @@ export default function Home() {
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", up);
+    target.addEventListener("pointercancel", up);
   };
 
   const resizeBusinessNodeStart = (
@@ -1517,9 +1555,6 @@ export default function Home() {
     if (layoutLocked || event.button !== 0) return;
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
-    const startSize = businessNodeSize(node);
-    const minimumHeight = businessNodeMinimumHeight(node);
-    const startPosition = { ...node.position };
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const world = target.closest<HTMLElement>(".business-preview-world");
     const renderedScale =
@@ -1529,44 +1564,22 @@ export default function Home() {
     const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
-      const dx = (moveEvent.clientX - origin.x) / pointerScale;
-      const dy = (moveEvent.clientY - origin.y) / pointerScale;
-      let x = startPosition.x;
-      let y = startPosition.y;
-      let width = startSize.width;
-      let height = startSize.height;
-      if (direction.includes("e")) {
-        width = Math.max(
-          NODE_MIN_SIZE.width,
-          Math.min(520, bounds.width - startPosition.x - 20, startSize.width + dx),
-        );
-      }
-      if (direction.includes("s")) {
-        height = Math.max(
-          minimumHeight,
-          Math.min(420, bounds.height - startPosition.y - 20, startSize.height + dy),
-        );
-      }
-      if (direction.includes("w")) {
-        width = Math.max(
-          NODE_MIN_SIZE.width,
-          Math.min(520, startPosition.x + startSize.width - 20, startSize.width - dx),
-        );
-        x = startPosition.x + startSize.width - width;
-      }
-      if (direction.includes("n")) {
-        height = Math.max(
-          minimumHeight,
-          Math.min(420, startPosition.y + startSize.height - 70, startSize.height - dy),
-        );
-        y = startPosition.y + startSize.height - height;
-      }
+      const geometry = resizeBusinessNodeGeometry(
+        node,
+        direction,
+        {
+          x: moveEvent.clientX - origin.x,
+          y: moveEvent.clientY - origin.y,
+        },
+        pointerScale,
+        bounds,
+      );
       setDocumentState((active) => ({
         ...active,
         rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
           ...item,
-          position: { x, y },
-          size: { width, height },
+          position: geometry.position,
+          size: geometry.size,
         })),
       }));
     };
@@ -1603,6 +1616,7 @@ export default function Home() {
 
   const renderBusinessCanvas = () => {
     const size = businessScope.canvasSize ?? { width: 1400, height: 850 };
+    const businessVisualEdges = deriveBusinessVisualEdges(businessScope);
     const expanded =
       scopePath.length > 1 &&
       scopeNode.implementation?.key === "current-container";
@@ -1642,13 +1656,23 @@ export default function Home() {
             </header>
             <div className="business-container-interfaces">
               <div className="business-container-inputs">
-                {businessScope.inputs.map((port) => (
-                  <span key={port.id}><i />{port.name}</span>
+                {businessScope.inputs.map((port, index) => (
+                  <span
+                    key={port.id}
+                    style={{ top: BUSINESS_CONTAINER_PORT_TOP + index * BUSINESS_PORT_ROW }}
+                  >
+                    <i />{port.name}
+                  </span>
                 ))}
               </div>
               <div className="business-container-outputs">
-                {businessScope.outputs.map((port) => (
-                  <span key={port.id}>{port.name}<i /></span>
+                {businessScope.outputs.map((port, index) => (
+                  <span
+                    key={port.id}
+                    style={{ top: BUSINESS_CONTAINER_PORT_TOP + index * BUSINESS_PORT_ROW }}
+                  >
+                    {port.name}<i />
+                  </span>
                 ))}
               </div>
             </div>
@@ -1659,40 +1683,42 @@ export default function Home() {
             </footer>
           </section>
           <svg className="business-edges" viewBox={`0 0 ${size.width} ${size.height}`}>
-            {deriveEdges(businessScope).map((edge) => {
-              const source = findNode(businessScope, edge.sourceId);
-              const target = findNode(businessScope, edge.targetId);
-              if (!source || !target) return null;
-              const sourceSize = businessNodeSize(source);
-              const targetSize = businessNodeSize(target);
-              const sourceMinimized =
-                nodeDisplayMode(source) === "minimized";
-              const targetMinimized =
-                nodeDisplayMode(target) === "minimized";
-              const sourceIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
-              const targetIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
-              const sx =
-                source.position.x +
-                sourceSize.width +
-                (sourceMinimized ? 0 : BUSINESS_PORT_DOT_OFFSET);
-              const sy = sourceMinimized
-                ? source.position.y + sourceSize.height / 2
-                : source.position.y +
-                  BUSINESS_PORT_TOP +
-                  BUSINESS_NODE_BORDER_WIDTH +
-                  BUSINESS_PORT_HEIGHT / 2 +
-                  sourceIndex * BUSINESS_PORT_ROW;
-              const tx =
-                target.position.x -
-                (targetMinimized ? 0 : BUSINESS_PORT_DOT_OFFSET);
-              const ty = targetMinimized
-                ? target.position.y + targetSize.height / 2
-                : target.position.y +
-                  BUSINESS_PORT_TOP +
-                  BUSINESS_NODE_BORDER_WIDTH +
-                  BUSINESS_PORT_HEIGHT / 2 +
-                  targetIndex * BUSINESS_PORT_ROW;
-              return <path key={edge.id} d={`M ${sx} ${sy} C ${sx + 45} ${sy}, ${tx - 45} ${ty}, ${tx} ${ty}`} />;
+            <defs>
+              <marker id="business-arrow-input" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
+              <marker id="business-arrow-compute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
+              <marker id="business-arrow-output" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
+            </defs>
+            {businessVisualEdges.map((edge) => {
+              const geometry = businessEdgeGeometry(
+                businessScope,
+                edge,
+                size,
+              );
+              if (!geometry) return null;
+              const { sx, sy, tx, ty } = geometry;
+              const bend = Math.max(45, Math.abs(tx - sx) * 0.42);
+              const edgeClass =
+                edge.targetKind === "container-output"
+                  ? "edge-output"
+                  : edge.sourceKind === "environment"
+                    ? "edge-input"
+                    : "edge-compute";
+              return (
+                <path
+                  key={edge.id}
+                  className={`business-edge ${edgeClass} channel-${edge.channel}`}
+                  data-source-port={edge.sourcePortId}
+                  data-target-port={edge.targetPortId}
+                  d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`}
+                  markerEnd={`url(#business-arrow-${edgeClass.slice(5)})`}
+                />
+              );
             })}
           </svg>
           {(businessScope.children ?? []).map((node) => {
@@ -2023,13 +2049,23 @@ export default function Home() {
         </div>
       );
     }
-    if (key === "current-container") return renderBusinessCanvas();
+    if (key === "current-container") {
+      if (scopeNode.id !== node.id) {
+        return (
+          <div className="runtime-lod-summary current-container-preview">
+            <span>进入节点后显示“当前业务容器”及其直属子意图</span>
+            <small>{businessScope.inputs.length} 输入 · {businessScope.children?.length ?? 0} 子意图 · {businessScope.outputs.length} 输出</small>
+          </div>
+        );
+      }
+      return renderBusinessCanvas();
+    }
     if (key === "canvas-status") {
       return (
         <div className="canvas-status-surface">
           <span><i className="data" />数据管道</span>
           <span><i className="event" />事件管道</span>
-          <span>{deriveEdges(businessScope).length} 条业务引用</span>
+          <span>{deriveBusinessVisualEdges(businessScope).length} 条业务引用</span>
           <span>双指平移 · Ctrl+滚轮 50%–200%</span>
         </div>
       );
