@@ -54,9 +54,19 @@ test("gives the current container the same resize modes as child nodes", async (
   const css = await readFile(new URL("app/globals.css", root), "utf8");
 
   assert.match(page, /canvasSize\?: \{ width: number; height: number \}/);
+  assert.match(page, /canvasContentOffset\?: \{ x: number; y: number \}/);
   assert.match(page, /currentResizeMode === "full" \? resizeDirections : simpleResizeDirections/);
   assert.match(page, /resizeCurrentContainer\(direction, event\)/);
   assert.match(page, /canvasSize: finalState\.size/);
+  assert.match(page, /canvasContentOffset: finalState\.offset/);
+  assert.match(page, /direction\.includes\("w"\) \? nextSize\.width - startSize\.width : 0/);
+  assert.match(page, /direction\.includes\("n"\) \? nextSize\.height - startSize\.height : 0/);
+  assert.match(page, /x: child\.position\.x \+ contentShift\.x/);
+  assert.match(page, /y: child\.position\.y \+ contentShift\.y/);
+  assert.match(page, /startSize\.width - startOffset\.x/);
+  assert.match(page, /startSize\.height - startOffset\.y/);
+  assert.match(page, /left: 23 \+ canvasContentOffset\.x/);
+  assert.match(page, /top: 76 \+ canvasContentOffset\.y/);
   assert.match(page, /viewBox=\{`0 0 \$\{canvasSize\.width\} \$\{canvasSize\.height\}`\}/);
   assert.match(page, /viewport\.clientWidth \/ activeCanvasSize\.width/);
   assert.match(page, /viewport\.clientHeight \/ activeCanvasSize\.height/);

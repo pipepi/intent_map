@@ -55,6 +55,7 @@ type IntentNode = {
   position: { x: number; y: number };
   size?: { width: number; height: number };
   canvasSize?: { width: number; height: number };
+  canvasContentOffset?: { x: number; y: number };
   resizeMode?: "simple" | "full";
   moduleRef?: { moduleId: string; version: number };
 };
@@ -130,17 +131,28 @@ const getNodeSize = (node: IntentNode) => {
 };
 const getResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
 const getCanvasSize = (node: IntentNode) => node.canvasSize ?? DEFAULT_CANVAS_SIZE;
+const getCanvasContentOffset = (node: IntentNode) =>
+  node.canvasContentOffset ?? { x: 0, y: 0 };
 const getCanvasMinimumSize = (node: IntentNode) => {
+  const contentOffset = getCanvasContentOffset(node);
   const childRight = Math.max(
     0,
     ...(node.children ?? []).map(
-      (child) => child.position.x + getNodeSize(child).width + CANVAS_NODE_MARGIN.right,
+      (child) =>
+        child.position.x +
+        getNodeSize(child).width +
+        CANVAS_NODE_MARGIN.right -
+        contentOffset.x,
     ),
   );
   const childBottom = Math.max(
     0,
     ...(node.children ?? []).map(
-      (child) => child.position.y + getNodeSize(child).height + CANVAS_NODE_MARGIN.bottom,
+      (child) =>
+        child.position.y +
+        getNodeSize(child).height +
+        CANVAS_NODE_MARGIN.bottom -
+        contentOffset.y,
     ),
   );
   return {
@@ -150,9 +162,10 @@ const getCanvasMinimumSize = (node: IntentNode) => {
 };
 const getNodeBounds = (scope: IntentNode) => {
   const canvasSize = getCanvasSize(scope);
+  const contentOffset = getCanvasContentOffset(scope);
   return {
-    left: CANVAS_NODE_MARGIN.left,
-    top: CANVAS_NODE_MARGIN.top,
+    left: CANVAS_NODE_MARGIN.left + contentOffset.x,
+    top: CANVAS_NODE_MARGIN.top + contentOffset.y,
     right: canvasSize.width - CANVAS_NODE_MARGIN.right,
     bottom: canvasSize.height - CANVAS_NODE_MARGIN.bottom,
   };
@@ -560,6 +573,7 @@ export default function Home() {
   const currentRef = useRef(current);
   currentRef.current = current;
   const canvasSize = getCanvasSize(current);
+  const canvasContentOffset = getCanvasContentOffset(current);
   const currentResizeMode = getResizeMode(current);
   const currentResizeDirections =
     currentResizeMode === "full" ? resizeDirections : simpleResizeDirections;
@@ -1263,12 +1277,18 @@ export default function Home() {
     handle.addEventListener("pointercancel", onUp);
   };
 
-  const previewCurrentCanvasSize = (nextSize: { width: number; height: number }) =>
+  const previewCurrentCanvasFrame = (
+    nextSize: { width: number; height: number },
+    nextOffset: { x: number; y: number },
+    nextChildren: IntentNode[] | undefined,
+  ) =>
     setDoc((activeDocument) => ({
       ...activeDocument,
       rootIntent: updateAtPath(activeDocument.rootIntent, path, (scope) => ({
         ...scope,
         canvasSize: nextSize,
+        canvasContentOffset: nextOffset,
+        children: nextChildren,
       })),
     }));
 
@@ -1284,7 +1304,20 @@ export default function Home() {
     const originX = event.clientX;
     const originY = event.clientY;
     const startSize = getCanvasSize(current);
+    const startOffset = getCanvasContentOffset(current);
+    const startChildren = current.children?.map((child) => ({
+      ...child,
+      position: { ...child.position },
+    }));
     const minimumSize = getCanvasMinimumSize(current);
+    const westMinimumWidth = Math.max(
+      minimumSize.width,
+      startSize.width - startOffset.x,
+    );
+    const northMinimumHeight = Math.max(
+      minimumSize.height,
+      startSize.height - startOffset.y,
+    );
     const startCamera = { ...cameraRef.current };
 
     const stateFromEvent = (pointerEvent: PointerEvent) => {
@@ -1295,7 +1328,7 @@ export default function Home() {
 
       if (direction.includes("w"))
         width = Math.max(
-          minimumSize.width,
+          westMinimumWidth,
           Math.min(MAX_CANVAS_SIZE.width, startSize.width - dx),
         );
       if (direction.includes("e"))
@@ -1305,7 +1338,7 @@ export default function Home() {
         );
       if (direction.includes("n"))
         height = Math.max(
-          minimumSize.height,
+          northMinimumHeight,
           Math.min(MAX_CANVAS_SIZE.height, startSize.height - dy),
         );
       if (direction.includes("s"))
@@ -1315,8 +1348,23 @@ export default function Home() {
         );
 
       const nextSize = { width: Math.round(width), height: Math.round(height) };
+      const contentShift = {
+        x: direction.includes("w") ? nextSize.width - startSize.width : 0,
+        y: direction.includes("n") ? nextSize.height - startSize.height : 0,
+      };
       return {
         size: nextSize,
+        offset: {
+          x: startOffset.x + contentShift.x,
+          y: startOffset.y + contentShift.y,
+        },
+        children: startChildren?.map((child) => ({
+          ...child,
+          position: {
+            x: child.position.x + contentShift.x,
+            y: child.position.y + contentShift.y,
+          },
+        })),
         camera: {
           ...startCamera,
           x:
@@ -1333,10 +1381,12 @@ export default function Home() {
 
     let latestState = {
       size: { ...startSize },
+      offset: { ...startOffset },
+      children: startChildren,
       camera: { ...startCamera },
     };
     const applyState = (state: typeof latestState) => {
-      previewCurrentCanvasSize(state.size);
+      previewCurrentCanvasFrame(state.size, state.offset, state.children);
       cameraRef.current = state.camera;
       setCamera(state.camera);
     };
@@ -1352,7 +1402,12 @@ export default function Home() {
         upEvent.type === "pointercancel" ? latestState : stateFromEvent(upEvent);
       cameraRef.current = finalState.camera;
       setCamera(finalState.camera);
-      updateCurrent((scope) => ({ ...scope, canvasSize: finalState.size }));
+      updateCurrent((scope) => ({
+        ...scope,
+        canvasSize: finalState.size,
+        canvasContentOffset: finalState.offset,
+        children: finalState.children,
+      }));
     };
 
     handle.addEventListener("pointermove", onMove);
@@ -1402,7 +1457,10 @@ export default function Home() {
         },
       ],
       outputs: [{ id: uid("output"), name: "结果", type: "any" }],
-      position: { x: 360, y: 390 },
+      position: {
+        x: 360 + canvasContentOffset.x,
+        y: 390 + canvasContentOffset.y,
+      },
     };
     updateCurrent((scope) =>
       scope.kind === "operator"
@@ -1439,8 +1497,8 @@ export default function Home() {
       children: scope.children?.map((node, index) => ({
         ...node,
         position: {
-          x: 270 + (index % 3) * 235,
-          y: 88 + Math.floor(index / 3) * 190,
+          x: 270 + getCanvasContentOffset(scope).x + (index % 3) * 235,
+          y: 88 + getCanvasContentOffset(scope).y + Math.floor(index / 3) * 190,
         },
       })),
     }));
@@ -1478,7 +1536,10 @@ export default function Home() {
       kind: "linkedModule",
       moduleRef: { moduleId: module.moduleId, version: module.version },
       children: undefined,
-      position: { x: 410, y: 420 },
+      position: {
+        x: 410 + canvasContentOffset.x,
+        y: 420 + canvasContentOffset.y,
+      },
       inputs: module.snapshot.inputs.map((port, index) => ({
         ...port,
         binding: current.inputs[index]
@@ -1697,7 +1758,10 @@ export default function Home() {
   const sourcePosition = (ref: { nodeId?: string; portId: string; env?: boolean }) => {
     if (ref.env) {
       const index = current.inputs.findIndex((port) => port.id === ref.portId);
-      return { x: 178, y: 115 + Math.max(index, 0) * 116 };
+      return {
+        x: 178 + canvasContentOffset.x,
+        y: 115 + canvasContentOffset.y + Math.max(index, 0) * 116,
+      };
     }
     const source = current.children?.find((node) => node.id === ref.nodeId);
     const outputIndex = source?.outputs.findIndex((port) => port.id === ref.portId) ?? -1;
@@ -1938,7 +2002,8 @@ export default function Home() {
                   {current.outputs.flatMap((port, outputIndex) =>
                     collectRefs(port.mapping).map((ref, index) => {
                       const source = sourcePosition(ref);
-                      const targetY = 170 + outputIndex * 116;
+                      const targetY =
+                        170 + canvasContentOffset.y + outputIndex * 116;
                       return (
                         <path
                           key={`output-${port.id}-${index}`}
@@ -1951,13 +2016,25 @@ export default function Home() {
                   )}
                 </svg>
 
-                <div className="container-caption">
+                <div
+                  className="container-caption"
+                  style={{
+                    left: 23 + canvasContentOffset.x,
+                    top: 17 + canvasContentOffset.y,
+                  }}
+                >
                   <span>当前容器</span>
                   <strong>{current.name}</strong>
                   <small>{current.description}</small>
                 </div>
 
-                <div className="environment-stack">
+                <div
+                  className="environment-stack"
+                  style={{
+                    left: 26 + canvasContentOffset.x,
+                    top: 76 + canvasContentOffset.y,
+                  }}
+                >
                   <div className="stack-label">环境输入</div>
                   {current.inputs.map((port) => (
                     <button
@@ -2072,7 +2149,10 @@ export default function Home() {
                   );
                 })}
 
-                <div className="output-stack">
+                <div
+                  className="output-stack"
+                  style={{ top: 76 + canvasContentOffset.y }}
+                >
                   <div className="stack-label">父级输出</div>
                   {current.outputs.map((port) => (
                     <button
@@ -2088,7 +2168,14 @@ export default function Home() {
                 </div>
 
                 {current.kind !== "linkedModule" && !current.children?.length && (
-                  <button className="empty-canvas" onClick={addOperator}>
+                  <button
+                    className="empty-canvas"
+                    style={{
+                      left: 410 + canvasContentOffset.x,
+                      top: 250 + canvasContentOffset.y,
+                    }}
+                    onClick={addOperator}
+                  >
                     <span>＋</span>
                     添加第一个子意图
                   </button>
