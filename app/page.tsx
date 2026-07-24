@@ -77,11 +77,12 @@ const ROOT_CANVAS_MAX_SIZE = { width: 8000, height: 6000 };
 const ROOT_CANVAS_PADDING = 40;
 const PORT_ROW = 26;
 const PORT_TOP = 65;
-const BUSINESS_PORT_TOP = 94;
+const BUSINESS_PORT_TOP = 112;
 const BUSINESS_PORT_ROW = 28;
 const BUSINESS_PORT_HEIGHT = 24;
 const BUSINESS_NODE_BORDER_WIDTH = 2;
 const BUSINESS_PORT_DOT_OFFSET = 7;
+const BUSINESS_NODE_BOTTOM_PADDING = 12;
 
 const uid = (prefix = "id") =>
   `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
@@ -244,6 +245,25 @@ const collectRefs = (expression?: Expression): Array<Extract<Expression, { kind:
 
 const nodeSize = (node: IntentNode) => node.size ?? { width: 320, height: 220 };
 const nodeResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
+const businessNodeMinimumHeight = (node: IntentNode) => {
+  const rows = Math.max(node.inputs.length, node.outputs.length);
+  return Math.max(
+    NODE_MIN_SIZE.height,
+    rows > 0
+      ? BUSINESS_PORT_TOP +
+          BUSINESS_NODE_BORDER_WIDTH +
+          rows * BUSINESS_PORT_ROW +
+          BUSINESS_NODE_BOTTOM_PADDING
+      : NODE_MIN_SIZE.height,
+  );
+};
+const businessNodeSize = (node: IntentNode) => {
+  const size = nodeSize(node);
+  return {
+    width: size.width,
+    height: Math.max(size.height, businessNodeMinimumHeight(node)),
+  };
+};
 
 const deriveEdges = (scope: IntentNode): DerivedEdge[] =>
   (scope.children ?? []).flatMap((target) =>
@@ -1413,7 +1433,7 @@ export default function Home() {
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
     const start = { ...node.position };
-    const size = nodeSize(node);
+    const size = businessNodeSize(node);
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const world = target.closest<HTMLElement>(".business-preview-world");
     const renderedScale =
@@ -1457,7 +1477,8 @@ export default function Home() {
     if (layoutLocked || event.button !== 0) return;
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
-    const startSize = nodeSize(node);
+    const startSize = businessNodeSize(node);
+    const minimumHeight = businessNodeMinimumHeight(node);
     const startPosition = { ...node.position };
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const world = target.closest<HTMLElement>(".business-preview-world");
@@ -1482,7 +1503,7 @@ export default function Home() {
       }
       if (direction.includes("s")) {
         height = Math.max(
-          NODE_MIN_SIZE.height,
+          minimumHeight,
           Math.min(420, bounds.height - startPosition.y - 20, startSize.height + dy),
         );
       }
@@ -1495,7 +1516,7 @@ export default function Home() {
       }
       if (direction.includes("n")) {
         height = Math.max(
-          NODE_MIN_SIZE.height,
+          minimumHeight,
           Math.min(420, startPosition.y + startSize.height - 70, startSize.height - dy),
         );
         y = startPosition.y + startSize.height - height;
@@ -1567,7 +1588,7 @@ export default function Home() {
               const source = findNode(businessScope, edge.sourceId);
               const target = findNode(businessScope, edge.targetId);
               if (!source || !target) return null;
-              const sourceSize = nodeSize(source);
+              const sourceSize = businessNodeSize(source);
               const sourceIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
               const targetIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
               const sx =
@@ -1592,7 +1613,7 @@ export default function Home() {
             })}
           </svg>
           {(businessScope.children ?? []).map((node) => {
-            const size = nodeSize(node);
+            const size = businessNodeSize(node);
             const resizeMode = nodeResizeMode(node);
             const visibleDirections = resizeDirectionsFor(resizeMode);
             const selected = selectedBusinessNodeId === node.id;
@@ -1608,7 +1629,10 @@ export default function Home() {
                   <span>{node.kind.toUpperCase()}</span>
                   <strong>{node.name}</strong>
                   <small>{node.description}</small>
-                  <div className="business-node-ports">
+                  <div
+                    className="business-node-ports"
+                    style={{ top: BUSINESS_PORT_TOP }}
+                  >
                     {node.inputs.map((port, index) => (
                       <i
                         className="input"

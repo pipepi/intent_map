@@ -1617,6 +1617,7 @@ code,
 
 .business-node {
   position: absolute;
+  display: block;
   padding: 14px;
   overflow: visible;
   border: 2px solid #364777;
@@ -1632,6 +1633,9 @@ code,
 }
 
 .business-node > span {
+  position: absolute;
+  left: 14px;
+  top: 14px;
   color: #39a7ff;
   font-family: Consolas, monospace;
   font-size: 10px;
@@ -1643,11 +1647,22 @@ code,
 }
 
 .business-node > strong {
-  margin: 12px 0 8px;
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 42px;
+  margin: 0;
+  overflow: hidden;
   font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .business-node > small {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 70px;
   height: 40px;
   overflow: hidden;
   color: #7c89ad;
@@ -1659,7 +1674,6 @@ code,
   position: absolute;
   left: 0;
   right: 0;
-  top: 94px;
   pointer-events: none;
 }
 

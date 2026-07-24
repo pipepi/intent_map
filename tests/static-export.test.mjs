@@ -140,10 +140,17 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /moveBusinessNodeStart/);
   assert.match(page, /resizeBusinessNodeStart/);
   assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);
-  assert.match(page, /const BUSINESS_PORT_TOP = 94/);
+  assert.match(page, /const BUSINESS_PORT_TOP = 112/);
   assert.match(page, /const BUSINESS_PORT_ROW = 28/);
   assert.match(page, /const BUSINESS_PORT_HEIGHT = 24/);
   assert.match(page, /const BUSINESS_NODE_BORDER_WIDTH = 2/);
+  assert.match(page, /const BUSINESS_NODE_BOTTOM_PADDING = 12/);
+  assert.match(page, /const businessNodeMinimumHeight/);
+  assert.match(page, /rows \* BUSINESS_PORT_ROW \+/);
+  assert.match(page, /const businessNodeSize/);
+  assert.match(page, /Math\.max\(size\.height, businessNodeMinimumHeight\(node\)\)/);
+  assert.match(page, /const minimumHeight = businessNodeMinimumHeight\(node\)/);
+  assert.match(page, /style=\{\{ top: BUSINESS_PORT_TOP \}\}/);
   assert.match(page, /BUSINESS_PORT_TOP \+\s*BUSINESS_NODE_BORDER_WIDTH \+/);
   assert.match(page, /BUSINESS_PORT_HEIGHT \/ 2/);
   assert.match(page, /sourceSize\.width \+\s*BUSINESS_PORT_DOT_OFFSET/);
@@ -152,6 +159,13 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(css, /\.business-node-ports i\.input::before\s*\{\s*left:\s*-21px/);
   assert.match(css, /\.business-node-ports i\.output\s*\{[\s\S]*right:\s*8px/);
   assert.match(css, /\.business-node-ports i\.output::before\s*\{[\s\S]*right:\s*-21px/);
+  assert.match(
+    css,
+    /\.business-node > strong\s*\{[\s\S]*top:\s*42px;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/,
+  );
+  assert.match(css, /\.business-node > span\s*\{[\s\S]*top:\s*14px;/);
+  assert.match(css, /\.business-node > small\s*\{[\s\S]*top:\s*70px;/);
+  assert.match(css, /\.business-node\s*\{[\s\S]*display:\s*block;/);
   assert.match(
     page,
     /const moveBusinessNodeStart = \([\s\S]*?event\.stopPropagation\(\);[\s\S]*?if \(layoutLocked/,
