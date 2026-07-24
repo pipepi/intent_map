@@ -38,8 +38,14 @@ test("supports simple and full node resize modes", async () => {
   assert.match(page, /resizeMode: getResizeMode\(child\) === "simple" \? "full" : "simple"/);
   assert.match(page, /onPointerDown=\{\(event\) => resizeNode\(node\.id, direction, event\)\}/);
   assert.match(css, /\.resize-handle\s*\{[^}]*opacity:\s*0 !important/s);
-  assert.doesNotMatch(css, /\.graph-node:hover \.resize-handle/);
-  assert.doesNotMatch(css, /\.graph-node\.selected \.resize-handle/);
+  assert.match(css, /\.graph-node:hover \.resize-nw/);
+  assert.match(css, /\.graph-node:hover \.resize-ne/);
+  assert.match(css, /\.graph-node:hover \.resize-se/);
+  assert.match(css, /\.graph-node:hover \.resize-sw/);
+  assert.match(css, /\.graph-node\.selected \.resize-nw/);
+  assert.match(css, /\.graph-node\.selected \.resize-sw[\s\S]*opacity:\s*1 !important/);
+  assert.doesNotMatch(css, /\.graph-node:hover \.resize-[nesw],/);
+  assert.doesNotMatch(css, /\.graph-node\.selected \.resize-[nesw],/);
 });
 
 test("anchors derived edges to named node interface ports", async () => {

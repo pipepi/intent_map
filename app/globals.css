@@ -1044,6 +1044,18 @@ code,
   padding: 0;
   opacity: 0 !important;
   touch-action: none;
+  transition: opacity 100ms ease;
+}
+
+.graph-node:hover .resize-nw,
+.graph-node:hover .resize-ne,
+.graph-node:hover .resize-se,
+.graph-node:hover .resize-sw,
+.graph-node.selected .resize-nw,
+.graph-node.selected .resize-ne,
+.graph-node.selected .resize-se,
+.graph-node.selected .resize-sw {
+  opacity: 1 !important;
 }
 
 .resize-mode-toggle {
