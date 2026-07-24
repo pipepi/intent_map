@@ -27,6 +27,7 @@ import {
   type PublishedModule,
 } from "./runtime/model";
 import {
+  MINIMIZED_NODE_SIZE,
   NodeRenderer,
   resizeDirectionsFor,
   runtimeNodeRenderSize,
@@ -567,6 +568,7 @@ export default function Home() {
   const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
   const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
+  const scopeMinimized = nodeDisplayMode(scopeNode) === "minimized";
 
   const commit = useCallback(
     (next: IntentDocumentV2) => {
@@ -632,10 +634,12 @@ export default function Home() {
   const fitScope = useCallback(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    const world = scopeNode.canvasSize ?? {
-      width: Math.max(900, ...visibleNodes.map((node) => node.position.x + nodeSize(node).width + 100)),
-      height: Math.max(600, ...visibleNodes.map((node) => node.position.y + nodeSize(node).height + 100)),
-    };
+    const world = scopeMinimized
+      ? MINIMIZED_NODE_SIZE
+      : scopeNode.canvasSize ?? {
+          width: Math.max(900, ...visibleNodes.map((node) => node.position.x + nodeSize(node).width + 100)),
+          height: Math.max(600, ...visibleNodes.map((node) => node.position.y + nodeSize(node).height + 100)),
+        };
     const scale = Math.max(
       MIN_SCALE,
       Math.min(MAX_SCALE, Math.min((viewport.clientWidth - 36) / world.width, (viewport.clientHeight - 36) / world.height)),
@@ -645,7 +649,7 @@ export default function Home() {
       x: (viewport.clientWidth - world.width * scale) / 2,
       y: (viewport.clientHeight - world.height * scale) / 2,
     });
-  }, [scopeNode, setScopeCamera, visibleNodes]);
+  }, [scopeMinimized, scopeNode, setScopeCamera, visibleNodes]);
 
   useEffect(() => {
     const saved = documentState.viewState.cameras[scopeNode.id];
@@ -657,6 +661,19 @@ export default function Home() {
     // Scope identity is the intentional trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeNode.id]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(fitScope);
+    return () => window.cancelAnimationFrame(frame);
+    // Display-mode changes intentionally refit the same scope to its new boundary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeMinimized]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2074,8 +2091,8 @@ export default function Home() {
   };
 
   const worldSize = scopeNode.canvasSize ?? { width: 1200, height: 800 };
+  const renderedWorldSize = scopeMinimized ? MINIMIZED_NODE_SIZE : worldSize;
   const focusedLeaf = scopePath.length > 1 && !scopeNode.children?.length;
-  const scopeMinimized = nodeDisplayMode(scopeNode) === "minimized";
 
   return (
     <main className="everything-app">
@@ -2086,18 +2103,18 @@ export default function Home() {
         onWheel={onWheel}
         onPointerDown={onViewportPointerDown}
       >
-        <div className="root-grid" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`, width: worldSize.width, height: worldSize.height }}>
+        <div className="root-grid" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`, width: renderedWorldSize.width, height: renderedWorldSize.height }}>
           <div
             className={`root-boundary ${scopeMinimized ? "minimized" : "expanded"}`}
-            style={{ width: worldSize.width, height: worldSize.height }}
+            style={{ width: renderedWorldSize.width, height: renderedWorldSize.height }}
             data-display-mode={scopeMinimized ? "minimized" : "expanded"}
           >
             {scopeMinimized ? (
               <button
                 className="root-minimized-node"
                 style={{
-                  left: worldSize.width / 2 - 110,
-                  top: worldSize.height / 2 - 26,
+                  left: 0,
+                  top: 0,
                 }}
                 title="双击展开节点"
                 onPointerDown={(event) => event.stopPropagation()}
@@ -2209,7 +2226,17 @@ export default function Home() {
           <span>{appEdges.length} 组聚合管道</span>
           <span>双指平移 · Ctrl + 滚轮进入 / 返回</span>
         </div>}
-        {toast && <button className="runtime-toast" onClick={() => setToast("")}>{toast}<span>×</span></button>}
+        {toast && (
+          <button
+            type="button"
+            className="runtime-toast"
+            aria-label={`关闭提示：${toast}`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setToast("")}
+          >
+            {toast}<span>×</span>
+          </button>
+        )}
       </div>
     </main>
   );

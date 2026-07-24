@@ -90,7 +90,15 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /toggleNodeDisplayMode/);
   assert.match(page, /toggleBusinessDisplayMode/);
   assert.match(page, /scopeMinimized/);
+  assert.match(page, /renderedWorldSize/);
+  assert.match(page, /scopeMinimized \? MINIMIZED_NODE_SIZE : worldSize/);
   assert.match(page, /className="root-minimized-node"/);
+  assert.match(page, /left: 0/);
+  assert.match(page, /top: 0/);
+  assert.match(page, /Display-mode changes intentionally refit the same scope/);
+  assert.match(page, /window\.setTimeout\(\(\) => setToast\(""\), 2400\)/);
+  assert.match(page, /aria-label=\{`关闭提示：\$\{toast\}`\}/);
+  assert.match(page, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(page, /data-display-mode/);
   assert.match(page, /resizeScopeCanvasStart/);
   assert.match(page, /ROOT_CANVAS_MIN_SIZE/);
