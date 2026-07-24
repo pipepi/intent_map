@@ -86,6 +86,15 @@ type ScopeMotion = {
   originY: number;
 };
 
+type ZoomCue = {
+  mode: "enter" | "exit" | "limit";
+  progress: number;
+  x: number;
+  y: number;
+  title: string;
+  detail: string;
+};
+
 const uid = (prefix = "id") =>
   `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 
@@ -496,6 +505,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"properties" | "run">("properties");
   const [toast, setToast] = useState("");
   const [scopeMotion, setScopeMotion] = useState<ScopeMotion | null>(null);
+  const [zoomCue, setZoomCue] = useState<ZoomCue | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasViewport = useRef<HTMLDivElement>(null);
   const cameraTouched = useRef(false);
@@ -562,6 +572,13 @@ export default function Home() {
   const resetCamera = () => {
     const viewport = canvasViewport.current;
     cameraTouched.current = false;
+    thresholdIntent.current = {
+      direction: 0,
+      armedAt: 0,
+      travel: 0,
+      lastAt: 0,
+    };
+    setZoomCue(null);
     setCamera({
       scale: 1,
       x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
@@ -584,6 +601,12 @@ export default function Home() {
       scopeTimers.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, []);
+
+  useEffect(() => {
+    if (!zoomCue) return;
+    const timer = window.setTimeout(() => setZoomCue(null), 1400);
+    return () => window.clearTimeout(timer);
+  }, [zoomCue]);
 
   const navigateTo = (targetPath: string[]) => {
     setPath(targetPath);
@@ -673,8 +696,64 @@ export default function Home() {
   const zoomFromControls = (delta: number) => {
     const viewport = canvasViewport.current;
     if (!viewport) return;
+    clearThresholdIntent();
     const nextZoom = Math.max(0.5, Math.min(2, zoom + delta));
-    applyAnchoredZoom(nextZoom, getZoomAnchor(viewport));
+    const anchor = getZoomAnchor(viewport);
+    applyAnchoredZoom(nextZoom, anchor);
+
+    if (delta > 0 && nextZoom >= 2) {
+      const candidates = current.children ?? [];
+      const nearest = candidates.length
+        ? candidates.reduce((closest, node) => {
+            const closestDistance =
+              (closest.position.x + 89 - anchor.stageX) ** 2 +
+              (closest.position.y + 52 - anchor.stageY) ** 2;
+            const nodeDistance =
+              (node.position.x + 89 - anchor.stageX) ** 2 +
+              (node.position.y + 52 - anchor.stageY) ** 2;
+            return nodeDistance < closestDistance ? node : closest;
+          })
+        : undefined;
+      setZoomCue({
+        mode: nearest ? "enter" : "limit",
+        progress: nearest ? 0 : 1,
+        x: anchor.viewportX,
+        y: anchor.viewportY,
+        title: nearest ? `靠近「${nearest.name}」` : "已在最深层",
+        detail: nearest ? "Ctrl + 滚轮继续放大即可进入" : "可通过“添加子意图”继续扩展",
+      });
+    }
+
+    if (delta < 0 && nextZoom <= 0.5) {
+      const parent =
+        path.length > 1
+          ? getNodeAtPath(doc.rootIntent, path.slice(0, -1))
+          : undefined;
+      setZoomCue({
+        mode: parent ? "exit" : "limit",
+        progress: parent ? 0 : 1,
+        x: anchor.viewportX,
+        y: anchor.viewportY,
+        title: parent ? `可返回「${parent.name}」` : "根意图概览",
+        detail: parent ? "Ctrl + 滚轮继续缩小即可返回" : "已经位于最外层",
+      });
+    }
+  };
+
+  const fitCamera = () => {
+    const viewport = canvasViewport.current;
+    if (!viewport) return;
+    clearThresholdIntent();
+    const nextZoom = Math.max(
+      0.5,
+      Math.min(1, Math.min(viewport.clientWidth / 1000, viewport.clientHeight / 650) * 0.92),
+    );
+    cameraTouched.current = true;
+    setCamera({
+      scale: nextZoom,
+      x: (viewport.clientWidth - 1000 * nextZoom) / 2,
+      y: (viewport.clientHeight - 650 * nextZoom) / 2,
+    });
   };
 
   const clearThresholdIntent = () => {
@@ -684,6 +763,7 @@ export default function Home() {
       travel: 0,
       lastAt: 0,
     };
+    setZoomCue(null);
   };
 
   const thresholdIsConfirmed = (direction: number, delta: number) => {
@@ -699,12 +779,15 @@ export default function Home() {
         travel: 0,
         lastAt: now,
       };
-      return false;
+      return { confirmed: false, progress: 0 };
     }
 
     intent.travel += Math.abs(delta);
     intent.lastAt = now;
-    return now - intent.armedAt >= 70 && intent.travel >= 54;
+    return {
+      confirmed: now - intent.armedAt >= 70 && intent.travel >= 54,
+      progress: Math.min(1, intent.travel / 54),
+    };
   };
 
   const beginScopeTransition = (
@@ -782,7 +865,7 @@ export default function Home() {
       const candidates = current.children ?? [];
 
       applyAnchoredZoom(2, anchor);
-      if (candidates.length > 0 && thresholdIsConfirmed(direction, event.deltaY)) {
+      if (candidates.length > 0) {
         const nearest = candidates.reduce((closest, node) => {
           const closestDistance =
             (closest.position.x + 89 - anchor.stageX) ** 2 +
@@ -792,17 +875,62 @@ export default function Home() {
             (node.position.y + 52 - anchor.stageY) ** 2;
           return nodeDistance < closestDistance ? node : closest;
         });
-        beginScopeTransition([...path, nearest.id], "enter", anchor, nearest);
-        return;
+        const intent = thresholdIsConfirmed(direction, event.deltaY);
+        setZoomCue({
+          mode: "enter",
+          progress: intent.progress,
+          x: anchor.viewportX,
+          y: anchor.viewportY,
+          title: `进入「${nearest.name}」`,
+          detail: intent.progress > 0 ? "继续放大以确认" : "已到 200% · 再向内滚动",
+        });
+        if (intent.confirmed) {
+          beginScopeTransition([...path, nearest.id], "enter", anchor, nearest);
+          return;
+        }
+      } else {
+        clearThresholdIntent();
+        setZoomCue({
+          mode: "limit",
+          progress: 1,
+          x: anchor.viewportX,
+          y: anchor.viewportY,
+          title: "已在最深层",
+          detail: "可通过“添加子意图”继续扩展",
+        });
       }
       return;
     }
 
     if (direction < 0 && nextZoom <= 0.5 && path.length > 1) {
       applyAnchoredZoom(0.5, anchor);
-      if (thresholdIsConfirmed(direction, event.deltaY)) {
+      const parent = getNodeAtPath(doc.rootIntent, path.slice(0, -1));
+      const intent = thresholdIsConfirmed(direction, event.deltaY);
+      setZoomCue({
+        mode: "exit",
+        progress: intent.progress,
+        x: anchor.viewportX,
+        y: anchor.viewportY,
+        title: `返回「${parent.name}」`,
+        detail: intent.progress > 0 ? "继续缩小以确认" : "已到 50% · 再向外滚动",
+      });
+      if (intent.confirmed) {
         beginScopeTransition(path.slice(0, -1), "exit", anchor);
       }
+      return;
+    }
+
+    if (direction < 0 && nextZoom <= 0.5) {
+      applyAnchoredZoom(0.5, anchor);
+      clearThresholdIntent();
+      setZoomCue({
+        mode: "limit",
+        progress: 1,
+        x: anchor.viewportX,
+        y: anchor.viewportY,
+        title: "根意图概览",
+        detail: "已经位于最外层",
+      });
       return;
     }
 
@@ -1346,14 +1474,24 @@ export default function Home() {
             <span>{current.inputs.length} 输入</span>
             <span>{current.outputs.length} 输出</span>
             <div className="zoom-controls">
-              <button onClick={() => zoomFromControls(-0.1)}>−</button>
-              <span>{Math.round(zoom * 100)}%</span>
-              <button onClick={() => zoomFromControls(0.1)}>＋</button>
+              <button aria-label="缩小画布" title="缩小" onClick={() => zoomFromControls(-0.1)}>−</button>
+              <button
+                className="zoom-value"
+                aria-label="重置为 100%"
+                title="重置为 100%"
+                onClick={resetCamera}
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button aria-label="放大画布" title="放大" onClick={() => zoomFromControls(0.1)}>＋</button>
+              <button className="fit-button" onClick={fitCamera} title="完整显示当前容器">
+                适应
+              </button>
             </div>
           </div>
           <div
             ref={canvasViewport}
-            className={`canvas-viewport ${scopeMotion ? `scope-motion ${scopeMotion.phase}` : ""}`}
+            className={`canvas-viewport ${zoom <= 0.72 ? "overview-mode" : ""} ${scopeMotion ? `scope-motion ${scopeMotion.phase}` : ""}`}
             onWheel={handleCanvasWheel}
             style={
               scopeMotion
@@ -1478,6 +1616,25 @@ export default function Home() {
                 )}
               </div>
             </div>
+            {zoomCue && (
+              <div
+                className={`zoom-cue ${zoomCue.mode}`}
+                style={{
+                  left: Math.max(118, Math.min(zoomCue.x, (canvasViewport.current?.clientWidth ?? 236) - 118)),
+                  top: Math.max(54, Math.min(zoomCue.y, (canvasViewport.current?.clientHeight ?? 108) - 54)),
+                }}
+                role="status"
+              >
+                <span className="zoom-cue-icon">
+                  {zoomCue.mode === "enter" ? "↘" : zoomCue.mode === "exit" ? "↖" : "◎"}
+                </span>
+                <span>
+                  <strong>{zoomCue.title}</strong>
+                  <small>{zoomCue.detail}</small>
+                </span>
+                <i style={{ transform: `scaleX(${zoomCue.progress})` }} />
+              </div>
+            )}
           </div>
           <div className="canvas-status">
             <span><i className="blue-dot" /> 数据输入</span>
