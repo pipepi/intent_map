@@ -81,6 +81,18 @@ test("derives and aggregates root pipes without persisting edges", async () => {
   assert.match(model, /\.filter\(\(\[key\]\) => key !== "edges"\)/);
 });
 
+test("routes interface commands through the state node and event clock", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+
+  assert.match(page, /processEventBatch\(pendingEvents, runtimeState, tick\)/);
+  assert.match(page, /dispatchRuntimeEvent\("SELECT_NODE"/);
+  assert.match(page, /dispatchRuntimeEvent\("NAVIGATE_SCOPE"/);
+  assert.match(page, /dispatchRuntimeEvent\("SET_LAYOUT_LOCK"/);
+  assert.match(page, /dispatchRuntimeEvent\("DOCUMENT_CHANGED"/);
+  assert.match(page, /commandHandlerRef\.current/);
+  assert.match(page, /runtime-mini-trace/);
+});
+
 test("copies all deployment assets into the static output", async () => {
   await Promise.all([
     access(new URL("out/og.png", root)),

@@ -34,6 +34,14 @@ import {
   resolveRenderer,
   type RuntimeCommand,
 } from "./runtime/registry";
+import {
+  createRuntimeEvent,
+  processEventBatch,
+  type ApplicationRuntimeState,
+  type PipelineTraceEntry,
+  type RuntimeCommand as PipelineCommand,
+  type RuntimeEvent,
+} from "./runtime/pipeline";
 
 type Trace = {
   id: string;
@@ -424,17 +432,24 @@ export default function Home() {
   const [history, setHistory] = useState<IntentDocumentV2[]>([]);
   const [future, setFuture] = useState<IntentDocumentV2[]>([]);
   const [scopePath, setScopePath] = useState<string[]>(["application_root"]);
-  const [businessScopeId, setBusinessScopeId] = useState("business_root");
   const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container");
-  const [selectedBusinessNodeId, setSelectedBusinessNodeId] = useState("scenario_flow");
   const [camera, setCamera] = useState<CameraState>({ scale: 0.5, x: 12, y: 12 });
   const [search, setSearch] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [layoutLocked, setLayoutLocked] = useState(false);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [trace, setTrace] = useState<Trace[]>([]);
+  const [runtimeState, setRuntimeState] = useState<ApplicationRuntimeState>({
+    scopeId: "business_root",
+    selectionId: "scenario_flow",
+    layoutLocked: false,
+    documentRevision: 0,
+    lastEventType: "BOOT",
+  });
+  const [pendingEvents, setPendingEvents] = useState<RuntimeEvent[]>([]);
+  const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceEntry[]>([]);
+  const [lastCommands, setLastCommands] = useState<PipelineCommand[]>([]);
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
     product_goal: "构建可验证、可持续演进的业务应用",
     business_constraints: "确定性、可审计、严格模块边界",
@@ -444,7 +459,55 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRunRef = useRef(false);
   const cameraRef = useRef(camera);
+  const eventTickRef = useRef(0);
+  const commandHandlerRef = useRef<(command: PipelineCommand) => void>(() => undefined);
   cameraRef.current = camera;
+  const businessScopeId = runtimeState.scopeId;
+  const selectedBusinessNodeId = runtimeState.selectionId;
+  const layoutLocked = runtimeState.layoutLocked;
+
+  const dispatchRuntimeEvent = useCallback(
+    (
+      type: string,
+      source: string,
+      payload?: Record<string, JsonValue>,
+    ) => {
+      setPendingEvents((events) => [
+        ...events,
+        createRuntimeEvent(type, source, payload),
+      ]);
+    },
+    [],
+  );
+
+  const setBusinessScopeId = useCallback(
+    (scopeId: string) =>
+      dispatchRuntimeEvent("NAVIGATE_SCOPE", "scope-navigation", { scopeId }),
+    [dispatchRuntimeEvent],
+  );
+
+  const setSelectedBusinessNodeId = useCallback(
+    (nodeId: string) =>
+      dispatchRuntimeEvent("SELECT_NODE", "node-selection", { nodeId }),
+    [dispatchRuntimeEvent],
+  );
+
+  useEffect(() => {
+    if (!pendingEvents.length) return;
+    const tick = eventTickRef.current + 1;
+    eventTickRef.current = tick;
+    try {
+      const batch = processEventBatch(pendingEvents, runtimeState, tick);
+      setPendingEvents(batch.nextTick);
+      setRuntimeState(batch.state);
+      setPipelineTrace((entries) => [...entries.slice(-95), ...batch.trace]);
+      setLastCommands(batch.commands);
+      batch.commands.forEach((command) => commandHandlerRef.current(command));
+    } catch (error) {
+      setPendingEvents([]);
+      setToast(error instanceof Error ? error.message : String(error));
+    }
+  }, [pendingEvents, runtimeState]);
 
   const appRoot = documentState.rootIntent;
   const scopeNode = useMemo(
@@ -468,8 +531,9 @@ export default function Home() {
       setFuture([]);
       setDocumentState(next);
       setDirty(true);
+      dispatchRuntimeEvent("DOCUMENT_CHANGED", "document-store");
     },
-    [documentState],
+    [dispatchRuntimeEvent, documentState],
   );
 
   const updateDocumentNode = useCallback(
@@ -664,6 +728,7 @@ export default function Home() {
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
+      dispatchRuntimeEvent("DOCUMENT_CHANGED", "node-move");
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", up);
@@ -712,6 +777,7 @@ export default function Home() {
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
+      dispatchRuntimeEvent("DOCUMENT_CHANGED", "node-resize");
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", up);
@@ -762,8 +828,10 @@ export default function Home() {
       const loaded = loadIntentDocument(parsed);
       setHistory((items) => [...items, documentState]);
       setDocumentState(loaded);
-      setBusinessScopeId(loaded.businessRootId);
-      setSelectedBusinessNodeId(loaded.businessRootId);
+      dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
+        scopeId: loaded.businessRootId,
+        selectionId: loaded.businessRootId,
+      });
       setScopePath([loaded.rootIntent.id]);
       setDirty(false);
       setToast("文档已在临时状态校验并加载");
@@ -908,10 +976,42 @@ export default function Home() {
     setRunState("idle");
   };
 
-  const emit = (command: RuntimeCommand) => {
-    if (command.type === "RUN") void run();
-    if (command.type === "STOP") stop();
+  const newDocument = () => {
+    const next = sampleDocument();
+    setHistory((items) => [...items, documentState]);
+    setFuture([]);
+    setDocumentState(next);
+    setScopePath([next.rootIntent.id]);
+    dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
+      scopeId: next.businessRootId,
+      selectionId: next.businessRootId,
+    });
+    setDirty(false);
+  };
+
+  commandHandlerRef.current = (command) => {
+    if (command.type === "NEW_DOCUMENT") newDocument();
+    if (command.type === "IMPORT_REQUEST") fileInputRef.current?.click();
+    if (command.type === "EXPORT_V2")
+      downloadJson("intent-map-v2.intent-map.json", documentState);
+    if (command.type === "EXPORT_V1")
+      downloadJson(
+        "intent-map-v1-compatible.intent-map.json",
+        exportCompatibleV1(documentState),
+      );
+    if (command.type === "UNDO") undo();
+    if (command.type === "REDO") redo();
     if (command.type === "AUTO_LAYOUT") autoLayout();
+    if (command.type === "PUBLISH_MODULE") publishModule();
+    if (command.type === "RUN_BUSINESS") void run();
+    if (command.type === "STOP_BUSINESS") stop();
+    if (command.type === "ADD_BUSINESS_CHILD") addBusinessChild();
+    if (command.type === "DUPLICATE_NODE") duplicateSelected();
+    if (command.type === "DELETE_NODE") deleteSelected();
+  };
+
+  const emit = (command: RuntimeCommand) => {
+    dispatchRuntimeEvent(command.type, command.source ?? "renderer", command.payload);
   };
 
   const renderTree = (node: IntentNode, depth = 0): React.ReactNode => {
@@ -1000,27 +1100,80 @@ export default function Home() {
 
   const renderNodeContent = (node: IntentNode) => {
     const key = node.implementation?.key;
+    if (key === "intent-document-loader") {
+      return (
+        <div className="runtime-inspector-surface">
+          <span>DOCUMENT</span>
+          <strong>IntentDocument v{documentState.version}</strong>
+          <small>业务根：{documentState.businessRootId}</small>
+          <small>模块快照：{documentState.publishedModules.length}</small>
+          <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "document_loader")}>加载文档</button>
+        </div>
+      );
+    }
+    if (key === "application-state") {
+      return (
+        <div className="runtime-inspector-surface">
+          <span>STATE NODE</span>
+          <strong>revision {runtimeState.documentRevision}</strong>
+          <small>scope：{runtimeState.scopeId}</small>
+          <small>selection：{runtimeState.selectionId}</small>
+          <small>layout：{runtimeState.layoutLocked ? "locked" : "editable"}</small>
+        </div>
+      );
+    }
+    if (key === "event-clock") {
+      return (
+        <div className="runtime-inspector-surface">
+          <span>EVENT CLOCK</span>
+          <strong>tick {eventTickRef.current}</strong>
+          <small>当前队列：{pendingEvents.length}</small>
+          <small>最近事件：{runtimeState.lastEventType}</small>
+          <div className="runtime-mini-trace">
+            {pipelineTrace.slice(-4).map((item) => (
+              <i key={`${item.tick}-${item.sequence}`}>#{item.tick}.{item.sequence} {item.eventType}</i>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    if (key === "command-processor") {
+      return (
+        <div className="runtime-inspector-surface">
+          <span>COMMANDS</span>
+          <strong>{lastCommands.length} 条当前命令</strong>
+          <div className="runtime-mini-trace">
+            {lastCommands.slice(-5).map((command) => <i key={command.id}>{command.type}</i>)}
+          </div>
+        </div>
+      );
+    }
+    if (key === "intent-executor") {
+      return (
+        <div className="runtime-inspector-surface">
+          <span>EXECUTOR</span>
+          <strong>{runState.toUpperCase()}</strong>
+          <small>业务根：{businessRoot.name}</small>
+          <small>追踪步骤：{trace.length}</small>
+          <button onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "intent_executor")} disabled={runState === "running"}>执行业务根</button>
+        </div>
+      );
+    }
     if (key === "global-toolbar") {
       return (
         <div className="global-toolbar-surface">
           <div className="runtime-brand"><i>◈</i><span><strong>Intent Map</strong><small>一切皆节点 · v2</small></span></div>
           <div className="runtime-command-grid">
-            <button onClick={() => {
-              const next = sampleDocument();
-              setHistory((items) => [...items, documentState]);
-              setDocumentState(next);
-              setBusinessScopeId(next.businessRootId);
-              setSelectedBusinessNodeId(next.businessRootId);
-            }}>新建</button>
-            <button onClick={() => fileInputRef.current?.click()}>导入</button>
-            <button onClick={() => downloadJson("intent-map-v2.intent-map.json", documentState)}>导出 v2</button>
-            <button onClick={() => downloadJson("intent-map-v1-compatible.intent-map.json", exportCompatibleV1(documentState))}>兼容 v1</button>
-            <button disabled={!history.length} onClick={undo}>撤销</button>
-            <button disabled={!future.length} onClick={redo}>重做</button>
-            <button onClick={autoLayout}>泳道布局</button>
-            <button onClick={publishModule}>发布模块</button>
-            <button onClick={() => setLayoutLocked((value) => !value)}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
-            {runState === "running" ? <button className="danger" onClick={stop}>停止</button> : <button className="primary" onClick={() => void run()}>运行</button>}
+            <button onClick={() => dispatchRuntimeEvent("NEW_DOCUMENT", "global_toolbar")}>新建</button>
+            <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "global_toolbar")}>导入</button>
+            <button onClick={() => dispatchRuntimeEvent("EXPORT_V2", "global_toolbar")}>导出 v2</button>
+            <button onClick={() => dispatchRuntimeEvent("EXPORT_V1", "global_toolbar")}>兼容 v1</button>
+            <button disabled={!history.length} onClick={() => dispatchRuntimeEvent("UNDO", "global_toolbar")}>撤销</button>
+            <button disabled={!future.length} onClick={() => dispatchRuntimeEvent("REDO", "global_toolbar")}>重做</button>
+            <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "global_toolbar")}>泳道布局</button>
+            <button onClick={() => dispatchRuntimeEvent("PUBLISH_MODULE", "global_toolbar")}>发布模块</button>
+            <button onClick={() => dispatchRuntimeEvent("SET_LAYOUT_LOCK", "global_toolbar", { locked: !layoutLocked })}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
+            {runState === "running" ? <button className="danger" onClick={() => dispatchRuntimeEvent("STOP_REQUEST", "global_toolbar")}>停止</button> : <button className="primary" onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "global_toolbar")}>运行</button>}
           </div>
           <small className="runtime-save-state">{dirty ? "● 未导出" : "○ 已同步到文件"}</small>
         </div>
@@ -1065,7 +1218,7 @@ export default function Home() {
           <strong>{businessScope.name}</strong>
           <small>{businessScope.inputs.length} 输入 · {businessScope.outputs.length} 输出</small>
           <button onClick={() => setBusinessScopeId(businessRoot.id)}>业务根</button>
-          <button onClick={addBusinessChild}>＋ 子意图</button>
+          <button onClick={() => dispatchRuntimeEvent("ADD_BUSINESS_CHILD", "scope_toolbar")}>＋ 子意图</button>
         </div>
       );
     }
@@ -1089,14 +1242,14 @@ export default function Home() {
           {selectedBusinessNode.kind === "operator" && <label>内置算子<select value={selectedBusinessNode.operator ?? "identity"} onChange={(event) => updateDocumentNode(selectedBusinessNode.id, (item) => ({ ...item, operator: event.target.value }))}><option value="identity">identity</option><option value="object">object</option><option value="array">array</option><option value="concat">concat</option></select></label>}
           <div className="property-ports"><strong>输入</strong>{selectedBusinessNode.inputs.map((port) => <span key={port.id}><i />{port.name}<small>{port.type}</small></span>)}</div>
           <div className="property-ports outputs"><strong>输出</strong>{selectedBusinessNode.outputs.map((port) => <span key={port.id}><i />{port.name}<small>{port.type}</small></span>)}</div>
-          <div className="property-actions"><button onClick={duplicateSelected} disabled={selectedBusinessNode.id === businessRoot.id}>创建副本</button><button className="danger" onClick={deleteSelected} disabled={selectedBusinessNode.id === businessRoot.id}>删除</button></div>
+          <div className="property-actions"><button onClick={() => dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={selectedBusinessNode.id === businessRoot.id}>创建副本</button><button className="danger" onClick={() => dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={selectedBusinessNode.id === businessRoot.id}>删除</button></div>
         </div>
       );
     }
     if (key === "run-trace") {
       return (
         <div className="trace-surface">
-          <div className="run-state"><i className={runState} /><span><small>本地确定性执行</small><strong>{runState === "idle" ? "尚未运行" : runState === "running" ? "运行中" : runState === "success" ? "执行成功" : "执行失败"}</strong></span><button onClick={() => void run()} disabled={runState === "running"}>重新运行</button></div>
+          <div className="run-state"><i className={runState} /><span><small>本地确定性执行</small><strong>{runState === "idle" ? "尚未运行" : runState === "running" ? "运行中" : runState === "success" ? "执行成功" : "执行失败"}</strong></span><button onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "run_trace")} disabled={runState === "running"}>重新运行</button></div>
           <div className="run-input-grid">{businessRoot.inputs.map((port) => <label key={port.id}><span>{port.name}<small>{port.type}</small></span><input value={String(rootInput[port.id] ?? "")} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} /></label>)}</div>
           <div className="trace-list">{trace.length ? trace.map((item, index) => <div className={`trace-row ${item.status}`} key={`${item.id}-${item.path}`}><b>{String(index + 1).padStart(2, "0")}</b><span><strong>{item.name}</strong><small>{item.path}</small></span><i>{item.status}{item.duration ? ` · ${item.duration}ms` : ""}</i></div>) : <div className="surface-empty">运行后显示每层输入、输出与耗时</div>}</div>
         </div>
@@ -1181,8 +1334,8 @@ export default function Home() {
         <div className="root-hud">
           <button onClick={() => scopePath.length > 1 && setScopePath((path) => path.slice(0, -1))} disabled={scopePath.length === 1}>← 上级</button>
           <span>{scopePath.map((id) => findNode(appRoot, id)?.name ?? id).join(" / ")}</span>
-          <button onClick={() => setLayoutLocked((value) => !value)}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
-          <button onClick={autoLayout}>泳道布局</button>
+          <button onClick={() => dispatchRuntimeEvent("SET_LAYOUT_LOCK", "root_hud", { locked: !layoutLocked })}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
+          <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "root_hud")}>泳道布局</button>
           <button onClick={fitScope}>适应</button>
           <button onClick={() => setScopeCamera({ scale: 1, x: 0, y: 0 }, true)}>{Math.round(camera.scale * 100)}%</button>
         </div>

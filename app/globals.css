@@ -1339,6 +1339,62 @@ code,
   overflow: auto;
 }
 
+.runtime-inspector-surface {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+}
+
+.runtime-inspector-surface > span {
+  color: #31d6a5;
+  font-family: Consolas, monospace;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.runtime-inspector-surface > strong {
+  font-size: 12px;
+}
+
+.runtime-inspector-surface > small {
+  overflow: hidden;
+  color: #7583a9;
+  font-family: Consolas, monospace;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-inspector-surface > button {
+  min-height: 27px;
+  margin-top: auto;
+  border: 1px solid rgba(49, 214, 165, 0.4);
+  border-radius: 5px;
+  color: #86e8c7;
+  background: rgba(49, 214, 165, 0.08);
+  font-size: 9px;
+}
+
+.runtime-mini-trace {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.runtime-mini-trace i {
+  overflow: hidden;
+  color: #7180a6;
+  font-family: Consolas, monospace;
+  font-size: 8px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .global-toolbar-surface {
   display: grid;
   grid-template-columns: 190px 1fr auto;
