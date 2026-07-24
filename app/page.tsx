@@ -3,6 +3,7 @@
 import {
   ChangeEvent,
   PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
   useEffect,
   useMemo,
   useRef,
@@ -477,7 +478,7 @@ export default function Home() {
   const [future, setFuture] = useState<IntentDocument[]>([]);
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
-  const [zoom, setZoom] = useState(0.88);
+  const [zoom, setZoom] = useState(1);
   const [trace, setTrace] = useState<Trace[]>([]);
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
@@ -541,6 +542,7 @@ export default function Home() {
 
   const navigateTo = (targetPath: string[]) => {
     setPath(targetPath);
+    setZoom(1);
     const node = getNodeAtPath(doc.rootIntent, targetPath);
     setSelectedId(node.children?.[0]?.id ?? node.id);
   };
@@ -556,8 +558,48 @@ export default function Home() {
     }
     if (target.kind === "composite" || target.children?.length) {
       setPath((items) => [...items, node.id]);
+      setZoom(1);
       setSelectedId(target.children?.[0]?.id ?? target.id);
     }
+  };
+
+  const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+
+    const direction = event.deltaY < 0 ? 1 : -1;
+    const nextZoom = Math.max(0.5, Math.min(2, zoom + direction * 0.1));
+
+    if (direction > 0 && nextZoom >= 2) {
+      const expandable = (current.children ?? []).filter(
+        (node) => node.kind === "composite" && Boolean(node.children?.length),
+      );
+
+      if (expandable.length > 0) {
+        const viewport = event.currentTarget;
+        const rect = viewport.getBoundingClientRect();
+        const pointerX = (event.clientX - rect.left + viewport.scrollLeft) / zoom;
+        const pointerY = (event.clientY - rect.top + viewport.scrollTop) / zoom;
+        const nearest = expandable.reduce((closest, node) => {
+          const closestDistance =
+            (closest.position.x + 89 - pointerX) ** 2 +
+            (closest.position.y + 52 - pointerY) ** 2;
+          const nodeDistance =
+            (node.position.x + 89 - pointerX) ** 2 +
+            (node.position.y + 52 - pointerY) ** 2;
+          return nodeDistance < closestDistance ? node : closest;
+        });
+        enterNode(nearest);
+        return;
+      }
+    }
+
+    if (direction < 0 && nextZoom <= 0.5 && path.length > 1) {
+      navigateTo(path.slice(0, -1));
+      return;
+    }
+
+    setZoom(nextZoom);
   };
 
   const sourceOptions = (scope: IntentNode) => [
@@ -1080,20 +1122,14 @@ export default function Home() {
             <span>{current.inputs.length} 输入</span>
             <span>{current.outputs.length} 输出</span>
             <div className="zoom-controls">
-              <button onClick={() => setZoom((value) => Math.max(0.62, value - 0.1))}>−</button>
+              <button onClick={() => setZoom((value) => Math.max(0.5, value - 0.1))}>−</button>
               <span>{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom((value) => Math.min(1.18, value + 0.1))}>＋</button>
+              <button onClick={() => setZoom((value) => Math.min(2, value + 0.1))}>＋</button>
             </div>
           </div>
           <div
             className="canvas-viewport"
-            onWheel={(event) => {
-              if (!event.ctrlKey) return;
-              event.preventDefault();
-              setZoom((value) =>
-                Math.max(0.62, Math.min(1.18, value + (event.deltaY < 0 ? 0.05 : -0.05))),
-              );
-            }}
+            onWheel={handleCanvasWheel}
           >
             <div className="canvas-scale" style={{ transform: `scale(${zoom})` }}>
               <div className="canvas-stage" aria-label={`${current.name} 内部意图地图`}>
@@ -1209,7 +1245,7 @@ export default function Home() {
             <span><i className="blue-dot" /> 数据输入</span>
             <span><i className="purple-dot" /> 计算 / 导出</span>
             <span>{refs.length + current.outputs.length} 条派生连线</span>
-            <span className="status-right">双击复合意图进入 · Ctrl + 滚轮缩放</span>
+            <span className="status-right">Ctrl + 滚轮 50%–200% · 到达阈值切换层级</span>
           </div>
         </section>
 
