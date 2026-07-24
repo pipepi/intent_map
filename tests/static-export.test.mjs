@@ -128,6 +128,7 @@ test("routes interface commands through the state node and event clock", async (
 
 test("protects core composition and preserves business editing", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const css = await readFile(new URL("app/globals.css", root), "utf8");
 
   assert.match(page, /selected\.implementation\?\.core/);
   assert.match(page, /window\.confirm\(`「\$\{selected\.name\}」是核心节点/);
@@ -139,6 +140,18 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /moveBusinessNodeStart/);
   assert.match(page, /resizeBusinessNodeStart/);
   assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);
+  assert.match(page, /const BUSINESS_PORT_TOP = 94/);
+  assert.match(page, /const BUSINESS_PORT_ROW = 28/);
+  assert.match(page, /const BUSINESS_PORT_HEIGHT = 24/);
+  assert.match(page, /const BUSINESS_NODE_BORDER_WIDTH = 2/);
+  assert.match(page, /BUSINESS_PORT_TOP \+\s*BUSINESS_NODE_BORDER_WIDTH \+/);
+  assert.match(page, /BUSINESS_PORT_HEIGHT \/ 2/);
+  assert.match(page, /sourceSize\.width \+\s*BUSINESS_PORT_DOT_OFFSET/);
+  assert.match(css, /\.business-node-ports i::before/);
+  assert.match(css, /\.business-node-ports i\.input\s*\{\s*left:\s*8px/);
+  assert.match(css, /\.business-node-ports i\.input::before\s*\{\s*left:\s*-21px/);
+  assert.match(css, /\.business-node-ports i\.output\s*\{[\s\S]*right:\s*8px/);
+  assert.match(css, /\.business-node-ports i\.output::before\s*\{[\s\S]*right:\s*-21px/);
   assert.match(
     page,
     /const moveBusinessNodeStart = \([\s\S]*?event\.stopPropagation\(\);[\s\S]*?if \(layoutLocked/,

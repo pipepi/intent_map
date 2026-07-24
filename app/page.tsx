@@ -77,6 +77,11 @@ const ROOT_CANVAS_MAX_SIZE = { width: 8000, height: 6000 };
 const ROOT_CANVAS_PADDING = 40;
 const PORT_ROW = 26;
 const PORT_TOP = 65;
+const BUSINESS_PORT_TOP = 94;
+const BUSINESS_PORT_ROW = 28;
+const BUSINESS_PORT_HEIGHT = 24;
+const BUSINESS_NODE_BORDER_WIDTH = 2;
+const BUSINESS_PORT_DOT_OFFSET = 7;
 
 const uid = (prefix = "id") =>
   `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
@@ -1565,10 +1570,24 @@ export default function Home() {
               const sourceSize = nodeSize(source);
               const sourceIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
               const targetIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
-              const sx = source.position.x + sourceSize.width + 6;
-              const sy = source.position.y + 95 + sourceIndex * 28;
-              const tx = target.position.x - 6;
-              const ty = target.position.y + 95 + targetIndex * 28;
+              const sx =
+                source.position.x +
+                sourceSize.width +
+                BUSINESS_PORT_DOT_OFFSET;
+              const sy =
+                source.position.y +
+                BUSINESS_PORT_TOP +
+                BUSINESS_NODE_BORDER_WIDTH +
+                BUSINESS_PORT_HEIGHT / 2 +
+                sourceIndex * BUSINESS_PORT_ROW;
+              const tx =
+                target.position.x - BUSINESS_PORT_DOT_OFFSET;
+              const ty =
+                target.position.y +
+                BUSINESS_PORT_TOP +
+                BUSINESS_NODE_BORDER_WIDTH +
+                BUSINESS_PORT_HEIGHT / 2 +
+                targetIndex * BUSINESS_PORT_ROW;
               return <path key={edge.id} d={`M ${sx} ${sy} C ${sx + 45} ${sy}, ${tx - 45} ${ty}, ${tx} ${ty}`} />;
             })}
           </svg>
@@ -1590,8 +1609,24 @@ export default function Home() {
                   <strong>{node.name}</strong>
                   <small>{node.description}</small>
                   <div className="business-node-ports">
-                    {node.inputs.map((port, index) => <i className="input" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
-                    {node.outputs.map((port, index) => <i className="output" style={{ top: index * 28 }} key={port.id}>{port.name}</i>)}
+                    {node.inputs.map((port, index) => (
+                      <i
+                        className="input"
+                        style={{ top: index * BUSINESS_PORT_ROW }}
+                        key={port.id}
+                      >
+                        {port.name}
+                      </i>
+                    ))}
+                    {node.outputs.map((port, index) => (
+                      <i
+                        className="output"
+                        style={{ top: index * BUSINESS_PORT_ROW }}
+                        key={port.id}
+                      >
+                        {port.name}
+                      </i>
+                    ))}
                   </div>
                   {!layoutLocked &&
                     visibleDirections.map((direction) => (

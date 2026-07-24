@@ -1660,6 +1660,7 @@ code,
   left: 0;
   right: 0;
   top: 94px;
+  pointer-events: none;
 }
 
 .business-node-ports i {
@@ -1680,8 +1681,39 @@ code,
   white-space: nowrap;
 }
 
-.business-node-ports i.input { left: 0; }
-.business-node-ports i.output { right: 0; justify-content: flex-end; border-color: #7653d9; }
+.business-node-ports i::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  position: absolute;
+  top: 50%;
+  box-sizing: border-box;
+  border: 2px solid #39a7ff;
+  border-radius: 50%;
+  background: #070a18;
+  box-shadow: 0 0 8px rgba(57, 167, 255, 0.58);
+  transform: translateY(-50%);
+}
+
+.business-node-ports i.input {
+  left: 8px;
+}
+
+.business-node-ports i.input::before {
+  left: -21px;
+}
+
+.business-node-ports i.output {
+  right: 8px;
+  justify-content: flex-end;
+  border-color: #7653d9;
+}
+
+.business-node-ports i.output::before {
+  right: -21px;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.58);
+}
 
 .business-edges path {
   stroke-width: 3;
