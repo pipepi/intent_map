@@ -668,7 +668,7 @@ export default function Home() {
   };
 
   const addOperator = () => {
-    if (current.kind !== "composite") return;
+    if (current.kind === "linkedModule") return;
     const node: IntentNode = {
       id: uid("intent"),
       name: "新意图",
@@ -688,7 +688,16 @@ export default function Home() {
       outputs: [{ id: uid("output"), name: "结果", type: "any" }],
       position: { x: 360, y: 390 },
     };
-    updateCurrent((scope) => ({ ...scope, children: [...(scope.children ?? []), node] }));
+    updateCurrent((scope) =>
+      scope.kind === "operator"
+        ? {
+            ...scope,
+            kind: "composite",
+            operator: undefined,
+            children: [node],
+          }
+        : { ...scope, children: [...(scope.children ?? []), node] },
+    );
     setSelectedId(node.id);
   };
 
@@ -1053,7 +1062,7 @@ export default function Home() {
             <button
               aria-label="新增叶子意图"
               onClick={addOperator}
-              disabled={current.kind !== "composite"}
+              disabled={current.kind === "linkedModule"}
             >
               ＋
             </button>
@@ -1237,7 +1246,7 @@ export default function Home() {
                   ))}
                 </div>
 
-                {current.kind === "composite" && !current.children?.length && (
+                {current.kind !== "linkedModule" && !current.children?.length && (
                   <button className="empty-canvas" onClick={addOperator}>
                     <span>＋</span>
                     添加第一个子意图
