@@ -75,6 +75,22 @@ test("round-trips v2 and never persists derived edges", () => {
   assert.doesNotMatch(json, /"edges"/);
 });
 
+test("keeps the scope toolbar live and backfills older v2 documents", () => {
+  const v2 = createApplicationDocument(businessRoot, []);
+  const toolbar = v2.rootIntent.children.find(
+    (node) => node.id === "scope_toolbar",
+  );
+
+  assert.equal(toolbar.implementation.config.lod, "always-live");
+  delete toolbar.implementation.config.lod;
+
+  const loaded = loadIntentDocument(v2);
+  const loadedToolbar = loaded.rootIntent.children.find(
+    (node) => node.id === "scope_toolbar",
+  );
+  assert.equal(loadedToolbar.implementation.config.lod, "always-live");
+});
+
 test("rejects an unknown version and a missing business root", () => {
   assert.throws(() => loadIntentDocument({ version: 99 }), /不支持的文档版本/);
   const v2 = createApplicationDocument(businessRoot, []);

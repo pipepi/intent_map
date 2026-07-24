@@ -50,6 +50,24 @@ test("turns UI events into deterministic commands", () => {
   assert.equal(result.trace[0].outcome, "command");
 });
 
+test("routes root toolbar camera controls through the command pipeline", () => {
+  const result = processEventBatch(
+    [
+      createRuntimeEvent("NAVIGATE_APP_PARENT", "scope_toolbar"),
+      createRuntimeEvent("FIT_SCOPE", "scope_toolbar"),
+      createRuntimeEvent("RESET_CAMERA", "scope_toolbar"),
+    ],
+    state,
+    8,
+  );
+
+  assert.deepEqual(
+    result.commands.map((command) => command.type),
+    ["NAVIGATE_APP_PARENT", "FIT_SCOPE", "RESET_CAMERA"],
+  );
+  assert.equal(result.trace.every((entry) => entry.outcome === "command"), true);
+});
+
 test("deduplicates event ids and guards each tick", () => {
   const event = createRuntimeEvent("SELECT_NODE", "intent_tree", {
     nodeId: "child",

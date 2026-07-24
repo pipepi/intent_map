@@ -27,6 +27,7 @@ import {
 } from "./runtime/model";
 import {
   NodeRenderer,
+  RUNTIME_RESIZE_DIRECTIONS,
   type ResizeDirection,
 } from "./runtime/node-renderer";
 import {
@@ -71,6 +72,9 @@ const MIN_SCALE = 0.5;
 const MAX_SCALE = 2;
 const NODE_MIN_SIZE = { width: 220, height: 140 };
 const NODE_MAX_SIZE = { width: 1200, height: 900 };
+const ROOT_CANVAS_MIN_SIZE = { width: 640, height: 420 };
+const ROOT_CANVAS_MAX_SIZE = { width: 8000, height: 6000 };
+const ROOT_CANVAS_PADDING = 40;
 const PORT_ROW = 26;
 const PORT_TOP = 65;
 
@@ -789,6 +793,100 @@ export default function Home() {
     target.addEventListener("pointerup", up);
   };
 
+  const resizeScopeCanvasStart = (
+    direction: ResizeDirection,
+    event: ReactPointerEvent<HTMLSpanElement>,
+  ) => {
+    if (layoutLocked || event.button !== 0) return;
+    const startSize = scopeNode.canvasSize ?? { width: 1200, height: 800 };
+    const startCamera = { ...cameraRef.current };
+    const origin = { x: event.clientX, y: event.clientY };
+    const contentMinimum = visibleNodes.reduce(
+      (minimum, node) => {
+        const size = nodeSize(node);
+        return {
+          width: Math.max(
+            minimum.width,
+            node.position.x + size.width + ROOT_CANVAS_PADDING,
+          ),
+          height: Math.max(
+            minimum.height,
+            node.position.y + size.height + ROOT_CANVAS_PADDING,
+          ),
+        };
+      },
+      ROOT_CANVAS_MIN_SIZE,
+    );
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+
+    const move = (moveEvent: PointerEvent) => {
+      const dx =
+        (moveEvent.clientX - origin.x) / cameraRef.current.scale;
+      const dy =
+        (moveEvent.clientY - origin.y) / cameraRef.current.scale;
+      let width = startSize.width;
+      let height = startSize.height;
+
+      if (direction.includes("e")) {
+        width = Math.max(
+          contentMinimum.width,
+          Math.min(ROOT_CANVAS_MAX_SIZE.width, startSize.width + dx),
+        );
+      }
+      if (direction.includes("s")) {
+        height = Math.max(
+          contentMinimum.height,
+          Math.min(ROOT_CANVAS_MAX_SIZE.height, startSize.height + dy),
+        );
+      }
+      if (direction.includes("w")) {
+        width = Math.max(
+          contentMinimum.width,
+          Math.min(ROOT_CANVAS_MAX_SIZE.width, startSize.width - dx),
+        );
+      }
+      if (direction.includes("n")) {
+        height = Math.max(
+          contentMinimum.height,
+          Math.min(ROOT_CANVAS_MAX_SIZE.height, startSize.height - dy),
+        );
+      }
+
+      setDocumentState((active) => ({
+        ...active,
+        rootIntent: updateNode(active.rootIntent, scopeNode.id, (item) => ({
+          ...item,
+          canvasSize: { width, height },
+        })),
+      }));
+      setScopeCamera({
+        ...startCamera,
+        x: direction.includes("w")
+          ? startCamera.x + (startSize.width - width) * startCamera.scale
+          : startCamera.x,
+        y: direction.includes("n")
+          ? startCamera.y + (startSize.height - height) * startCamera.scale
+          : startCamera.y,
+      });
+    };
+
+    const up = () => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      target.removeEventListener("pointercancel", up);
+      setHistory((items) => [...items.slice(-29), documentState]);
+      setFuture([]);
+      setDirty(true);
+      setScopeCamera(cameraRef.current, true);
+      dispatchRuntimeEvent("DOCUMENT_CHANGED", "scope-canvas-resize");
+    };
+
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
+    target.addEventListener("pointercancel", up);
+  };
+
   const autoLayout = () => {
     const laneColumns = {
       runtime: [90],
@@ -1084,6 +1182,11 @@ export default function Home() {
         if (command.type === "DUPLICATE_APP_NODE") duplicateAppNode();
         if (command.type === "DELETE_APP_NODE") deleteAppNode();
         if (command.type === "RESET_APP_GRAPH") resetApplicationGraph();
+        if (command.type === "NAVIGATE_APP_PARENT" && scopePath.length > 1)
+          setScopePath((path) => path.slice(0, -1));
+        if (command.type === "FIT_SCOPE") fitScope();
+        if (command.type === "RESET_CAMERA")
+          setScopeCamera({ scale: 1, x: 0, y: 0 }, true);
       });
     }, 0);
     return () => window.clearTimeout(timer);
@@ -1453,11 +1556,100 @@ export default function Home() {
     if (key === "scope-toolbar") {
       return (
         <div className="scope-toolbar-surface">
-          <span>{businessScope.kind.toUpperCase()}</span>
-          <strong>{businessScope.name}</strong>
-          <small>{businessScope.inputs.length} 输入 · {businessScope.outputs.length} 输出</small>
-          <button onClick={() => setBusinessScopeId(businessRoot.id)}>业务根</button>
-          <button onClick={() => dispatchRuntimeEvent("ADD_BUSINESS_CHILD", "scope_toolbar")}>＋ 子意图</button>
+          <div className="scope-toolbar-context">
+            <span>{scopeNode.kind.toUpperCase()}</span>
+            <strong>
+              {scopePath
+                .map((id) => findNode(appRoot, id)?.name ?? id)
+                .join(" / ")}
+            </strong>
+            <small>
+              {businessScope.name} · {businessScope.inputs.length} 输入 ·{" "}
+              {businessScope.outputs.length} 输出
+            </small>
+          </div>
+          <div className="scope-toolbar-actions">
+            <button
+              disabled={scopePath.length === 1}
+              onClick={() =>
+                dispatchRuntimeEvent(
+                  "NAVIGATE_APP_PARENT",
+                  "scope_toolbar",
+                )
+              }
+            >
+              ← 上级
+            </button>
+            <button
+              onClick={() =>
+                dispatchRuntimeEvent("SET_LAYOUT_LOCK", "scope_toolbar", {
+                  locked: !layoutLocked,
+                })
+              }
+            >
+              {layoutLocked ? "解锁布局" : "锁定布局"}
+            </button>
+            <button
+              onClick={() =>
+                dispatchRuntimeEvent("AUTO_LAYOUT", "scope_toolbar")
+              }
+            >
+              泳道布局
+            </button>
+            <button
+              disabled={!findNode(scopeNode, selectedAppNodeId)}
+              onClick={() =>
+                dispatchRuntimeEvent(
+                  "DUPLICATE_APP_NODE",
+                  "scope_toolbar",
+                )
+              }
+            >
+              复制节点
+            </button>
+            <button
+              disabled={!findNode(scopeNode, selectedAppNodeId)}
+              onClick={() =>
+                dispatchRuntimeEvent("DELETE_APP_NODE", "scope_toolbar")
+              }
+            >
+              删除节点
+            </button>
+            <button
+              onClick={() =>
+                dispatchRuntimeEvent("RESET_APP_GRAPH", "scope_toolbar")
+              }
+            >
+              重置节点图
+            </button>
+            <button
+              onClick={() =>
+                dispatchRuntimeEvent("FIT_SCOPE", "scope_toolbar")
+              }
+            >
+              适应
+            </button>
+            <button
+              onClick={() =>
+                dispatchRuntimeEvent("RESET_CAMERA", "scope_toolbar")
+              }
+            >
+              {Math.round(camera.scale * 100)}%
+            </button>
+            <button onClick={() => setBusinessScopeId(businessRoot.id)}>
+              业务根
+            </button>
+            <button
+              onClick={() =>
+                dispatchRuntimeEvent(
+                  "ADD_BUSINESS_CHILD",
+                  "scope_toolbar",
+                )
+              }
+            >
+              ＋ 子意图
+            </button>
+          </div>
         </div>
       );
     }
@@ -1586,18 +1778,18 @@ export default function Home() {
             {(focusedLeaf || !visibleNodes.length) && (
               <button className="runtime-add-child" onClick={addRuntimeChild}>＋ 添加子节点</button>
             )}
+            {!layoutLocked &&
+              RUNTIME_RESIZE_DIRECTIONS.map((direction) => (
+                <span
+                  className={`root-resize root-resize-${direction}`}
+                  key={direction}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    resizeScopeCanvasStart(direction, event);
+                  }}
+                />
+              ))}
           </div>
-        </div>
-        <div className="root-hud">
-          <button onClick={() => scopePath.length > 1 && setScopePath((path) => path.slice(0, -1))} disabled={scopePath.length === 1}>← 上级</button>
-          <span>{scopePath.map((id) => findNode(appRoot, id)?.name ?? id).join(" / ")}</span>
-          <button onClick={() => dispatchRuntimeEvent("SET_LAYOUT_LOCK", "root_hud", { locked: !layoutLocked })}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
-          <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "root_hud")}>泳道布局</button>
-          <button onClick={() => dispatchRuntimeEvent("DUPLICATE_APP_NODE", "root_hud")} disabled={!findNode(scopeNode, selectedAppNodeId)}>复制节点</button>
-          <button onClick={() => dispatchRuntimeEvent("DELETE_APP_NODE", "root_hud")} disabled={!findNode(scopeNode, selectedAppNodeId)}>删除节点</button>
-          <button onClick={() => dispatchRuntimeEvent("RESET_APP_GRAPH", "root_hud")}>重置节点图</button>
-          <button onClick={fitScope}>适应</button>
-          <button onClick={() => setScopeCamera({ scale: 1, x: 0, y: 0 }, true)}>{Math.round(camera.scale * 100)}%</button>
         </div>
         <div className="root-legend">
           <span><i className="data" />数据</span>

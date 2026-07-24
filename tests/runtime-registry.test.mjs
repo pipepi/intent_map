@@ -39,6 +39,7 @@ test("provides one recursive shell for all node implementations", async () => {
   assert.match(source, /export function NodeRenderer/);
   assert.match(source, /runtime-node-titlebar/);
   assert.match(source, /scale < 0\.75/);
+  assert.match(source, /lod === "always-live"/);
   assert.match(source, /layoutLocked/);
   assert.match(source, /runtime-port-input/);
   assert.match(source, /runtime-port-output/);

@@ -392,12 +392,17 @@ export const createApplicationDocument = (
     position: definition.position,
     size: definition.size,
     resizeMode: "full" as const,
-    implementation: {
-      key: definition.key,
-      core: true,
-      visual: true,
-      config: { lane: definition.lane },
-    },
+      implementation: {
+        key: definition.key,
+        core: true,
+        visual: true,
+        config: {
+          lane: definition.lane,
+          ...(definition.id === "scope_toolbar"
+            ? { lod: "always-live" }
+            : {}),
+        },
+      },
   }));
 
   return {
@@ -480,6 +485,13 @@ export const loadIntentDocument = (input: unknown): IntentDocumentV2 => {
   cloned.publishedModules ??= [];
   cloned.viewState ??= { layoutLocked: false, cameras: {} };
   cloned.viewState.cameras ??= {};
+  const scopeToolbar = findNode(cloned.rootIntent, "scope_toolbar");
+  if (scopeToolbar?.implementation?.key === "scope-toolbar") {
+    scopeToolbar.implementation.config = {
+      ...scopeToolbar.implementation.config,
+      lod: "always-live",
+    };
+  }
   return cloned;
 };
 

@@ -43,7 +43,8 @@ export function NodeRenderer({
   onResizeStart,
 }: NodeRendererProps) {
   const size = node.size ?? { width: 320, height: 220 };
-  const summary = scale < 0.75 && !active;
+  const alwaysLive = node.implementation?.config?.lod === "always-live";
+  const summary = scale < 0.75 && !active && !alwaysLive;
   const rows = portRows(node);
   return (
     <article
