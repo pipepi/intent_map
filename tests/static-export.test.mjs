@@ -21,6 +21,7 @@ test("exports a fully static entry page", async () => {
   assert.match(html, /resize-mode-toggle simple/);
   assert.match(html, /node-interface-port input-interface-port/);
   assert.match(html, /node-interface-port output-interface-port/);
+  assert.match(html, /node-interface-section/);
   assert.match(html, /height:166px/);
   assert.match(html, /title="业务约束"/);
   assert.match(html, /title="场景序列与约束"/);
@@ -48,8 +49,11 @@ test("anchors derived edges to named node interface ports", async () => {
   assert.match(page, /Math\.max\(startTop \+ minimumHeight, startBottom \+ dy\)/);
   assert.match(
     page,
-    /<small>\{node\.description\}<\/small>[\s\S]*node-interface-list input-interface-list[\s\S]*node-ports/,
+    /<small>\{node\.description\}<\/small>[\s\S]*node-interface-section[\s\S]*node-interface-list input-interface-list[\s\S]*node-ports/,
   );
+  assert.match(page, /style=\{\{ height: portRows \* NODE_PORT_ROW_GAP \}\}/);
+  assert.match(page, /style=\{\{ top: portIndex \* NODE_PORT_ROW_GAP \}\}/);
+  assert.match(css, /\.node-interface-section\s*\{[^}]*position:\s*relative[^}]*flex:\s*0 0 auto/s);
   assert.match(page, /target\.inputs\.findIndex/);
   assert.match(page, /source\?\.outputs\.findIndex/);
   assert.match(css, /\.input-interface-port\s*\{[^}]*left:\s*-41px/s);

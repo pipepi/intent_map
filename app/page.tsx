@@ -1801,6 +1801,7 @@ export default function Home() {
                   const visibleDirections =
                     resizeMode === "full" ? resizeDirections : simpleResizeDirections;
                   const isSelected = selectedId === node.id;
+                  const portRows = Math.max(node.inputs.length, node.outputs.length);
                   return (
                     <Fragment key={node.id}>
                       <button
@@ -1821,36 +1822,39 @@ export default function Home() {
                         </span>
                         <strong>{node.name}</strong>
                         <small>{node.description}</small>
-                        <span className="node-interface-list input-interface-list">
-                          {node.inputs.map((port, portIndex) => (
-                            <span
-                              key={port.id}
-                              className="node-interface-port input-interface-port"
-                              style={{
-                                top: getNodePortY(portIndex) - NODE_PORT_SIZE.height / 2,
-                              }}
-                              title={port.name}
-                            >
-                              <span className="node-port-dot" />
-                              <span className="node-port-name">{port.name}</span>
+                        {portRows > 0 && (
+                          <span
+                            className="node-interface-section"
+                            style={{ height: portRows * NODE_PORT_ROW_GAP }}
+                          >
+                            <span className="node-interface-list input-interface-list">
+                              {node.inputs.map((port, portIndex) => (
+                                <span
+                                  key={port.id}
+                                  className="node-interface-port input-interface-port"
+                                  style={{ top: portIndex * NODE_PORT_ROW_GAP }}
+                                  title={port.name}
+                                >
+                                  <span className="node-port-dot" />
+                                  <span className="node-port-name">{port.name}</span>
+                                </span>
+                              ))}
                             </span>
-                          ))}
-                        </span>
-                        <span className="node-interface-list output-interface-list">
-                          {node.outputs.map((port, portIndex) => (
-                            <span
-                              key={port.id}
-                              className="node-interface-port output-interface-port"
-                              style={{
-                                top: getNodePortY(portIndex) - NODE_PORT_SIZE.height / 2,
-                              }}
-                              title={port.name}
-                            >
-                              <span className="node-port-name">{port.name}</span>
-                              <span className="node-port-dot" />
+                            <span className="node-interface-list output-interface-list">
+                              {node.outputs.map((port, portIndex) => (
+                                <span
+                                  key={port.id}
+                                  className="node-interface-port output-interface-port"
+                                  style={{ top: portIndex * NODE_PORT_ROW_GAP }}
+                                  title={port.name}
+                                >
+                                  <span className="node-port-name">{port.name}</span>
+                                  <span className="node-port-dot" />
+                                </span>
+                              ))}
                             </span>
-                          ))}
-                        </span>
+                          </span>
+                        )}
                         <span className="node-ports">
                           <span>{node.inputs.length} in</span>
                           <span>{node.outputs.length} out</span>

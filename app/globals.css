@@ -955,8 +955,22 @@ code,
   -webkit-line-clamp: 2;
 }
 
+.graph-node > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .graph-node > .node-ports {
   margin-top: auto;
+}
+
+.node-interface-section {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  margin: 4px -11px 0;
+  pointer-events: none;
 }
 
 .node-interface-list {
