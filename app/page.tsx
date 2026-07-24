@@ -4,7 +4,6 @@ import {
   ChangeEvent,
   CSSProperties,
   PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
   useEffect,
   useMemo,
   useRef,
@@ -508,6 +507,8 @@ export default function Home() {
   const [zoomCue, setZoomCue] = useState<ZoomCue | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasViewport = useRef<HTMLDivElement>(null);
+  const cameraRef = useRef(camera);
+  const wheelHandlerRef = useRef<(event: WheelEvent) => void>(() => undefined);
   const cameraTouched = useRef(false);
   const scopeLockUntil = useRef(0);
   const scopeTimers = useRef<number[]>([]);
@@ -519,6 +520,7 @@ export default function Home() {
   });
   const cancelRun = useRef(false);
   const zoom = camera.scale;
+  cameraRef.current = camera;
 
   const current = useMemo(() => getNodeAtPath(doc.rootIntent, path), [doc, path]);
   const selected =
@@ -571,6 +573,11 @@ export default function Home() {
 
   const resetCamera = () => {
     const viewport = canvasViewport.current;
+    const nextCamera = {
+      scale: 1,
+      x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
+      y: viewport ? (viewport.clientHeight - 650) / 2 : 0,
+    };
     cameraTouched.current = false;
     thresholdIntent.current = {
       direction: 0,
@@ -579,11 +586,8 @@ export default function Home() {
       lastAt: 0,
     };
     setZoomCue(null);
-    setCamera({
-      scale: 1,
-      x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
-      y: viewport ? (viewport.clientHeight - 650) / 2 : 0,
-    });
+    cameraRef.current = nextCamera;
+    setCamera(nextCamera);
   };
 
   useEffect(() => {
@@ -644,8 +648,14 @@ export default function Home() {
     pointer?: { x: number; y: number },
   ) => {
     const viewportRect = viewport.getBoundingClientRect();
-    const stage = viewport.querySelector<HTMLElement>(".canvas-stage");
-    const stageRect = stage?.getBoundingClientRect() ?? viewportRect;
+    const activeCamera = cameraRef.current;
+    const renderedScale = activeCamera.scale;
+    const stageRect = {
+      left: viewportRect.left + activeCamera.x,
+      top: viewportRect.top + activeCamera.y,
+      right: viewportRect.left + activeCamera.x + 1000 * renderedScale,
+      bottom: viewportRect.top + activeCamera.y + 650 * renderedScale,
+    };
     const visibleLeft = Math.max(viewportRect.left, stageRect.left);
     const visibleTop = Math.max(viewportRect.top, stageRect.top);
     const visibleRight = Math.min(viewportRect.right, stageRect.right);
@@ -671,10 +681,10 @@ export default function Home() {
 
     return {
       stageX: hasVisibleStage
-        ? Math.max(0, Math.min(1000, (anchorClientX - stageRect.left) / zoom))
+        ? Math.max(0, Math.min(1000, (anchorClientX - stageRect.left) / renderedScale))
         : 500,
       stageY: hasVisibleStage
-        ? Math.max(0, Math.min(650, (anchorClientY - stageRect.top) / zoom))
+        ? Math.max(0, Math.min(650, (anchorClientY - stageRect.top) / renderedScale))
         : 325,
       viewportX: anchorClientX - viewportRect.left,
       viewportY: anchorClientY - viewportRect.top,
@@ -686,18 +696,20 @@ export default function Home() {
     anchor: ReturnType<typeof getZoomAnchor>,
   ) => {
     cameraTouched.current = true;
-    setCamera({
+    const nextCamera = {
       scale: nextZoom,
       x: anchor.viewportX - anchor.stageX * nextZoom,
       y: anchor.viewportY - anchor.stageY * nextZoom,
-    });
+    };
+    cameraRef.current = nextCamera;
+    setCamera(nextCamera);
   };
 
   const zoomFromControls = (delta: number) => {
     const viewport = canvasViewport.current;
     if (!viewport) return;
     clearThresholdIntent();
-    const nextZoom = Math.max(0.5, Math.min(2, zoom + delta));
+    const nextZoom = Math.max(0.5, Math.min(2, cameraRef.current.scale + delta));
     const anchor = getZoomAnchor(viewport);
     applyAnchoredZoom(nextZoom, anchor);
 
@@ -749,11 +761,13 @@ export default function Home() {
       Math.min(1, Math.min(viewport.clientWidth / 1000, viewport.clientHeight / 650) * 0.92),
     );
     cameraTouched.current = true;
-    setCamera({
+    const nextCamera = {
       scale: nextZoom,
       x: (viewport.clientWidth - 1000 * nextZoom) / 2,
       y: (viewport.clientHeight - 650 * nextZoom) / 2,
-    });
+    };
+    cameraRef.current = nextCamera;
+    setCamera(nextCamera);
   };
 
   const clearThresholdIntent = () => {
@@ -816,11 +830,13 @@ export default function Home() {
         setPath(targetPath);
         setSelectedId(nextNode.children?.[0]?.id ?? nextNode.id);
         cameraTouched.current = false;
-        setCamera({
+        const nextCamera = {
           scale: 1,
           x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
           y: viewport ? (viewport.clientHeight - 650) / 2 : 0,
-        });
+        };
+        cameraRef.current = nextCamera;
+        setCamera(nextCamera);
         setScopeMotion({
           phase: direction === "enter" ? "enter-arrive" : "exit-arrive",
           originX: direction === "enter" ? 500 : anchor.stageX,
@@ -834,7 +850,7 @@ export default function Home() {
     );
   };
 
-  const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+  const handleCanvasWheel = (event: WheelEvent) => {
     event.preventDefault();
 
     if (performance.now() < scopeLockUntil.current) return;
@@ -845,20 +861,25 @@ export default function Home() {
         event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX;
       const verticalDelta = event.shiftKey ? 0 : event.deltaY;
       cameraTouched.current = true;
-      setCamera((value) => ({
-        ...value,
-        x: value.x - horizontalDelta,
-        y: value.y - verticalDelta,
-      }));
+      setCamera((value) => {
+        const nextCamera = {
+          ...value,
+          x: value.x - horizontalDelta,
+          y: value.y - verticalDelta,
+        };
+        cameraRef.current = nextCamera;
+        return nextCamera;
+      });
       return;
     }
 
     const direction = event.deltaY < 0 ? 1 : -1;
     const nextZoom = Math.max(
       0.5,
-      Math.min(2, zoom * Math.exp(-event.deltaY * 0.002)),
+      Math.min(2, cameraRef.current.scale * Math.exp(-event.deltaY * 0.002)),
     );
-    const viewport = event.currentTarget;
+    const viewport = canvasViewport.current;
+    if (!viewport) return;
     const anchor = getZoomAnchor(viewport, { x: event.clientX, y: event.clientY });
 
     if (direction > 0 && nextZoom >= 2) {
@@ -938,6 +959,22 @@ export default function Home() {
     applyAnchoredZoom(nextZoom, anchor);
   };
 
+  wheelHandlerRef.current = handleCanvasWheel;
+
+  useEffect(() => {
+    const viewport = canvasViewport.current;
+    if (!viewport) return;
+    const handleWheel = (event: WheelEvent) => wheelHandlerRef.current(event);
+    viewport.addEventListener("wheel", handleWheel, {
+      capture: true,
+      passive: false,
+    });
+    return () =>
+      viewport.removeEventListener("wheel", handleWheel, {
+        capture: true,
+      });
+  }, []);
+
   const sourceOptions = (scope: IntentNode) => [
     ...scope.inputs.map((port) => ({
       value: `env:${port.id}`,
@@ -984,15 +1021,21 @@ export default function Home() {
     const start = node.position;
     const target = event.currentTarget;
     const onMove = (moveEvent: PointerEvent) => {
-      target.style.left = `${start.x + (moveEvent.clientX - originX) / zoom}px`;
-      target.style.top = `${start.y + (moveEvent.clientY - originY) / zoom}px`;
+      target.style.left = `${start.x + (moveEvent.clientX - originX) / cameraRef.current.scale}px`;
+      target.style.top = `${start.y + (moveEvent.clientY - originY) / cameraRef.current.scale}px`;
     };
     const onUp = (upEvent: PointerEvent) => {
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onUp);
       const nextPosition = {
-        x: Math.max(195, Math.min(760, start.x + (upEvent.clientX - originX) / zoom)),
-        y: Math.max(62, Math.min(520, start.y + (upEvent.clientY - originY) / zoom)),
+        x: Math.max(
+          195,
+          Math.min(760, start.x + (upEvent.clientX - originX) / cameraRef.current.scale),
+        ),
+        y: Math.max(
+          62,
+          Math.min(520, start.y + (upEvent.clientY - originY) / cameraRef.current.scale),
+        ),
       };
       updateCurrent((scope) => ({
         ...scope,
@@ -1492,7 +1535,6 @@ export default function Home() {
           <div
             ref={canvasViewport}
             className={`canvas-viewport ${zoom <= 0.72 ? "overview-mode" : ""} ${scopeMotion ? `scope-motion ${scopeMotion.phase}` : ""}`}
-            onWheel={handleCanvasWheel}
             style={
               scopeMotion
                 ? ({
