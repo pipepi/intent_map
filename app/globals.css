@@ -804,7 +804,7 @@ code,
   width: 1000px;
   height: 650px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(123, 90, 231, 0.25);
   border-radius: 16px;
   background: rgba(11, 15, 35, 0.36);
@@ -847,28 +847,18 @@ code,
 
 .environment-stack,
 .output-stack {
+  z-index: 5;
+  width: 72px;
   position: absolute;
-  top: 76px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  top: 83px;
 }
 
 .environment-stack {
-  left: 26px;
+  left: 0;
 }
 
 .output-stack {
-  right: 23px;
-}
-
-.stack-label {
-  margin-bottom: -5px;
-  color: #66749c;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  right: 0;
 }
 
 .intent-node {
@@ -1319,51 +1309,10 @@ code,
   pointer-events: none;
 }
 
-.env-node,
-.output-node {
-  width: 151px;
-  min-height: 84px;
-  border-style: dashed;
-  box-shadow: none;
-  background: rgba(12, 20, 42, 0.84);
-}
-
-.env-node {
-  border-color: rgba(57, 167, 255, 0.55);
-}
-
-.output-node {
-  border-color: rgba(139, 92, 246, 0.6);
-}
-
-.output-node .node-topline b {
-  color: #ad90ff;
-}
-
-.port-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 9px;
-}
-
-.port-line em {
-  color: #7885ab;
-  font-family: Consolas, monospace;
-  font-size: 8px;
-  font-style: normal;
-}
-
-.port-line i {
-  width: 8px;
-  height: 8px;
-  border: 2px solid var(--blue);
-  border-radius: 50%;
-  background: var(--bg);
-}
-
-.output-node .port-line i {
-  border-color: var(--purple);
+.container-interface-port {
+  margin: 0;
+  appearance: none;
+  cursor: pointer;
 }
 
 .edges {

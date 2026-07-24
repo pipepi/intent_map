@@ -1771,8 +1771,8 @@ export default function Home() {
     if (ref.env) {
       const index = current.inputs.findIndex((port) => port.id === ref.portId);
       return {
-        x: 178,
-        y: 115 + Math.max(index, 0) * 116,
+        x: -NODE_PORT_ANCHOR_OUTSET,
+        y: getNodePortY(Math.max(index, 0)),
       };
     }
     const source = current.children?.find((node) => node.id === ref.nodeId);
@@ -2014,12 +2014,13 @@ export default function Home() {
                   {current.outputs.flatMap((port, outputIndex) =>
                     collectRefs(port.mapping).map((ref, index) => {
                       const source = sourcePosition(ref);
-                      const targetY = 170 + outputIndex * 116;
+                      const targetX = canvasSize.width + NODE_PORT_ANCHOR_OUTSET;
+                      const targetY = getNodePortY(outputIndex);
                       return (
                         <path
                           key={`output-${port.id}-${index}`}
                           className="edge-output"
-                          d={`M ${source.x} ${source.y} C ${source.x + 55} ${source.y}, ${canvasSize.width - 135} ${targetY}, ${canvasSize.width - 100} ${targetY}`}
+                          d={`M ${source.x} ${source.y} C ${source.x + 55} ${source.y}, ${targetX - 55} ${targetY}, ${targetX} ${targetY}`}
                           markerEnd="url(#arrow-purple)"
                         />
                       );
@@ -2033,17 +2034,17 @@ export default function Home() {
                   <small>{current.description}</small>
                 </div>
 
-                <div className="environment-stack">
-                  <div className="stack-label">环境输入</div>
-                  {current.inputs.map((port) => (
+                <div className="environment-stack" role="group" aria-label="环境输入">
+                  {current.inputs.map((port, portIndex) => (
                     <button
                       key={port.id}
-                      className="intent-node env-node"
+                      className="node-interface-port input-interface-port container-interface-port"
+                      style={{ top: portIndex * NODE_PORT_ROW_GAP }}
+                      title={`${port.name} · ${port.type}`}
                       onClick={() => setSelectedId(current.id)}
                     >
-                      <span className="node-topline"><b>ENV</b><i /></span>
-                      <strong>{port.name}</strong>
-                      <span className="port-line"><em>{port.type}</em><i /></span>
+                      <span className="node-port-dot" />
+                      <span className="node-port-name">{port.name}</span>
                     </button>
                   ))}
                 </div>
@@ -2148,17 +2149,17 @@ export default function Home() {
                   );
                 })}
 
-                <div className="output-stack">
-                  <div className="stack-label">父级输出</div>
-                  {current.outputs.map((port) => (
+                <div className="output-stack" role="group" aria-label="父级输出">
+                  {current.outputs.map((port, portIndex) => (
                     <button
                       key={port.id}
-                      className="intent-node output-node"
+                      className="node-interface-port output-interface-port container-interface-port"
+                      style={{ top: portIndex * NODE_PORT_ROW_GAP }}
+                      title={`${port.name} · ${port.type}`}
                       onClick={() => setSelectedId(current.id)}
                     >
-                      <span className="node-topline"><b>EXPORT</b><i /></span>
-                      <strong>{port.name}</strong>
-                      <span className="port-line"><i /><em>{port.type}</em></span>
+                      <span className="node-port-name">{port.name}</span>
+                      <span className="node-port-dot" />
                     </button>
                   ))}
                 </div>

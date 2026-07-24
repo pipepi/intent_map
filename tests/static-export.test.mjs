@@ -142,6 +142,27 @@ test("anchors derived edges to named node interface ports", async () => {
   assert.match(css, /\.node-port-name\s*\{[^}]*flex:\s*0 0 56px/s);
   assert.match(css, /text-overflow:\s*ellipsis/);
   assert.match(css, /white-space:\s*nowrap/);
+  assert.match(
+    page,
+    /className="node-interface-port input-interface-port container-interface-port"/,
+  );
+  assert.match(
+    page,
+    /className="node-interface-port output-interface-port container-interface-port"/,
+  );
+  assert.match(page, /x: -NODE_PORT_ANCHOR_OUTSET/);
+  assert.match(page, /y: getNodePortY\(Math\.max\(index, 0\)\)/);
+  assert.match(page, /const targetX = canvasSize\.width \+ NODE_PORT_ANCHOR_OUTSET/);
+  assert.match(page, /const targetY = getNodePortY\(outputIndex\)/);
+  assert.doesNotMatch(page, /className="intent-node env-node"/);
+  assert.doesNotMatch(page, /className="intent-node output-node"/);
+  assert.match(
+    css,
+    /\.environment-stack,\s*\.output-stack\s*\{[^}]*width:\s*72px[^}]*top:\s*83px/s,
+  );
+  assert.match(css, /\.environment-stack\s*\{[^}]*left:\s*0/s);
+  assert.match(css, /\.output-stack\s*\{[^}]*right:\s*0/s);
+  assert.match(css, /\.canvas-stage\s*\{[^}]*overflow:\s*visible/s);
 });
 
 test("copies all deployment assets into the static output", async () => {
