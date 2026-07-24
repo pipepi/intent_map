@@ -571,16 +571,14 @@ export default function Home() {
     const nextZoom = Math.max(0.5, Math.min(2, zoom + direction * 0.1));
 
     if (direction > 0 && nextZoom >= 2) {
-      const expandable = (current.children ?? []).filter(
-        (node) => node.kind === "composite" && Boolean(node.children?.length),
-      );
+      const candidates = current.children ?? [];
 
-      if (expandable.length > 0) {
+      if (candidates.length > 0) {
         const viewport = event.currentTarget;
         const rect = viewport.getBoundingClientRect();
         const pointerX = (event.clientX - rect.left + viewport.scrollLeft) / zoom;
         const pointerY = (event.clientY - rect.top + viewport.scrollTop) / zoom;
-        const nearest = expandable.reduce((closest, node) => {
+        const nearest = candidates.reduce((closest, node) => {
           const closestDistance =
             (closest.position.x + 89 - pointerX) ** 2 +
             (closest.position.y + 52 - pointerY) ** 2;
@@ -589,7 +587,7 @@ export default function Home() {
             (node.position.y + 52 - pointerY) ** 2;
           return nodeDistance < closestDistance ? node : closest;
         });
-        enterNode(nearest);
+        navigateTo([...path, nearest.id]);
         return;
       }
     }
@@ -670,6 +668,7 @@ export default function Home() {
   };
 
   const addOperator = () => {
+    if (current.kind !== "composite") return;
     const node: IntentNode = {
       id: uid("intent"),
       name: "新意图",
@@ -1051,7 +1050,13 @@ export default function Home() {
         <aside className="left-panel">
           <div className="panel-heading">
             <span>意图结构</span>
-            <button aria-label="新增叶子意图" onClick={addOperator}>＋</button>
+            <button
+              aria-label="新增叶子意图"
+              onClick={addOperator}
+              disabled={current.kind !== "composite"}
+            >
+              ＋
+            </button>
           </div>
           <label className="search-field">
             <span>⌕</span>
@@ -1117,7 +1122,7 @@ export default function Home() {
             <span className="scope-note">严格模块边界 · 仅显示直属子意图</span>
           </div>
           <div className="canvas-toolbar">
-            <span className="scope-badge">COMPOSITE</span>
+            <span className="scope-badge">{current.kind.toUpperCase()}</span>
             <strong>{current.name}</strong>
             <span>{current.inputs.length} 输入</span>
             <span>{current.outputs.length} 输出</span>
@@ -1232,7 +1237,7 @@ export default function Home() {
                   ))}
                 </div>
 
-                {!current.children?.length && (
+                {current.kind === "composite" && !current.children?.length && (
                   <button className="empty-canvas" onClick={addOperator}>
                     <span>＋</span>
                     添加第一个子意图
