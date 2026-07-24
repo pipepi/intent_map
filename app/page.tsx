@@ -2,6 +2,7 @@
 
 import {
   ChangeEvent,
+  CSSProperties,
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
   useEffect,
@@ -77,6 +78,12 @@ type Trace = {
   duration?: number;
   output?: Record<string, unknown>;
   error?: string;
+};
+
+type ScopeMotion = {
+  phase: "enter-leave" | "enter-arrive" | "exit-leave" | "exit-arrive";
+  originX: number;
+  originY: number;
 };
 
 const uid = (prefix = "id") =>
@@ -488,9 +495,18 @@ export default function Home() {
   });
   const [activeTab, setActiveTab] = useState<"properties" | "run">("properties");
   const [toast, setToast] = useState("");
+  const [scopeMotion, setScopeMotion] = useState<ScopeMotion | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasViewport = useRef<HTMLDivElement>(null);
   const cameraTouched = useRef(false);
+  const scopeLockUntil = useRef(0);
+  const scopeTimers = useRef<number[]>([]);
+  const thresholdIntent = useRef({
+    direction: 0,
+    armedAt: 0,
+    travel: 0,
+    lastAt: 0,
+  });
   const cancelRun = useRef(false);
   const zoom = camera.scale;
 
@@ -565,6 +581,7 @@ export default function Home() {
     return () => {
       cancelAnimationFrame(frame);
       observer?.disconnect();
+      scopeTimers.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, []);
 
@@ -584,11 +601,19 @@ export default function Home() {
       );
       if (module) target = module.snapshot;
     }
-    if (target.kind === "composite" || target.children?.length) {
+    const viewport = canvasViewport.current;
+    if (!viewport) {
       setPath((items) => [...items, node.id]);
       resetCamera();
       setSelectedId(target.children?.[0]?.id ?? target.id);
+      return;
     }
+    beginScopeTransition(
+      [...path, node.id],
+      "enter",
+      getZoomAnchor(viewport),
+      target,
+    );
   };
 
   const getZoomAnchor = (
@@ -652,10 +677,87 @@ export default function Home() {
     applyAnchoredZoom(nextZoom, getZoomAnchor(viewport));
   };
 
+  const clearThresholdIntent = () => {
+    thresholdIntent.current = {
+      direction: 0,
+      armedAt: 0,
+      travel: 0,
+      lastAt: 0,
+    };
+  };
+
+  const thresholdIsConfirmed = (direction: number, delta: number) => {
+    const now = performance.now();
+    const intent = thresholdIntent.current;
+    const startsNewIntent =
+      intent.direction !== direction || now - intent.lastAt > 420;
+
+    if (startsNewIntent) {
+      thresholdIntent.current = {
+        direction,
+        armedAt: now,
+        travel: 0,
+        lastAt: now,
+      };
+      return false;
+    }
+
+    intent.travel += Math.abs(delta);
+    intent.lastAt = now;
+    return now - intent.armedAt >= 70 && intent.travel >= 54;
+  };
+
+  const beginScopeTransition = (
+    targetPath: string[],
+    direction: "enter" | "exit",
+    anchor: ReturnType<typeof getZoomAnchor>,
+    target?: IntentNode,
+  ) => {
+    if (performance.now() < scopeLockUntil.current) return;
+
+    scopeLockUntil.current = performance.now() + 720;
+    clearThresholdIntent();
+    scopeTimers.current.forEach((timer) => window.clearTimeout(timer));
+    scopeTimers.current = [];
+    setScopeMotion({
+      phase: direction === "enter" ? "enter-leave" : "exit-leave",
+      originX: anchor.stageX,
+      originY: anchor.stageY,
+    });
+    applyAnchoredZoom(direction === "enter" ? 2 : 0.5, anchor);
+
+    scopeTimers.current.push(
+      window.setTimeout(() => {
+        const viewport = canvasViewport.current;
+        const nextNode = target ?? getNodeAtPath(doc.rootIntent, targetPath);
+        setPath(targetPath);
+        setSelectedId(nextNode.children?.[0]?.id ?? nextNode.id);
+        cameraTouched.current = false;
+        setCamera({
+          scale: 1,
+          x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
+          y: viewport ? (viewport.clientHeight - 650) / 2 : 0,
+        });
+        setScopeMotion({
+          phase: direction === "enter" ? "enter-arrive" : "exit-arrive",
+          originX: direction === "enter" ? 500 : anchor.stageX,
+          originY: direction === "enter" ? 325 : anchor.stageY,
+        });
+
+        scopeTimers.current.push(
+          window.setTimeout(() => setScopeMotion(null), 260),
+        );
+      }, 170),
+    );
+  };
+
   const handleCanvasWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
 
+    if (performance.now() < scopeLockUntil.current) return;
+
     if (!event.ctrlKey) {
+      clearThresholdIntent();
       const horizontalDelta =
         event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX;
       const verticalDelta = event.shiftKey ? 0 : event.deltaY;
@@ -679,7 +781,8 @@ export default function Home() {
     if (direction > 0 && nextZoom >= 2) {
       const candidates = current.children ?? [];
 
-      if (candidates.length > 0) {
+      applyAnchoredZoom(2, anchor);
+      if (candidates.length > 0 && thresholdIsConfirmed(direction, event.deltaY)) {
         const nearest = candidates.reduce((closest, node) => {
           const closestDistance =
             (closest.position.x + 89 - anchor.stageX) ** 2 +
@@ -689,16 +792,21 @@ export default function Home() {
             (node.position.y + 52 - anchor.stageY) ** 2;
           return nodeDistance < closestDistance ? node : closest;
         });
-        navigateTo([...path, nearest.id]);
+        beginScopeTransition([...path, nearest.id], "enter", anchor, nearest);
         return;
       }
-    }
-
-    if (direction < 0 && nextZoom <= 0.5 && path.length > 1) {
-      navigateTo(path.slice(0, -1));
       return;
     }
 
+    if (direction < 0 && nextZoom <= 0.5 && path.length > 1) {
+      applyAnchoredZoom(0.5, anchor);
+      if (thresholdIsConfirmed(direction, event.deltaY)) {
+        beginScopeTransition(path.slice(0, -1), "exit", anchor);
+      }
+      return;
+    }
+
+    clearThresholdIntent();
     applyAnchoredZoom(nextZoom, anchor);
   };
 
@@ -1245,8 +1353,16 @@ export default function Home() {
           </div>
           <div
             ref={canvasViewport}
-            className="canvas-viewport"
+            className={`canvas-viewport ${scopeMotion ? `scope-motion ${scopeMotion.phase}` : ""}`}
             onWheel={handleCanvasWheel}
+            style={
+              scopeMotion
+                ? ({
+                    "--scope-origin-x": `${(scopeMotion.originX / 1000) * 100}%`,
+                    "--scope-origin-y": `${(scopeMotion.originY / 650) * 100}%`,
+                  } as CSSProperties)
+                : undefined
+            }
           >
             <div
               className="canvas-scale"
