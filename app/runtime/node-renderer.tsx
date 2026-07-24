@@ -64,12 +64,16 @@ export function NodeRenderer({
       }}
       data-node-id={node.id}
       data-implementation={node.implementation?.key ?? ""}
-      onPointerDown={() => onSelect(node.id)}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect(node.id);
+      }}
       onDoubleClick={() => onEnter(node)}
     >
       <header
         className="runtime-node-titlebar"
         onPointerDown={(event) => {
+          event.stopPropagation();
           if (!layoutLocked) onMoveStart(node, event);
         }}
       >
@@ -124,7 +128,10 @@ export function NodeRenderer({
           <span
             className={`runtime-resize runtime-resize-${direction}`}
             key={direction}
-            onPointerDown={(event) => onResizeStart(node, direction, event)}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              onResizeStart(node, direction, event);
+            }}
           />
         ))}
     </article>
