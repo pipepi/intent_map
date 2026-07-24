@@ -54,6 +54,7 @@ type IntentNode = {
   children?: IntentNode[];
   position: { x: number; y: number };
   size?: { width: number; height: number };
+  canvasSize?: { width: number; height: number };
   resizeMode?: "simple" | "full";
   moduleRef?: { moduleId: string; version: number };
 };
@@ -103,7 +104,10 @@ const uid = (prefix = "id") =>
 const DEFAULT_NODE_SIZE = { width: 174, height: 102 };
 const MIN_NODE_SIZE = { width: 150, height: 96 };
 const MAX_NODE_SIZE = { width: 520, height: 360 };
-const NODE_BOUNDS = { left: 195, top: 62, right: 900, bottom: 590 };
+const DEFAULT_CANVAS_SIZE = { width: 1000, height: 650 };
+const MIN_CANVAS_SIZE = { width: 720, height: 480 };
+const MAX_CANVAS_SIZE = { width: 1600, height: 1100 };
+const CANVAS_NODE_MARGIN = { left: 195, top: 62, right: 100, bottom: 60 };
 const NODE_PORT_SIZE = { width: 72, height: 22 };
 const NODE_PORT_ANCHOR_OUTSET = 5.5;
 const NODE_PORT_SECTION_TOP = 83;
@@ -125,6 +129,34 @@ const getNodeSize = (node: IntentNode) => {
   };
 };
 const getResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
+const getCanvasSize = (node: IntentNode) => node.canvasSize ?? DEFAULT_CANVAS_SIZE;
+const getCanvasMinimumSize = (node: IntentNode) => {
+  const childRight = Math.max(
+    0,
+    ...(node.children ?? []).map(
+      (child) => child.position.x + getNodeSize(child).width + CANVAS_NODE_MARGIN.right,
+    ),
+  );
+  const childBottom = Math.max(
+    0,
+    ...(node.children ?? []).map(
+      (child) => child.position.y + getNodeSize(child).height + CANVAS_NODE_MARGIN.bottom,
+    ),
+  );
+  return {
+    width: Math.max(MIN_CANVAS_SIZE.width, childRight),
+    height: Math.max(MIN_CANVAS_SIZE.height, childBottom),
+  };
+};
+const getNodeBounds = (scope: IntentNode) => {
+  const canvasSize = getCanvasSize(scope);
+  return {
+    left: CANVAS_NODE_MARGIN.left,
+    top: CANVAS_NODE_MARGIN.top,
+    right: canvasSize.width - CANVAS_NODE_MARGIN.right,
+    bottom: canvasSize.height - CANVAS_NODE_MARGIN.bottom,
+  };
+};
 const getNodePortY = (index: number) =>
   NODE_PORT_SECTION_TOP + NODE_PORT_SIZE.height / 2 + index * NODE_PORT_ROW_GAP;
 const getNodePortAnchorX = (
@@ -525,6 +557,12 @@ export default function Home() {
   cameraRef.current = camera;
 
   const current = useMemo(() => getNodeAtPath(doc.rootIntent, path), [doc, path]);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const canvasSize = getCanvasSize(current);
+  const currentResizeMode = getResizeMode(current);
+  const currentResizeDirections =
+    currentResizeMode === "full" ? resizeDirections : simpleResizeDirections;
   const selected =
     current.children?.find((node) => node.id === selectedId) ??
     (current.id === selectedId ? current : undefined);
@@ -573,12 +611,13 @@ export default function Home() {
     setDoc(next);
   };
 
-  const resetCamera = () => {
+  const resetCamera = (scope = currentRef.current) => {
     const viewport = canvasViewport.current;
+    const scopeSize = getCanvasSize(scope);
     const nextCamera = {
       scale: 1,
-      x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
-      y: viewport ? (viewport.clientHeight - 650) / 2 : 0,
+      x: viewport ? (viewport.clientWidth - scopeSize.width) / 2 : 0,
+      y: viewport ? (viewport.clientHeight - scopeSize.height) / 2 : 0,
     };
     cameraTouched.current = false;
     thresholdIntent.current = {
@@ -593,7 +632,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const frame = requestAnimationFrame(resetCamera);
+    const frame = requestAnimationFrame(() => resetCamera());
     const viewport = canvasViewport.current;
     const observer = viewport
       ? new ResizeObserver(() => {
@@ -615,9 +654,9 @@ export default function Home() {
   }, [zoomCue]);
 
   const navigateTo = (targetPath: string[]) => {
-    setPath(targetPath);
-    resetCamera();
     const node = getNodeAtPath(doc.rootIntent, targetPath);
+    setPath(targetPath);
+    resetCamera(node);
     setSelectedId(node.children?.[0]?.id ?? node.id);
   };
 
@@ -633,7 +672,7 @@ export default function Home() {
     const viewport = canvasViewport.current;
     if (!viewport) {
       setPath((items) => [...items, node.id]);
-      resetCamera();
+      resetCamera(target);
       setSelectedId(target.children?.[0]?.id ?? target.id);
       return;
     }
@@ -652,11 +691,12 @@ export default function Home() {
     const viewportRect = viewport.getBoundingClientRect();
     const activeCamera = cameraRef.current;
     const renderedScale = activeCamera.scale;
+    const activeCanvasSize = getCanvasSize(currentRef.current);
     const stageRect = {
       left: viewportRect.left + activeCamera.x,
       top: viewportRect.top + activeCamera.y,
-      right: viewportRect.left + activeCamera.x + 1000 * renderedScale,
-      bottom: viewportRect.top + activeCamera.y + 650 * renderedScale,
+      right: viewportRect.left + activeCamera.x + activeCanvasSize.width * renderedScale,
+      bottom: viewportRect.top + activeCamera.y + activeCanvasSize.height * renderedScale,
     };
     const visibleLeft = Math.max(viewportRect.left, stageRect.left);
     const visibleTop = Math.max(viewportRect.top, stageRect.top);
@@ -683,11 +723,23 @@ export default function Home() {
 
     return {
       stageX: hasVisibleStage
-        ? Math.max(0, Math.min(1000, (anchorClientX - stageRect.left) / renderedScale))
-        : 500,
+        ? Math.max(
+            0,
+            Math.min(
+              activeCanvasSize.width,
+              (anchorClientX - stageRect.left) / renderedScale,
+            ),
+          )
+        : activeCanvasSize.width / 2,
       stageY: hasVisibleStage
-        ? Math.max(0, Math.min(650, (anchorClientY - stageRect.top) / renderedScale))
-        : 325,
+        ? Math.max(
+            0,
+            Math.min(
+              activeCanvasSize.height,
+              (anchorClientY - stageRect.top) / renderedScale,
+            ),
+          )
+        : activeCanvasSize.height / 2,
       viewportX: anchorClientX - viewportRect.left,
       viewportY: anchorClientY - viewportRect.top,
     };
@@ -760,15 +812,22 @@ export default function Home() {
     const viewport = canvasViewport.current;
     if (!viewport) return;
     clearThresholdIntent();
+    const activeCanvasSize = getCanvasSize(currentRef.current);
     const nextZoom = Math.max(
       0.5,
-      Math.min(1, Math.min(viewport.clientWidth / 1000, viewport.clientHeight / 650) * 0.92),
+      Math.min(
+        1,
+        Math.min(
+          viewport.clientWidth / activeCanvasSize.width,
+          viewport.clientHeight / activeCanvasSize.height,
+        ) * 0.92,
+      ),
     );
     cameraTouched.current = true;
     const nextCamera = {
       scale: nextZoom,
-      x: (viewport.clientWidth - 1000 * nextZoom) / 2,
-      y: (viewport.clientHeight - 650 * nextZoom) / 2,
+      x: (viewport.clientWidth - activeCanvasSize.width * nextZoom) / 2,
+      y: (viewport.clientHeight - activeCanvasSize.height * nextZoom) / 2,
     };
     cameraRef.current = nextCamera;
     setCamera(nextCamera);
@@ -831,20 +890,21 @@ export default function Home() {
       window.setTimeout(() => {
         const viewport = canvasViewport.current;
         const nextNode = target ?? getNodeAtPath(doc.rootIntent, targetPath);
+        const nextCanvasSize = getCanvasSize(nextNode);
         setPath(targetPath);
         setSelectedId(nextNode.children?.[0]?.id ?? nextNode.id);
         cameraTouched.current = false;
         const nextCamera = {
           scale: 1,
-          x: viewport ? (viewport.clientWidth - 1000) / 2 : 0,
-          y: viewport ? (viewport.clientHeight - 650) / 2 : 0,
+          x: viewport ? (viewport.clientWidth - nextCanvasSize.width) / 2 : 0,
+          y: viewport ? (viewport.clientHeight - nextCanvasSize.height) / 2 : 0,
         };
         cameraRef.current = nextCamera;
         setCamera(nextCamera);
         setScopeMotion({
           phase: direction === "enter" ? "enter-arrive" : "exit-arrive",
-          originX: direction === "enter" ? 500 : anchor.stageX,
-          originY: direction === "enter" ? 325 : anchor.stageY,
+          originX: direction === "enter" ? nextCanvasSize.width / 2 : anchor.stageX,
+          originY: direction === "enter" ? nextCanvasSize.height / 2 : anchor.stageY,
         });
 
         scopeTimers.current.push(
@@ -1047,19 +1107,20 @@ export default function Home() {
     event.currentTarget.setPointerCapture(event.pointerId);
     const start = node.position;
     const size = getNodeSize(node);
+    const bounds = getNodeBounds(current);
     const target = event.currentTarget;
     const positionFromEvent = (pointerEvent: PointerEvent) => ({
       x: Math.max(
-        NODE_BOUNDS.left,
+        bounds.left,
         Math.min(
-          NODE_BOUNDS.right - size.width,
+          bounds.right - size.width,
           start.x + (pointerEvent.clientX - originX) / cameraRef.current.scale,
         ),
       ),
       y: Math.max(
-        NODE_BOUNDS.top,
+        bounds.top,
         Math.min(
-          NODE_BOUNDS.bottom - size.height,
+          bounds.bottom - size.height,
           start.y + (pointerEvent.clientY - originY) / cameraRef.current.scale,
         ),
       ),
@@ -1112,6 +1173,7 @@ export default function Home() {
     const startTop = node.position.y;
     const startRight = startLeft + startSize.width;
     const startBottom = startTop + startSize.height;
+    const bounds = getNodeBounds(current);
 
     const rectFromEvent = (pointerEvent: PointerEvent) => {
       const dx = (pointerEvent.clientX - originX) / cameraRef.current.scale;
@@ -1123,7 +1185,7 @@ export default function Home() {
 
       if (direction.includes("w")) {
         left = Math.max(
-          NODE_BOUNDS.left,
+          bounds.left,
           Math.min(startRight - MIN_NODE_SIZE.width, startLeft + dx),
         );
         if (startRight - left > MAX_NODE_SIZE.width)
@@ -1131,7 +1193,7 @@ export default function Home() {
       }
       if (direction.includes("e")) {
         right = Math.min(
-          NODE_BOUNDS.right,
+          bounds.right,
           Math.max(startLeft + MIN_NODE_SIZE.width, startRight + dx),
         );
         if (right - startLeft > MAX_NODE_SIZE.width)
@@ -1139,7 +1201,7 @@ export default function Home() {
       }
       if (direction.includes("n")) {
         top = Math.max(
-          NODE_BOUNDS.top,
+          bounds.top,
           Math.min(startBottom - minimumHeight, startTop + dy),
         );
         if (startBottom - top > MAX_NODE_SIZE.height)
@@ -1147,7 +1209,7 @@ export default function Home() {
       }
       if (direction.includes("s")) {
         bottom = Math.min(
-          NODE_BOUNDS.bottom,
+          bounds.bottom,
           Math.max(startTop + minimumHeight, startBottom + dy),
         );
         if (bottom - startTop > MAX_NODE_SIZE.height)
@@ -1201,6 +1263,103 @@ export default function Home() {
     handle.addEventListener("pointercancel", onUp);
   };
 
+  const previewCurrentCanvasSize = (nextSize: { width: number; height: number }) =>
+    setDoc((activeDocument) => ({
+      ...activeDocument,
+      rootIntent: updateAtPath(activeDocument.rootIntent, path, (scope) => ({
+        ...scope,
+        canvasSize: nextSize,
+      })),
+    }));
+
+  const resizeCurrentContainer = (
+    direction: ResizeDirection,
+    event: ReactPointerEvent<HTMLSpanElement>,
+  ) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const originX = event.clientX;
+    const originY = event.clientY;
+    const startSize = getCanvasSize(current);
+    const minimumSize = getCanvasMinimumSize(current);
+    const startCamera = { ...cameraRef.current };
+
+    const stateFromEvent = (pointerEvent: PointerEvent) => {
+      const dx = (pointerEvent.clientX - originX) / startCamera.scale;
+      const dy = (pointerEvent.clientY - originY) / startCamera.scale;
+      let width = startSize.width;
+      let height = startSize.height;
+
+      if (direction.includes("w"))
+        width = Math.max(
+          minimumSize.width,
+          Math.min(MAX_CANVAS_SIZE.width, startSize.width - dx),
+        );
+      if (direction.includes("e"))
+        width = Math.max(
+          minimumSize.width,
+          Math.min(MAX_CANVAS_SIZE.width, startSize.width + dx),
+        );
+      if (direction.includes("n"))
+        height = Math.max(
+          minimumSize.height,
+          Math.min(MAX_CANVAS_SIZE.height, startSize.height - dy),
+        );
+      if (direction.includes("s"))
+        height = Math.max(
+          minimumSize.height,
+          Math.min(MAX_CANVAS_SIZE.height, startSize.height + dy),
+        );
+
+      const nextSize = { width: Math.round(width), height: Math.round(height) };
+      return {
+        size: nextSize,
+        camera: {
+          ...startCamera,
+          x:
+            direction.includes("w")
+              ? startCamera.x + (startSize.width - nextSize.width) * startCamera.scale
+              : startCamera.x,
+          y:
+            direction.includes("n")
+              ? startCamera.y + (startSize.height - nextSize.height) * startCamera.scale
+              : startCamera.y,
+        },
+      };
+    };
+
+    let latestState = {
+      size: { ...startSize },
+      camera: { ...startCamera },
+    };
+    const applyState = (state: typeof latestState) => {
+      previewCurrentCanvasSize(state.size);
+      cameraRef.current = state.camera;
+      setCamera(state.camera);
+    };
+    const onMove = (moveEvent: PointerEvent) => {
+      latestState = stateFromEvent(moveEvent);
+      applyState(latestState);
+    };
+    const onUp = (upEvent: PointerEvent) => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      const finalState =
+        upEvent.type === "pointercancel" ? latestState : stateFromEvent(upEvent);
+      cameraRef.current = finalState.camera;
+      setCamera(finalState.camera);
+      updateCurrent((scope) => ({ ...scope, canvasSize: finalState.size }));
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  };
+
   const toggleResizeMode = (nodeId: string) => {
     updateCurrent((scope) => ({
       ...scope,
@@ -1214,6 +1373,14 @@ export default function Home() {
       ),
     }));
     setSelectedId(nodeId);
+  };
+
+  const toggleCurrentResizeMode = () => {
+    updateCurrent((scope) => ({
+      ...scope,
+      resizeMode: getResizeMode(scope) === "simple" ? "full" : "simple",
+    }));
+    setSelectedId(current.id);
   };
 
   const addOperator = () => {
@@ -1698,7 +1865,7 @@ export default function Home() {
                 className="zoom-value"
                 aria-label="重置为 100%"
                 title="重置为 100%"
-                onClick={resetCamera}
+                onClick={() => resetCamera()}
               >
                 {Math.round(zoom * 100)}%
               </button>
@@ -1714,8 +1881,8 @@ export default function Home() {
             style={
               scopeMotion
                 ? ({
-                    "--scope-origin-x": `${(scopeMotion.originX / 1000) * 100}%`,
-                    "--scope-origin-y": `${(scopeMotion.originY / 650) * 100}%`,
+                    "--scope-origin-x": `${(scopeMotion.originX / canvasSize.width) * 100}%`,
+                    "--scope-origin-y": `${(scopeMotion.originY / canvasSize.height) * 100}%`,
                   } as CSSProperties)
                 : undefined
             }
@@ -1723,11 +1890,22 @@ export default function Home() {
             <div
               className="canvas-scale"
               style={{
+                width: canvasSize.width,
+                height: canvasSize.height,
                 transform: `translate(${camera.x}px, ${camera.y}px) scale(${zoom})`,
               }}
             >
-              <div className="canvas-stage" aria-label={`${current.name} 内部意图地图`}>
-                <svg className="edges" viewBox="0 0 1000 650" role="img" aria-label="由输入绑定动态推导的依赖连线">
+              <div
+                className={`canvas-stage ${selectedId === current.id ? "container-selected" : ""}`}
+                style={{ width: canvasSize.width, height: canvasSize.height }}
+                aria-label={`${current.name} 内部意图地图`}
+              >
+                <svg
+                  className="edges"
+                  viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+                  role="img"
+                  aria-label="由输入绑定动态推导的依赖连线"
+                >
                   <defs>
                     <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
                       <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
@@ -1765,7 +1943,7 @@ export default function Home() {
                         <path
                           key={`output-${port.id}-${index}`}
                           className="edge-output"
-                          d={`M ${source.x} ${source.y} C ${source.x + 55} ${source.y}, 865 ${targetY}, 900 ${targetY}`}
+                          d={`M ${source.x} ${source.y} C ${source.x + 55} ${source.y}, ${canvasSize.width - 135} ${targetY}, ${canvasSize.width - 100} ${targetY}`}
                           markerEnd="url(#arrow-purple)"
                         />
                       );
@@ -1916,6 +2094,38 @@ export default function Home() {
                   </button>
                 )}
               </div>
+              <span
+                className={`container-resize-layer ${selectedId === current.id ? "selected" : ""}`}
+                aria-hidden="true"
+              >
+                {currentResizeDirections.map((direction) => (
+                  <span
+                    key={direction}
+                    className={`resize-handle resize-${direction}`}
+                    onPointerDown={(event) => resizeCurrentContainer(direction, event)}
+                  />
+                ))}
+              </span>
+              <button
+                className={`resize-mode-toggle container-mode-toggle ${currentResizeMode} ${selectedId === current.id ? "selected" : ""}`}
+                style={{
+                  left: canvasSize.width - 30,
+                  top: canvasSize.height + 5,
+                }}
+                aria-label={
+                  currentResizeMode === "simple"
+                    ? `将当前容器「${current.name}」切换为四边四角缩放`
+                    : `将当前容器「${current.name}」切换为右边、下边和右下角缩放`
+                }
+                title={
+                  currentResizeMode === "simple"
+                    ? "当前容器：右边、下边、右下角 · 点击切换为八向"
+                    : "当前容器：四边四角 · 点击切换为三向"
+                }
+                onClick={toggleCurrentResizeMode}
+              >
+                {currentResizeMode === "simple" ? "┘" : "⤢"}
+              </button>
             </div>
             {zoomCue && (
               <div

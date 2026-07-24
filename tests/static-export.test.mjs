@@ -48,6 +48,24 @@ test("supports simple and full node resize modes", async () => {
   assert.doesNotMatch(css, /\.graph-node\.selected \.resize-[nesw],/);
 });
 
+test("gives the current container the same resize modes as child nodes", async () => {
+  const html = await readFile(new URL("out/index.html", root), "utf8");
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const css = await readFile(new URL("app/globals.css", root), "utf8");
+
+  assert.match(page, /canvasSize\?: \{ width: number; height: number \}/);
+  assert.match(page, /currentResizeMode === "full" \? resizeDirections : simpleResizeDirections/);
+  assert.match(page, /resizeCurrentContainer\(direction, event\)/);
+  assert.match(page, /canvasSize: finalState\.size/);
+  assert.match(page, /viewBox=\{`0 0 \$\{canvasSize\.width\} \$\{canvasSize\.height\}`\}/);
+  assert.match(page, /viewport\.clientWidth \/ activeCanvasSize\.width/);
+  assert.match(page, /viewport\.clientHeight \/ activeCanvasSize\.height/);
+  assert.match(html, /container-resize-layer/);
+  assert.match(html, /resize-mode-toggle container-mode-toggle simple/);
+  assert.match(css, /\.container-resize-layer\s*\{[^}]*position:\s*absolute/s);
+  assert.match(css, /\.container-resize-layer \.resize-handle\s*\{[^}]*pointer-events:\s*auto/s);
+});
+
 test("anchors derived edges to named node interface ports", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
   const css = await readFile(new URL("app/globals.css", root), "utf8");

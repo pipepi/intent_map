@@ -727,6 +727,7 @@ code,
 .canvas-scale {
   width: 1000px;
   height: 650px;
+  position: relative;
   transform-origin: top left;
 }
 
@@ -1061,8 +1062,31 @@ code,
 .graph-node.selected .resize-nw,
 .graph-node.selected .resize-ne,
 .graph-node.selected .resize-se,
-.graph-node.selected .resize-sw {
+.graph-node.selected .resize-sw,
+.canvas-scale:hover .container-resize-layer .resize-nw,
+.canvas-scale:hover .container-resize-layer .resize-ne,
+.canvas-scale:hover .container-resize-layer .resize-se,
+.canvas-scale:hover .container-resize-layer .resize-sw,
+.container-resize-layer.selected .resize-nw,
+.container-resize-layer.selected .resize-ne,
+.container-resize-layer.selected .resize-se,
+.container-resize-layer.selected .resize-sw {
   opacity: 1 !important;
+}
+
+.container-resize-layer {
+  z-index: 7;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.container-resize-layer .resize-handle {
+  pointer-events: auto;
+}
+
+.container-mode-toggle {
+  z-index: 8;
 }
 
 .resize-mode-toggle {
