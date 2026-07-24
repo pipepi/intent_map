@@ -464,6 +464,13 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRunRef = useRef(false);
   const cameraRef = useRef(camera);
+  const touchPointersRef = useRef(
+    new Map<number, { x: number; y: number }>(),
+  );
+  const touchGestureRef = useRef<{
+    startCamera: CameraState;
+    startCenter: { x: number; y: number };
+  } | null>(null);
   const businessScopeId = runtimeState.scopeId;
   const selectedBusinessNodeId = runtimeState.selectionId;
   const layoutLocked = runtimeState.layoutLocked;
@@ -655,12 +662,28 @@ export default function Home() {
   };
 
   const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey) return;
     event.preventDefault();
     const viewport = viewportRef.current;
     if (!viewport) return;
     const rect = viewport.getBoundingClientRect();
     const old = cameraRef.current;
+    if (!event.ctrlKey) {
+      const deltaUnit =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? Math.max(rect.width, rect.height)
+            : 1;
+      setScopeCamera(
+        {
+          ...old,
+          x: old.x - event.deltaX * deltaUnit,
+          y: old.y - event.deltaY * deltaUnit,
+        },
+        true,
+      );
+      return;
+    }
     const direction = event.deltaY < 0 ? 1 : -1;
     const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, old.scale * Math.exp(-event.deltaY * 0.002)));
     if (direction > 0 && nextScale >= MAX_SCALE) {
@@ -696,6 +719,65 @@ export default function Home() {
 
   const onViewportPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    if (event.pointerType === "touch") {
+      event.preventDefault();
+      const target = event.currentTarget;
+      const points = touchPointersRef.current;
+      points.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const center = () => {
+        const active = [...points.values()];
+        return {
+          x: active.reduce((sum, point) => sum + point.x, 0) / active.length,
+          y: active.reduce((sum, point) => sum + point.y, 0) / active.length,
+        };
+      };
+      touchGestureRef.current = {
+        startCamera: { ...cameraRef.current },
+        startCenter: center(),
+      };
+      target.setPointerCapture(event.pointerId);
+      const move = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId !== event.pointerId) return;
+        points.set(moveEvent.pointerId, {
+          x: moveEvent.clientX,
+          y: moveEvent.clientY,
+        });
+        const gesture = touchGestureRef.current;
+        if (!gesture || points.size === 0) return;
+        const currentCenter = center();
+        setScopeCamera({
+          ...gesture.startCamera,
+          x:
+            gesture.startCamera.x +
+            currentCenter.x -
+            gesture.startCenter.x,
+          y:
+            gesture.startCamera.y +
+            currentCenter.y -
+            gesture.startCenter.y,
+        });
+      };
+      const finish = (finishEvent: PointerEvent) => {
+        if (finishEvent.pointerId !== event.pointerId) return;
+        points.delete(finishEvent.pointerId);
+        target.removeEventListener("pointermove", move);
+        target.removeEventListener("pointerup", finish);
+        target.removeEventListener("pointercancel", finish);
+        if (points.size > 0) {
+          touchGestureRef.current = {
+            startCamera: { ...cameraRef.current },
+            startCenter: center(),
+          };
+        } else {
+          touchGestureRef.current = null;
+          setScopeCamera(cameraRef.current, true);
+        }
+      };
+      target.addEventListener("pointermove", move);
+      target.addEventListener("pointerup", finish);
+      target.addEventListener("pointercancel", finish);
+      return;
+    }
     const start = { x: event.clientX, y: event.clientY };
     const startCamera = { ...cameraRef.current };
     const target = event.currentTarget;
@@ -1778,7 +1860,7 @@ export default function Home() {
           <span><i className="data" />数据管道</span>
           <span><i className="event" />事件管道</span>
           <span>{deriveEdges(businessScope).length} 条业务引用</span>
-          <span>Ctrl+滚轮 50%–200%</span>
+          <span>双指平移 · Ctrl+滚轮 50%–200%</span>
         </div>
       );
     }
@@ -1950,7 +2032,7 @@ export default function Home() {
           <span><i className="data" />数据</span>
           <span><i className="event" />事件</span>
           <span>{appEdges.length} 组聚合管道</span>
-          <span>Ctrl + 滚轮进入 / 返回</span>
+          <span>双指平移 · Ctrl + 滚轮进入 / 返回</span>
         </div>
         {toast && <button className="runtime-toast" onClick={() => setToast("")}>{toast}<span>×</span></button>}
       </div>
