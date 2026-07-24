@@ -260,9 +260,12 @@ const businessNodeMinimumHeight = (node: IntentNode) => {
       : NODE_MIN_SIZE.height,
   );
 };
-const businessNodeSize = (node: IntentNode) => {
+const businessNodeSize = (
+  node: IntentNode,
+  minimized = nodeDisplayMode(node) === "minimized",
+) => {
   const size = nodeSize(node);
-  if (nodeDisplayMode(node) === "minimized") {
+  if (minimized) {
     return {
       width: Math.min(size.width, 220),
       height: 52,
@@ -565,6 +568,13 @@ export default function Home() {
   );
   const selectedBusinessNode =
     findNode(businessRoot, selectedBusinessNodeId) ?? businessScope;
+  const isBusinessNodeMinimized = useCallback(
+    (node: IntentNode) =>
+      node.displayMode
+        ? node.displayMode === "minimized"
+        : selectedBusinessNodeId !== node.id,
+    [selectedBusinessNodeId],
+  );
   const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
   const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
@@ -1473,7 +1483,7 @@ export default function Home() {
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
     const start = { ...node.position };
-    const size = businessNodeSize(node);
+    const size = businessNodeSize(node, isBusinessNodeMinimized(node));
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const world = target.closest<HTMLElement>(".business-preview-world");
     const renderedScale =
@@ -1517,7 +1527,7 @@ export default function Home() {
     if (layoutLocked || event.button !== 0) return;
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
-    const startSize = businessNodeSize(node);
+    const startSize = businessNodeSize(node, isBusinessNodeMinimized(node));
     const minimumHeight = businessNodeMinimumHeight(node);
     const startPosition = { ...node.position };
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
@@ -1596,7 +1606,7 @@ export default function Home() {
     updateDocumentNode(node.id, (item) => ({
       ...item,
       displayMode:
-        nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
+        isBusinessNodeMinimized(item) ? "expanded" : "minimized",
     }));
     setSelectedBusinessNodeId(node.id);
   };
@@ -1637,12 +1647,10 @@ export default function Home() {
               const source = findNode(businessScope, edge.sourceId);
               const target = findNode(businessScope, edge.targetId);
               if (!source || !target) return null;
-              const sourceSize = businessNodeSize(source);
-              const targetSize = businessNodeSize(target);
-              const sourceMinimized =
-                nodeDisplayMode(source) === "minimized";
-              const targetMinimized =
-                nodeDisplayMode(target) === "minimized";
+              const sourceMinimized = isBusinessNodeMinimized(source);
+              const targetMinimized = isBusinessNodeMinimized(target);
+              const sourceSize = businessNodeSize(source, sourceMinimized);
+              const targetSize = businessNodeSize(target, targetMinimized);
               const sourceIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
               const targetIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
               const sx =
@@ -1670,11 +1678,11 @@ export default function Home() {
             })}
           </svg>
           {(businessScope.children ?? []).map((node) => {
-            const size = businessNodeSize(node);
+            const minimized = isBusinessNodeMinimized(node);
+            const size = businessNodeSize(node, minimized);
             const resizeMode = nodeResizeMode(node);
             const visibleDirections = resizeDirectionsFor(resizeMode);
             const selected = selectedBusinessNodeId === node.id;
-            const minimized = nodeDisplayMode(node) === "minimized";
             return (
               <Fragment key={node.id}>
                 <article

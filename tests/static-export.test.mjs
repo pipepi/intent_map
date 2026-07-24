@@ -168,6 +168,10 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /const businessNodeMinimumHeight/);
   assert.match(page, /rows \* BUSINESS_PORT_ROW \+/);
   assert.match(page, /const businessNodeSize/);
+  assert.match(page, /const isBusinessNodeMinimized = useCallback/);
+  assert.match(page, /node\.displayMode[\s\S]*selectedBusinessNodeId !== node\.id/);
+  assert.match(page, /businessNodeSize\(node, isBusinessNodeMinimized\(node\)\)/);
+  assert.match(page, /isBusinessNodeMinimized\(item\) \? "expanded" : "minimized"/);
   assert.match(page, /Math\.max\(size\.height, businessNodeMinimumHeight\(node\)\)/);
   assert.match(page, /const minimumHeight = businessNodeMinimumHeight\(node\)/);
   assert.match(page, /style=\{\{ top: BUSINESS_PORT_TOP \}\}/);
