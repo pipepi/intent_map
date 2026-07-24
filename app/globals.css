@@ -860,6 +860,27 @@ code,
   pointer-events: none;
 }
 
+.root-caption .node-display-toggle {
+  pointer-events: auto;
+}
+
+.root-minimized-node {
+  width: 220px;
+  height: 52px;
+  z-index: 8;
+  position: absolute;
+  overflow: hidden;
+  border: 1px solid rgba(119, 88, 231, 0.76);
+  border-radius: 10px;
+  color: #e8edff;
+  background: linear-gradient(145deg, rgba(17, 25, 53, 0.99), rgba(9, 13, 30, 0.99));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .root-caption span,
 .runtime-kind-chip {
   padding: 3px 7px;
@@ -925,7 +946,7 @@ code,
 .runtime-node-titlebar {
   min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 0 10px;
@@ -934,6 +955,53 @@ code,
   background: rgba(12, 17, 37, 0.88);
   cursor: grab;
   user-select: none;
+}
+
+.runtime-node.minimized {
+  display: block;
+}
+
+.runtime-minimized-titlebar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-radius: 9px;
+  background: rgba(12, 17, 37, 0.94);
+  cursor: grab;
+  user-select: none;
+}
+
+.runtime-minimized-titlebar strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-locked .runtime-minimized-titlebar {
+  cursor: default;
+}
+
+.node-display-toggle {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(139, 92, 246, 0.48);
+  border-radius: 5px;
+  color: #c3b5ff;
+  background: rgba(139, 92, 246, 0.12);
+  font: 700 14px/1 Consolas, monospace;
+  cursor: pointer;
+}
+
+.node-display-toggle:hover {
+  border-color: rgba(139, 92, 246, 0.86);
+  background: rgba(139, 92, 246, 0.24);
 }
 
 .layout-locked .runtime-node-titlebar {
@@ -1630,6 +1698,31 @@ code,
 .business-node.selected {
   border-color: #39a7ff;
   box-shadow: 0 0 0 3px rgba(57, 167, 255, 0.14);
+}
+
+.business-node.minimized {
+  display: block;
+  padding: 0;
+}
+
+.business-node.minimized > strong {
+  width: 100%;
+  height: 100%;
+  position: static;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 16px;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.business-display-toggle {
+  z-index: 9;
+  position: absolute;
+  right: 8px;
+  top: 8px;
 }
 
 .business-node > span {

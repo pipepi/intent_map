@@ -17,6 +17,7 @@ import {
   exportCompatibleV1,
   getBusinessRoot,
   loadIntentDocument,
+  nodeDisplayMode,
   serializeIntentDocument,
   type CameraState,
   type Expression,
@@ -28,6 +29,7 @@ import {
 import {
   NodeRenderer,
   resizeDirectionsFor,
+  runtimeNodeRenderSize,
   type ResizeDirection,
 } from "./runtime/node-renderer";
 import {
@@ -259,6 +261,12 @@ const businessNodeMinimumHeight = (node: IntentNode) => {
 };
 const businessNodeSize = (node: IntentNode) => {
   const size = nodeSize(node);
+  if (nodeDisplayMode(node) === "minimized") {
+    return {
+      width: Math.min(size.width, 220),
+      height: 52,
+    };
+  }
   return {
     width: size.width,
     height: Math.max(size.height, businessNodeMinimumHeight(node)),
@@ -592,6 +600,18 @@ export default function Home() {
     [updateDocumentNode],
   );
 
+  const toggleNodeDisplayMode = useCallback(
+    (node: IntentNode) => {
+      updateDocumentNode(node.id, (item) => ({
+        ...item,
+        displayMode:
+          nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
+      }));
+      setSelectedAppNodeId(node.id);
+    },
+    [updateDocumentNode],
+  );
+
   const setScopeCamera = useCallback(
     (next: CameraState, persist = false) => {
       cameraRef.current = next;
@@ -678,8 +698,8 @@ export default function Home() {
     const y = (clientY - rect.top - cameraRef.current.y) / cameraRef.current.scale;
     return visibleNodes.reduce<IntentNode | undefined>((closest, node) => {
       if (!closest) return node;
-      const size = nodeSize(node);
-      const closestSize = nodeSize(closest);
+      const size = runtimeNodeRenderSize(node);
+      const closestSize = runtimeNodeRenderSize(closest);
       const distance = (node.position.x + size.width / 2 - x) ** 2 + (node.position.y + size.height / 2 - y) ** 2;
       const closestDistance = (closest.position.x + closestSize.width / 2 - x) ** 2 + (closest.position.y + closestSize.height / 2 - y) ** 2;
       return distance < closestDistance ? node : closest;
@@ -829,7 +849,7 @@ export default function Home() {
   ) => {
     if (layoutLocked || event.button !== 0) return;
     const start = { ...node.position };
-    const size = nodeSize(node);
+    const size = runtimeNodeRenderSize(node);
     const bounds = scopeNode.canvasSize ?? { width: 2400, height: 1500 };
     const origin = { x: event.clientX, y: event.clientY };
     const target = event.currentTarget;
@@ -922,7 +942,7 @@ export default function Home() {
     const origin = { x: event.clientX, y: event.clientY };
     const contentMinimum = visibleNodes.reduce(
       (minimum, node) => {
-        const size = nodeSize(node);
+        const size = runtimeNodeRenderSize(node);
         return {
           width: Math.max(
             minimum.width,
@@ -1022,7 +1042,7 @@ export default function Home() {
       ...scope,
       children: scope.children?.map((node) => {
         const lane = String(node.implementation?.config?.lane ?? "interface") as keyof typeof laneColumns;
-        const size = nodeSize(node);
+        const size = runtimeNodeRenderSize(node);
         const column = laneHeights[lane].indexOf(Math.min(...laneHeights[lane]));
         const x = laneColumns[lane][column];
         const y = laneHeights[lane][column];
@@ -1107,6 +1127,7 @@ export default function Home() {
       children: clone(snapshot.children),
       moduleRef: { moduleId: module.moduleId, version: module.version },
       position: { x: 380, y: 300 },
+      displayMode: "minimized",
     };
     updateDocumentNode(businessScope.id, (scope) => ({
       ...scope,
@@ -1127,6 +1148,7 @@ export default function Home() {
       position: { x: 320, y: 240 },
       size: { width: 220, height: 150 },
       resizeMode: "simple",
+      displayMode: "minimized",
     };
     updateDocumentNode(businessScope.id, (scope) => ({
       ...scope,
@@ -1147,6 +1169,7 @@ export default function Home() {
       position: { x: 180, y: 150 },
       size: { width: 280, height: 180 },
       resizeMode: "simple",
+      displayMode: "minimized",
     };
     updateDocumentNode(scopeNode.id, (scope) => ({
       ...scope,
@@ -1426,7 +1449,7 @@ export default function Home() {
   const moveBusinessNodeStart = (
     node: IntentNode,
     previewScale: number,
-    event: ReactPointerEvent<HTMLButtonElement>,
+    event: ReactPointerEvent<HTMLElement>,
   ) => {
     event.stopPropagation();
     if (layoutLocked || event.button !== 0) return;
@@ -1552,6 +1575,15 @@ export default function Home() {
     setSelectedBusinessNodeId(node.id);
   };
 
+  const toggleBusinessDisplayMode = (node: IntentNode) => {
+    updateDocumentNode(node.id, (item) => ({
+      ...item,
+      displayMode:
+        nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
+    }));
+    setSelectedBusinessNodeId(node.id);
+  };
+
   const renderBusinessCanvas = () => {
     const size = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const expanded =
@@ -1589,26 +1621,34 @@ export default function Home() {
               const target = findNode(businessScope, edge.targetId);
               if (!source || !target) return null;
               const sourceSize = businessNodeSize(source);
+              const targetSize = businessNodeSize(target);
+              const sourceMinimized =
+                nodeDisplayMode(source) === "minimized";
+              const targetMinimized =
+                nodeDisplayMode(target) === "minimized";
               const sourceIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
               const targetIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
               const sx =
                 source.position.x +
                 sourceSize.width +
-                BUSINESS_PORT_DOT_OFFSET;
-              const sy =
-                source.position.y +
-                BUSINESS_PORT_TOP +
-                BUSINESS_NODE_BORDER_WIDTH +
-                BUSINESS_PORT_HEIGHT / 2 +
-                sourceIndex * BUSINESS_PORT_ROW;
+                (sourceMinimized ? 0 : BUSINESS_PORT_DOT_OFFSET);
+              const sy = sourceMinimized
+                ? source.position.y + sourceSize.height / 2
+                : source.position.y +
+                  BUSINESS_PORT_TOP +
+                  BUSINESS_NODE_BORDER_WIDTH +
+                  BUSINESS_PORT_HEIGHT / 2 +
+                  sourceIndex * BUSINESS_PORT_ROW;
               const tx =
-                target.position.x - BUSINESS_PORT_DOT_OFFSET;
-              const ty =
-                target.position.y +
-                BUSINESS_PORT_TOP +
-                BUSINESS_NODE_BORDER_WIDTH +
-                BUSINESS_PORT_HEIGHT / 2 +
-                targetIndex * BUSINESS_PORT_ROW;
+                target.position.x -
+                (targetMinimized ? 0 : BUSINESS_PORT_DOT_OFFSET);
+              const ty = targetMinimized
+                ? target.position.y + targetSize.height / 2
+                : target.position.y +
+                  BUSINESS_PORT_TOP +
+                  BUSINESS_NODE_BORDER_WIDTH +
+                  BUSINESS_PORT_HEIGHT / 2 +
+                  targetIndex * BUSINESS_PORT_ROW;
               return <path key={edge.id} d={`M ${sx} ${sy} C ${sx + 45} ${sy}, ${tx - 45} ${ty}, ${tx} ${ty}`} />;
             })}
           </svg>
@@ -1617,55 +1657,83 @@ export default function Home() {
             const resizeMode = nodeResizeMode(node);
             const visibleDirections = resizeDirectionsFor(resizeMode);
             const selected = selectedBusinessNodeId === node.id;
+            const minimized = nodeDisplayMode(node) === "minimized";
             return (
               <Fragment key={node.id}>
-                <button
-                  className={`business-node ${selected ? "selected" : ""}`}
+                <article
+                  role="button"
+                  tabIndex={0}
+                  className={`business-node ${minimized ? "minimized" : "expanded"} ${selected ? "selected" : ""}`}
                   style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
                   onClick={() => setSelectedBusinessNodeId(node.id)}
-                  onDoubleClick={() => setBusinessScopeId(node.id)}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    if (minimized) toggleBusinessDisplayMode(node);
+                    else setBusinessScopeId(node.id);
+                  }}
                   onPointerDown={(event) => moveBusinessNodeStart(node, scale, event)}
+                  data-display-mode={minimized ? "minimized" : "expanded"}
+                  title={minimized ? "双击展开节点" : undefined}
                 >
-                  <span>{node.kind.toUpperCase()}</span>
-                  <strong>{node.name}</strong>
-                  <small>{node.description}</small>
-                  <div
-                    className="business-node-ports"
-                    style={{ top: BUSINESS_PORT_TOP }}
-                  >
-                    {node.inputs.map((port, index) => (
-                      <i
-                        className="input"
-                        style={{ top: index * BUSINESS_PORT_ROW }}
-                        key={port.id}
-                      >
-                        {port.name}
-                      </i>
-                    ))}
-                    {node.outputs.map((port, index) => (
-                      <i
-                        className="output"
-                        style={{ top: index * BUSINESS_PORT_ROW }}
-                        key={port.id}
-                      >
-                        {port.name}
-                      </i>
-                    ))}
-                  </div>
-                  {!layoutLocked &&
-                    visibleDirections.map((direction) => (
-                      <span
-                        className={`resize-handle resize-${direction}`}
-                        key={direction}
-                        onClick={(event) => event.stopPropagation()}
+                  {minimized ? (
+                    <strong>{node.name}</strong>
+                  ) : (
+                    <>
+                      <span>{node.kind.toUpperCase()}</span>
+                      <strong>{node.name}</strong>
+                      <small>{node.description}</small>
+                      <button
+                        className="node-display-toggle business-display-toggle"
+                        aria-label={`最小化「${node.name}」`}
+                        title="只显示节点名称"
+                        onPointerDown={(event) => event.stopPropagation()}
                         onDoubleClick={(event) => event.stopPropagation()}
-                        onPointerDown={(event) =>
-                          resizeBusinessNodeStart(node, direction, scale, event)
-                        }
-                      />
-                    ))}
-                </button>
-                {!layoutLocked && (
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleBusinessDisplayMode(node);
+                        }}
+                      >
+                        −
+                      </button>
+                      <div
+                        className="business-node-ports"
+                        style={{ top: BUSINESS_PORT_TOP }}
+                      >
+                        {node.inputs.map((port, index) => (
+                          <i
+                            className="input"
+                            style={{ top: index * BUSINESS_PORT_ROW }}
+                            key={port.id}
+                          >
+                            {port.name}
+                          </i>
+                        ))}
+                        {node.outputs.map((port, index) => (
+                          <i
+                            className="output"
+                            style={{ top: index * BUSINESS_PORT_ROW }}
+                            key={port.id}
+                          >
+                            {port.name}
+                          </i>
+                        ))}
+                      </div>
+                      {!layoutLocked &&
+                        visibleDirections.map((direction) => (
+                          <span
+                            className={`resize-handle resize-${direction}`}
+                            key={direction}
+                            onClick={(event) => event.stopPropagation()}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                            onPointerDown={(event) =>
+                              resizeBusinessNodeStart(node, direction, scale, event)
+                            }
+                          />
+                        ))}
+                    </>
+                  )}
+                </article>
+                {!layoutLocked && !minimized && (
                   <button
                     className={`resize-mode-toggle business-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
                     style={{
@@ -1971,13 +2039,21 @@ export default function Home() {
     const source = findNode(scopeNode, edge.sourceId);
     const target = findNode(scopeNode, edge.targetId);
     if (!source || !target) return null;
-    const sourceSize = nodeSize(source);
+    const sourceSize = runtimeNodeRenderSize(source);
+    const targetSize = runtimeNodeRenderSize(target);
+    const sourceMinimized = nodeDisplayMode(source) === "minimized";
+    const targetMinimized = nodeDisplayMode(target) === "minimized";
     const sourcePortIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
     const targetPortIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
-    const sx = source.position.x + sourceSize.width + 6;
-    const sy = source.position.y + PORT_TOP + sourcePortIndex * PORT_ROW;
-    const tx = target.position.x - 6;
-    const ty = target.position.y + PORT_TOP + targetPortIndex * PORT_ROW;
+    const sx =
+      source.position.x + sourceSize.width + (sourceMinimized ? 0 : 6);
+    const sy = sourceMinimized
+      ? source.position.y + sourceSize.height / 2
+      : source.position.y + PORT_TOP + sourcePortIndex * PORT_ROW;
+    const tx = target.position.x - (targetMinimized ? 0 : 6);
+    const ty = targetMinimized
+      ? target.position.y + targetSize.height / 2
+      : target.position.y + PORT_TOP + targetPortIndex * PORT_ROW;
     const bend = Math.max(70, Math.abs(tx - sx) * 0.42);
     const selected = selectedEdgeId === edge.id;
     return (
@@ -1999,6 +2075,7 @@ export default function Home() {
 
   const worldSize = scopeNode.canvasSize ?? { width: 1200, height: 800 };
   const focusedLeaf = scopePath.length > 1 && !scopeNode.children?.length;
+  const scopeMinimized = nodeDisplayMode(scopeNode) === "minimized";
 
   return (
     <main className="everything-app">
@@ -2010,10 +2087,48 @@ export default function Home() {
         onPointerDown={onViewportPointerDown}
       >
         <div className="root-grid" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`, width: worldSize.width, height: worldSize.height }}>
-          <div className="root-boundary" style={{ width: worldSize.width, height: worldSize.height }}>
-            <div className="root-caption"><span>{scopeNode.kind.toUpperCase()}</span><strong>{scopeNode.name}</strong><small>{scopeNode.description}</small></div>
-            {scopePath.length === 1 && <svg className="runtime-edges" viewBox={`0 0 ${worldSize.width} ${worldSize.height}`}>{appEdges.map(renderEdge)}</svg>}
-            {visibleNodes.map((node) => (
+          <div
+            className={`root-boundary ${scopeMinimized ? "minimized" : "expanded"}`}
+            style={{ width: worldSize.width, height: worldSize.height }}
+            data-display-mode={scopeMinimized ? "minimized" : "expanded"}
+          >
+            {scopeMinimized ? (
+              <button
+                className="root-minimized-node"
+                style={{
+                  left: worldSize.width / 2 - 110,
+                  top: worldSize.height / 2 - 26,
+                }}
+                title="双击展开节点"
+                onPointerDown={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  toggleNodeDisplayMode(scopeNode);
+                }}
+              >
+                {scopeNode.name}
+              </button>
+            ) : (
+              <div className="root-caption">
+                <span>{scopeNode.kind.toUpperCase()}</span>
+                <strong>{scopeNode.name}</strong>
+                <small>{scopeNode.description}</small>
+                <button
+                  className="node-display-toggle root-display-toggle"
+                  aria-label={`最小化「${scopeNode.name}」`}
+                  title="只显示节点名称"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleNodeDisplayMode(scopeNode);
+                  }}
+                >
+                  −
+                </button>
+              </div>
+            )}
+            {!scopeMinimized && scopePath.length === 1 && <svg className="runtime-edges" viewBox={`0 0 ${worldSize.width} ${worldSize.height}`}>{appEdges.map(renderEdge)}</svg>}
+            {!scopeMinimized && visibleNodes.map((node) => (
               <NodeRenderer
                 key={node.id}
                 node={node}
@@ -2027,9 +2142,10 @@ export default function Home() {
                 onMoveStart={moveNodeStart}
                 onResizeStart={resizeNodeStart}
                 onResizeModeToggle={toggleNodeResizeMode}
+                onDisplayModeToggle={toggleNodeDisplayMode}
               />
             ))}
-            {scopePath.length > 1 && (
+            {!scopeMinimized && scopePath.length > 1 && (
               <section
                 className="focused-runtime-content"
                 style={{
@@ -2040,10 +2156,10 @@ export default function Home() {
                 {renderNodeContent(scopeNode)}
               </section>
             )}
-            {(focusedLeaf || !visibleNodes.length) && (
+            {!scopeMinimized && (focusedLeaf || !visibleNodes.length) && (
               <button className="runtime-add-child" onClick={addRuntimeChild}>＋ 添加子节点</button>
             )}
-            {!layoutLocked && (
+            {!scopeMinimized && !layoutLocked && (
               <>
                 <span
                   className={`container-resize-layer ${selectedAppNodeId === scopeNode.id ? "selected" : ""}`}
@@ -2087,12 +2203,12 @@ export default function Home() {
             )}
           </div>
         </div>
-        <div className="root-legend">
+        {!scopeMinimized && <div className="root-legend">
           <span><i className="data" />数据</span>
           <span><i className="event" />事件</span>
           <span>{appEdges.length} 组聚合管道</span>
           <span>双指平移 · Ctrl + 滚轮进入 / 返回</span>
-        </div>
+        </div>}
         {toast && <button className="runtime-toast" onClick={() => setToast("")}>{toast}<span>×</span></button>}
       </div>
     </main>

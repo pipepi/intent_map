@@ -50,6 +50,8 @@ export type CameraState = {
   y: number;
 };
 
+export type NodeDisplayMode = "expanded" | "minimized";
+
 export type IntentNode = {
   id: string;
   name: string;
@@ -64,6 +66,7 @@ export type IntentNode = {
   canvasSize?: { width: number; height: number };
   canvasContentOffset?: { x: number; y: number };
   resizeMode?: "simple" | "full";
+  displayMode?: NodeDisplayMode;
   moduleRef?: { moduleId: string; version: number };
   implementation?: NodeImplementation;
 };
@@ -375,6 +378,19 @@ const findNode = (node: IntentNode, id: string): IntentNode | undefined => {
   return undefined;
 };
 
+export const defaultNodeDisplayMode = (
+  node: Pick<IntentNode, "id" | "implementation">,
+): NodeDisplayMode =>
+  node.id === "application_root" ||
+  node.id === "current_container" ||
+  node.implementation?.key === "current-container"
+    ? "expanded"
+    : "minimized";
+
+export const nodeDisplayMode = (
+  node: Pick<IntentNode, "id" | "implementation" | "displayMode">,
+): NodeDisplayMode => node.displayMode ?? defaultNodeDisplayMode(node);
+
 export const createApplicationDocument = (
   businessRoot: IntentNode,
   publishedModules: PublishedModule[] = [],
@@ -392,17 +408,21 @@ export const createApplicationDocument = (
     position: definition.position,
     size: definition.size,
     resizeMode: "simple" as const,
-      implementation: {
-        key: definition.key,
-        core: true,
-        visual: true,
-        config: {
-          lane: definition.lane,
-          ...(definition.id === "scope_toolbar"
-            ? { lod: "always-live" }
-            : {}),
-        },
+    displayMode:
+      definition.id === "current_container"
+        ? ("expanded" as const)
+        : ("minimized" as const),
+    implementation: {
+      key: definition.key,
+      core: true,
+      visual: true,
+      config: {
+        lane: definition.lane,
+        ...(definition.id === "scope_toolbar"
+          ? { lod: "always-live" }
+          : {}),
       },
+    },
   }));
 
   return {
@@ -424,6 +444,7 @@ export const createApplicationDocument = (
       position: { x: 0, y: 0 },
       canvasSize: { width: 2400, height: 1500 },
       resizeMode: "simple",
+      displayMode: "expanded",
       implementation: {
         key: "application-root",
         core: true,

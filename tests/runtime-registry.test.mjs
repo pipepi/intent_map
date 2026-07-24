@@ -38,6 +38,7 @@ test("provides one recursive shell for all node implementations", async () => {
 
   assert.match(source, /export function NodeRenderer/);
   assert.match(source, /runtime-node-titlebar/);
+  assert.match(source, /runtime-minimized-titlebar/);
   assert.match(source, /scale < 0\.75/);
   assert.match(source, /lod === "always-live"/);
   assert.match(source, /layoutLocked/);
@@ -47,4 +48,7 @@ test("provides one recursive shell for all node implementations", async () => {
   assert.match(source, /visibleDirections\.map/);
   assert.match(source, /resize-mode-toggle runtime-mode-toggle/);
   assert.match(source, /resizeMode === "simple" \? "┘" : "⤢"/);
+  assert.match(source, /nodeDisplayMode\(node\) === "minimized"/);
+  assert.match(source, /onDisplayModeToggle/);
+  assert.match(source, /data-display-mode/);
 });

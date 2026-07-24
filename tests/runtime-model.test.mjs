@@ -7,6 +7,7 @@ import {
   exportCompatibleV1,
   getBusinessRoot,
   loadIntentDocument,
+  nodeDisplayMode,
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
 
@@ -52,10 +53,24 @@ test("migrates v1 without changing the business tree", () => {
   );
   assert.equal(APPLICATION_NODE_IDS.length, 15);
   assert.equal(v2.rootIntent.resizeMode, "simple");
+  assert.equal(v2.rootIntent.displayMode, "expanded");
   assert.equal(
     v2.rootIntent.children.every((node) => node.resizeMode === "simple"),
     true,
   );
+  assert.equal(
+    v2.rootIntent.children.find((node) => node.id === "current_container")
+      .displayMode,
+    "expanded",
+  );
+  assert.equal(
+    v2.rootIntent.children
+      .filter((node) => node.id !== "current_container")
+      .every((node) => node.displayMode === "minimized"),
+    true,
+  );
+  assert.equal(nodeDisplayMode(getBusinessRoot(v2)), "minimized");
+  assert.equal(nodeDisplayMode(getBusinessRoot(v2).children[0]), "minimized");
 });
 
 test("exports a v1 document that the stable runtime can reopen", () => {

@@ -76,6 +76,9 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(shell, /scale < 0\.75/);
   assert.match(shell, /lod === "always-live"/);
   assert.match(shell, /runtime-node-titlebar/);
+  assert.match(shell, /runtime-minimized-titlebar/);
+  assert.match(shell, /MINIMIZED_NODE_SIZE = \{ width: 220, height: 52 \}/);
+  assert.match(shell, /onDisplayModeToggle/);
   assert.match(shell, /simpleResizeDirections = \["e", "s", "se"\]/);
   assert.match(shell, /resize-handle resize-\$\{direction\}/);
   assert.match(shell, /resize-mode-toggle runtime-mode-toggle/);
@@ -84,6 +87,11 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /container-mode-toggle/);
   assert.match(page, /toggleBusinessResizeMode/);
   assert.match(page, /toggleNodeResizeMode/);
+  assert.match(page, /toggleNodeDisplayMode/);
+  assert.match(page, /toggleBusinessDisplayMode/);
+  assert.match(page, /scopeMinimized/);
+  assert.match(page, /className="root-minimized-node"/);
+  assert.match(page, /data-display-mode/);
   assert.match(page, /resizeScopeCanvasStart/);
   assert.match(page, /ROOT_CANVAS_MIN_SIZE/);
   assert.match(page, /ROOT_CANVAS_MAX_SIZE/);
@@ -98,6 +106,10 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.doesNotMatch(css, /\.business-resize/);
   assert.match(css, /\.root-node-viewport\s*\{[^}]*width:\s*100%[^}]*height:\s*100%/s);
   assert.match(css, /\.runtime-node-titlebar\s*\{[^}]*cursor:\s*grab/s);
+  assert.match(css, /\.runtime-node\.minimized/);
+  assert.match(css, /\.business-node\.minimized/);
+  assert.match(css, /\.root-minimized-node/);
+  assert.match(css, /\.node-display-toggle/);
 });
 
 test("derives and aggregates root pipes without persisting edges", async () => {
@@ -153,7 +165,10 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /style=\{\{ top: BUSINESS_PORT_TOP \}\}/);
   assert.match(page, /BUSINESS_PORT_TOP \+\s*BUSINESS_NODE_BORDER_WIDTH \+/);
   assert.match(page, /BUSINESS_PORT_HEIGHT \/ 2/);
-  assert.match(page, /sourceSize\.width \+\s*BUSINESS_PORT_DOT_OFFSET/);
+  assert.match(
+    page,
+    /sourceSize\.width \+\s*\(sourceMinimized \? 0 : BUSINESS_PORT_DOT_OFFSET\)/,
+  );
   assert.match(css, /\.business-node-ports i::before/);
   assert.match(css, /\.business-node-ports i\.input\s*\{\s*left:\s*8px/);
   assert.match(css, /\.business-node-ports i\.input::before\s*\{\s*left:\s*-21px/);
