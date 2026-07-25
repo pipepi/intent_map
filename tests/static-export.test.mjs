@@ -86,6 +86,14 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(shell, /resize-mode-toggle runtime-mode-toggle/);
   assert.match(page, /resizeDirectionsFor\(nodeResizeMode\(scopeNode\)\)/);
   assert.match(page, /business-mode-toggle/);
+  assert.doesNotMatch(
+    page,
+    /className=\{`resize-mode-toggle business-mode-toggle[\s\S]*?left:\s*node\.position\.x/,
+  );
+  assert.match(
+    page,
+    /className=\{`resize-mode-toggle business-mode-toggle[\s\S]*?onDoubleClick=\{\(event\) => event\.stopPropagation\(\)\}[\s\S]*?event\.stopPropagation\(\);[\s\S]*?toggleBusinessResizeMode\(node\)/,
+  );
   assert.match(page, /container-mode-toggle/);
   assert.match(page, /toggleBusinessResizeMode/);
   assert.match(page, /toggleNodeResizeMode/);
@@ -258,6 +266,10 @@ test("keeps scope changes visible and separates the reference from business cont
   assert.match(css, /\.business-container-interfaces\s*\{[\s\S]*z-index:\s*3;/);
   assert.match(css, /\.business-node:focus-visible:not\(\.selected\)/);
   assert.match(css, /\.runtime-mode-toggle\s*\{[\s\S]*bottom:\s*8px;/);
+  assert.match(
+    css,
+    /\.business-mode-toggle\s*\{[\s\S]*right:\s*8px;[\s\S]*top:\s*auto;[\s\S]*bottom:\s*8px;/,
+  );
   assert.match(css, /\.everything-app\s*\{[\s\S]*height:\s*100dvh;[\s\S]*min-height:\s*0;/);
   assert.match(css, /\.business-scope-reference-card\s*\{[\s\S]*overflow:\s*hidden;/);
 });

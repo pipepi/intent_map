@@ -2950,6 +2950,9 @@ code,
 
 .business-mode-toggle {
   z-index: 8;
+  right: 8px;
+  top: auto;
+  bottom: 8px;
 }
 
 .resize-mode-toggle {

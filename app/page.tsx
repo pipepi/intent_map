@@ -2032,32 +2032,32 @@ export default function Home() {
                             }}
                           />
                         ))}
+                      {!layoutLocked && (
+                        <button
+                          className={`resize-mode-toggle business-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
+                          aria-label={
+                            resizeMode === "simple"
+                              ? `将「${node.name}」切换为四边四角缩放`
+                              : `将「${node.name}」切换为右边、下边和右下角缩放`
+                          }
+                          title={
+                            resizeMode === "simple"
+                              ? "当前：右边、下边、右下角 · 点击切换为八向"
+                              : "当前：四边四角 · 点击切换为三向"
+                          }
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onDoubleClick={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleBusinessResizeMode(node);
+                          }}
+                        >
+                          {resizeMode === "simple" ? "┘" : "⤢"}
+                        </button>
+                      )}
                     </>
                   )}
                 </article>
-                {!layoutLocked && !minimized && !lodSummary && (
-                  <button
-                    className={`resize-mode-toggle business-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
-                    style={{
-                      left: node.position.x + size.width - 40,
-                      top: node.position.y + size.height - 30,
-                    }}
-                    aria-label={
-                      resizeMode === "simple"
-                        ? `将「${node.name}」切换为四边四角缩放`
-                        : `将「${node.name}」切换为右边、下边和右下角缩放`
-                    }
-                    title={
-                      resizeMode === "simple"
-                        ? "当前：右边、下边、右下角 · 点击切换为八向"
-                        : "当前：四边四角 · 点击切换为三向"
-                    }
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={() => toggleBusinessResizeMode(node)}
-                  >
-                    {resizeMode === "simple" ? "┘" : "⤢"}
-                  </button>
-                )}
               </Fragment>
             );
           })}
