@@ -101,6 +101,7 @@ const NODE_MAX_SIZE = { width: 1200, height: 900 };
 const ROOT_CANVAS_MIN_SIZE = { width: 640, height: 420 };
 const ROOT_CANVAS_MAX_SIZE = { width: 8000, height: 6000 };
 const ROOT_CANVAS_PADDING = 40;
+const FIT_VIEW_PADDING = 56;
 const PORT_ROW = 26;
 const PORT_TOP = 65;
 
@@ -497,6 +498,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [dirty, setDirty] = useState(false);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [scopeLegendOpen, setScopeLegendOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [trace, setTrace] = useState<Trace[]>([]);
@@ -521,6 +523,7 @@ export default function Home() {
   const cancelRunRef = useRef(false);
   const cameraRef = useRef(camera);
   const lastEnterAtRef = useRef(0);
+  const fitOnNextScopeRef = useRef(false);
   const touchPointersRef = useRef(
     new Map<number, { x: number; y: number }>(),
   );
@@ -606,6 +609,10 @@ export default function Home() {
   const scopeBoundaryEdges = useMemo(
     () => deriveScopeBoundaryEdges(scopeNode),
     [scopeNode],
+  );
+  const businessVisualEdges = useMemo(
+    () => deriveBusinessVisualEdges(businessScope),
+    [businessScope],
   );
   const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
@@ -714,9 +721,23 @@ export default function Home() {
     const viewport = viewportRef.current;
     if (!viewport) return undefined;
     const world = scopeWorldSize;
+    const availableWidth = Math.max(
+      1,
+      viewport.clientWidth - FIT_VIEW_PADDING * 2,
+    );
+    const availableHeight = Math.max(
+      1,
+      viewport.clientHeight - FIT_VIEW_PADDING * 2,
+    );
     const scale = Math.max(
       MIN_SCALE,
-      Math.min(MAX_SCALE, Math.min((viewport.clientWidth - 36) / world.width, (viewport.clientHeight - 36) / world.height)),
+      Math.min(
+        MAX_SCALE,
+        Math.min(
+          availableWidth / world.width,
+          availableHeight / world.height,
+        ),
+      ),
     );
     return {
       scale,
@@ -756,10 +777,20 @@ export default function Home() {
       const viewport = viewportRef.current;
       if (!viewport) return undefined;
       const safeScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+      const scaledWidth = scopeWorldSize.width * safeScale;
+      const scaledHeight = scopeWorldSize.height * safeScale;
+      const centeredX = (viewport.clientWidth - scaledWidth) / 2;
+      const centeredY = (viewport.clientHeight - scaledHeight) / 2;
       return {
         scale: safeScale,
-        x: (viewport.clientWidth - scopeWorldSize.width * safeScale) / 2,
-        y: (viewport.clientHeight - scopeWorldSize.height * safeScale) / 2,
+        x:
+          scaledWidth > viewport.clientWidth - FIT_VIEW_PADDING * 2
+            ? FIT_VIEW_PADDING
+            : centeredX,
+        y:
+          scaledHeight > viewport.clientHeight - FIT_VIEW_PADDING * 2
+            ? FIT_VIEW_PADDING
+            : centeredY,
       };
     },
     [scopeWorldSize],
@@ -768,7 +799,10 @@ export default function Home() {
   useEffect(() => {
     const saved = documentState.viewState.cameras[activeCameraKey];
     const frame = window.requestAnimationFrame(() => {
-      if (saved && cameraKeepsScopeVisible(saved)) {
+      if (fitOnNextScopeRef.current) {
+        fitOnNextScopeRef.current = false;
+        fitScope();
+      } else if (saved && cameraKeepsScopeVisible(saved)) {
         setScopeCamera({
           scale: Math.max(MIN_SCALE, Math.min(MAX_SCALE, saved.scale)),
           x: saved.x,
@@ -811,6 +845,8 @@ export default function Home() {
 
   const navigateToScopeFrame = useCallback(
     (index: number) => {
+      fitOnNextScopeRef.current = true;
+      setScopeLegendOpen(false);
       setNavigationStack((path) => {
         if (index < 0 || index >= path.length - 1) return path;
         const next = path.slice(0, index + 1);
@@ -864,6 +900,8 @@ export default function Home() {
     const now = performance.now();
     if (now - lastEnterAtRef.current < 280) return;
     lastEnterAtRef.current = now;
+    fitOnNextScopeRef.current = true;
+    setScopeLegendOpen(false);
     if (node.id === ACTIVE_BUSINESS_SCOPE_REF_ID) {
       const address: ScopeAddress = {
         domain: "business",
@@ -1552,7 +1590,10 @@ export default function Home() {
           navigateToParent();
         if (command.type === "FIT_SCOPE") fitScope();
         if (command.type === "RESET_CAMERA")
-          setScopeCamera({ scale: 1, x: 0, y: 0 }, true);
+          {
+            const centered = centerScopeAtScale(1);
+            if (centered) setScopeCamera(centered, true);
+          }
       });
     }, 0);
     return () => window.clearTimeout(timer);
@@ -1566,6 +1607,8 @@ export default function Home() {
 
   const navigateToBusinessNode = (node: IntentNode) => {
     const path = findPath(businessRoot, node.id) ?? [businessRoot];
+    fitOnNextScopeRef.current = true;
+    setScopeLegendOpen(false);
     setNavigationStack([
       { domain: "app", nodeId: appRoot.id },
       { domain: "app", nodeId: "current_container" },
@@ -1808,7 +1851,6 @@ export default function Home() {
 
   const renderBusinessScopeLayer = () => {
     const size = scopeWorldSize;
-    const businessVisualEdges = deriveBusinessVisualEdges(businessScope);
     return (
       <>
           <section
@@ -1958,7 +2000,7 @@ export default function Home() {
                             style={{ top: index * BUSINESS_PORT_ROW }}
                             key={port.id}
                           >
-                            {port.name}
+                            <span>{port.name}</span>
                           </i>
                         ))}
                         {node.outputs.map((port, index) => (
@@ -1967,7 +2009,7 @@ export default function Home() {
                             style={{ top: index * BUSINESS_PORT_ROW }}
                             key={port.id}
                           >
-                            {port.name}
+                            <span>{port.name}</span>
                           </i>
                         ))}
                       </div>
@@ -1997,8 +2039,8 @@ export default function Home() {
                   <button
                     className={`resize-mode-toggle business-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
                     style={{
-                      left: node.position.x + size.width - 30,
-                      top: node.position.y + size.height + 5,
+                      left: node.position.x + size.width - 40,
+                      top: node.position.y + size.height - 30,
                     }}
                     aria-label={
                       resizeMode === "simple"
@@ -2469,6 +2511,9 @@ export default function Home() {
     !isBusinessScope &&
     scopeNode.implementation?.key !== "current-container" &&
     focusedLeaf;
+  const derivedPipeCount = isBusinessScope
+    ? businessVisualEdges.length
+    : appEdges.length + scopeBoundaryEdges.length;
 
   return (
     <main className="everything-app">
@@ -2492,20 +2537,48 @@ export default function Home() {
                 aria-label="当前作用域导航"
               >
                 <button onClick={navigateToParent}>← 返回上级</button>
-                <div>
+                <div className="scope-path">
                   {scopePath.map((name, index) => (
                     <Fragment key={`${navigationStack[index].domain}:${navigationStack[index].nodeId}`}>
                       <button
+                        className={
+                          index === scopePath.length - 1
+                            ? "scope-path-current"
+                            : undefined
+                        }
                         disabled={index === scopePath.length - 1}
+                        aria-current={
+                          index === scopePath.length - 1
+                            ? "page"
+                            : undefined
+                        }
+                        title={name}
                         onClick={() => navigateToScopeFrame(index)}
                       >
-                        {name}
+                        {index === scopePath.length - 1 &&
+                        navigationStack[index].domain === "business"
+                          ? "当前业务容器"
+                          : name}
                       </button>
                       {index < scopePath.length - 1 && <i>›</i>}
                     </Fragment>
                   ))}
                 </div>
+                <button
+                  className="scope-pipeline-trigger"
+                  aria-expanded={scopeLegendOpen}
+                  onClick={() => setScopeLegendOpen((open) => !open)}
+                >
+                  {derivedPipeCount} 管道
+                </button>
                 <span>{Math.round(camera.scale * 100)}%</span>
+                {scopeLegendOpen && (
+                  <div className="scope-legend-popover">
+                    <span><i className="data" />数据管道</span>
+                    <span><i className="event" />事件管道</span>
+                    <small>Ctrl + 滚轮进入或返回</small>
+                  </div>
+                )}
               </nav>
             )}
             {scopeMinimized ? (
@@ -2648,8 +2721,8 @@ export default function Home() {
                 <button
                   className={`resize-mode-toggle container-mode-toggle ${nodeResizeMode(scopeNode)} ${selectedAppNodeId === scopeNode.id ? "selected" : ""}`}
                   style={{
-                    left: worldSize.width - 30,
-                    top: worldSize.height + 5,
+                    left: worldSize.width - 40,
+                    top: worldSize.height - 30,
                   }}
                   aria-label={
                     nodeResizeMode(scopeNode) === "simple"
@@ -2670,17 +2743,6 @@ export default function Home() {
             )}
           </div>
         </div>
-        {!scopeMinimized && <div className="root-legend">
-          <span><i className="data" />数据</span>
-          <span><i className="event" />事件</span>
-          <span>
-            {isBusinessScope
-              ? deriveBusinessVisualEdges(businessScope).length
-              : appEdges.length + scopeBoundaryEdges.length}{" "}
-            组派生管道
-          </span>
-          <span>双指平移 · Ctrl + 滚轮进入 / 返回</span>
-        </div>}
         {toast && (
           <button
             type="button"
