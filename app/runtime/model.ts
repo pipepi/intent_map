@@ -98,6 +98,20 @@ export type IntentDocumentV2 = {
 
 export type IntentDocument = IntentDocumentV1 | IntentDocumentV2;
 
+export const ACTIVE_BUSINESS_SCOPE_REF_ID = "active_business_scope_ref";
+
+export type ScopeAddress =
+  | { domain: "app"; nodeId: string }
+  | {
+      domain: "business";
+      nodeId: string;
+      viaReferenceId: typeof ACTIVE_BUSINESS_SCOPE_REF_ID;
+    };
+
+export const scopeCameraKey = (
+  address: Pick<ScopeAddress, "domain" | "nodeId">,
+) => `${address.domain}:${address.nodeId}`;
+
 const ref = (nodeId: string, portId: string): Expression => ({
   kind: "ref",
   nodeId,
@@ -111,6 +125,79 @@ const port = (
   channel: PortChannel = "data",
   binding?: Expression,
 ): IntentPort => ({ id, name, type, channel, binding });
+
+const businessScopeReferenceNode = (): IntentNode => ({
+  id: ACTIVE_BUSINESS_SCOPE_REF_ID,
+  name: "当前业务容器",
+  description: "引用应用状态中的当前业务作用域；进入后解引用为真实业务意图。",
+  kind: "renderer",
+  inputs: [
+    port(
+      "document",
+      "业务文档",
+      "object",
+      "data",
+      { kind: "ref", portId: "document", env: true },
+    ),
+    port(
+      "scope",
+      "作用域引用",
+      "string",
+      "data",
+      { kind: "ref", portId: "scope", env: true },
+    ),
+    port(
+      "selection",
+      "当前选择",
+      "string",
+      "data",
+      { kind: "ref", portId: "selection", env: true },
+    ),
+  ],
+  outputs: [
+    port("selection", "选择变更", "object", "event"),
+    port("navigate", "层级导航", "object", "event"),
+    port("edit", "文档编辑", "object", "event"),
+  ],
+  position: { x: 250, y: 150 },
+  size: { width: 520, height: 300 },
+  resizeMode: "simple",
+  displayMode: "expanded",
+  implementation: {
+    key: "business-scope-reference",
+    core: true,
+    visual: true,
+    config: {
+      target: "active-business-scope",
+      lod: "always-live",
+    },
+  },
+});
+
+const wireCurrentContainerReference = (node: IntentNode): IntentNode => {
+  const reference =
+    node.children?.find(
+      (child) => child.id === ACTIVE_BUSINESS_SCOPE_REF_ID,
+    ) ?? businessScopeReferenceNode();
+  return {
+    ...node,
+    children: [
+      reference,
+      ...(node.children ?? []).filter(
+        (child) => child.id !== ACTIVE_BUSINESS_SCOPE_REF_ID,
+      ),
+    ],
+    outputs: node.outputs.map((output) => ({
+      ...output,
+      mapping: {
+        kind: "ref",
+        nodeId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+        portId: output.id,
+      },
+    })),
+    canvasSize: node.canvasSize ?? { width: 1020, height: 680 },
+  };
+};
 
 type AppNodeDefinition = {
   id: string;
@@ -396,34 +483,37 @@ export const createApplicationDocument = (
   publishedModules: PublishedModule[] = [],
 ): IntentDocumentV2 => {
   const safeBusinessRoot = cloneWithoutEdges(businessRoot);
-  const children = appNodeDefinitions().map((definition) => ({
-    id: definition.id,
-    name: definition.name,
-    description: definition.description,
-    kind: definition.kind,
-    inputs: definition.inputs,
-    outputs: definition.outputs,
-    children:
-      definition.id === "document_loader" ? [safeBusinessRoot] : undefined,
-    position: definition.position,
-    size: definition.size,
-    resizeMode: "simple" as const,
-    displayMode:
-      definition.id === "current_container"
-        ? ("expanded" as const)
-        : ("minimized" as const),
-    implementation: {
-      key: definition.key,
-      core: true,
-      visual: true,
-      config: {
-        lane: definition.lane,
-        ...(definition.id === "scope_toolbar"
-          ? { lod: "always-live" }
-          : {}),
+  const children = appNodeDefinitions().map((definition) => {
+    const node: IntentNode = {
+      id: definition.id,
+      name: definition.name,
+      description: definition.description,
+      kind: definition.kind,
+      inputs: definition.inputs,
+      outputs: definition.outputs,
+      children:
+        definition.id === "document_loader" ? [safeBusinessRoot] : undefined,
+      position: definition.position,
+      size: definition.size,
+      resizeMode: "simple",
+      displayMode:
+        definition.id === "current_container" ? "expanded" : "minimized",
+      implementation: {
+        key: definition.key,
+        core: true,
+        visual: true,
+        config: {
+          lane: definition.lane,
+          ...(definition.id === "scope_toolbar"
+            ? { lod: "always-live" }
+            : {}),
+        },
       },
-    },
-  }));
+    };
+    return definition.id === "current_container"
+      ? wireCurrentContainerReference(node)
+      : node;
+  });
 
   return {
     version: 2,
@@ -456,7 +546,7 @@ export const createApplicationDocument = (
     viewState: {
       layoutLocked: false,
       cameras: {
-        application_root: { scale: 1, x: 0, y: 0 },
+        "app:application_root": { scale: 1, x: 0, y: 0 },
       },
     },
   };
@@ -513,6 +603,30 @@ export const loadIntentDocument = (input: unknown): IntentDocumentV2 => {
       lod: "always-live",
     };
   }
+  const currentContainer = findNode(cloned.rootIntent, "current_container");
+  if (currentContainer?.implementation?.key === "current-container") {
+    const wired = wireCurrentContainerReference(currentContainer);
+    Object.assign(currentContainer, wired);
+  }
+  const businessRoot = findNode(cloned.rootIntent, cloned.businessRootId);
+  const businessIds = new Set<string>();
+  const collectBusinessIds = (node?: IntentNode) => {
+    if (!node) return;
+    businessIds.add(node.id);
+    node.children?.forEach(collectBusinessIds);
+  };
+  collectBusinessIds(businessRoot);
+  cloned.viewState.cameras = Object.fromEntries(
+    Object.entries(cloned.viewState.cameras).map(([key, value]) => {
+      if (key.startsWith("app:") || key.startsWith("business:")) {
+        return [key, value];
+      }
+      return [
+        `${businessIds.has(key) ? "business" : "app"}:${key}`,
+        value,
+      ];
+    }),
+  );
   return cloned;
 };
 

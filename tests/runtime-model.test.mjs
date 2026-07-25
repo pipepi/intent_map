@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ACTIVE_BUSINESS_SCOPE_REF_ID,
   APPLICATION_NODE_IDS,
   createApplicationDocument,
   exportCompatibleV1,
   getBusinessRoot,
   loadIntentDocument,
   nodeDisplayMode,
+  scopeCameraKey,
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
 
@@ -63,6 +65,30 @@ test("migrates v1 without changing the business tree", () => {
       .displayMode,
     "expanded",
   );
+  const currentContainer = v2.rootIntent.children.find(
+    (node) => node.id === "current_container",
+  );
+  assert.equal(currentContainer.children.length, 1);
+  assert.equal(currentContainer.children[0].id, ACTIVE_BUSINESS_SCOPE_REF_ID);
+  assert.equal(
+    currentContainer.children[0].implementation.key,
+    "business-scope-reference",
+  );
+  assert.equal(
+    currentContainer.outputs.every(
+      (output) =>
+        output.mapping?.kind === "ref" &&
+        output.mapping.nodeId === ACTIVE_BUSINESS_SCOPE_REF_ID,
+    ),
+    true,
+  );
+  assert.equal(
+    v2.viewState.cameras[scopeCameraKey({
+      domain: "app",
+      nodeId: "application_root",
+    })].scale,
+    1,
+  );
   assert.equal(
     v2.rootIntent.children
       .filter((node) => node.id !== "current_container")
@@ -103,12 +129,59 @@ test("keeps the scope toolbar live and backfills older v2 documents", () => {
 
   assert.equal(toolbar.implementation.config.lod, "always-live");
   delete toolbar.implementation.config.lod;
+  const currentContainer = v2.rootIntent.children.find(
+    (node) => node.id === "current_container",
+  );
+  currentContainer.children = undefined;
+  currentContainer.outputs = currentContainer.outputs.map((output) => ({
+    ...output,
+    mapping: undefined,
+  }));
+  v2.viewState.cameras = {
+    application_root: { scale: 0.75, x: 20, y: 30 },
+    business_root: { scale: 1.25, x: 40, y: 50 },
+  };
 
   const loaded = loadIntentDocument(v2);
   const loadedToolbar = loaded.rootIntent.children.find(
     (node) => node.id === "scope_toolbar",
   );
   assert.equal(loadedToolbar.implementation.config.lod, "always-live");
+  const loadedContainer = loaded.rootIntent.children.find(
+    (node) => node.id === "current_container",
+  );
+  assert.equal(loadedContainer.children.length, 1);
+  assert.equal(
+    loadedContainer.children[0].id,
+    ACTIVE_BUSINESS_SCOPE_REF_ID,
+  );
+  assert.equal(
+    loadedContainer.outputs.every(
+      (output) =>
+        output.mapping?.kind === "ref" &&
+        output.mapping.nodeId === ACTIVE_BUSINESS_SCOPE_REF_ID,
+    ),
+    true,
+  );
+  assert.deepEqual(loaded.viewState.cameras["app:application_root"], {
+    scale: 0.75,
+    x: 20,
+    y: 30,
+  });
+  assert.deepEqual(loaded.viewState.cameras["business:business_root"], {
+    scale: 1.25,
+    x: 40,
+    y: 50,
+  });
+
+  const loadedAgain = loadIntentDocument(loaded);
+  assert.equal(
+    loadedAgain.rootIntent.children
+      .find((node) => node.id === "current_container")
+      .children.filter((node) => node.id === ACTIVE_BUSINESS_SCOPE_REF_ID)
+      .length,
+    1,
+  );
 });
 
 test("rejects an unknown version and a missing business root", () => {
