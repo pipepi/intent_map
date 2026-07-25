@@ -1868,7 +1868,7 @@ code,
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 9px;
-  padding: 14px;
+  padding: 14px 14px 14px 144px;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 0, rgba(139, 92, 246, 0.13), transparent 46%),
@@ -1930,6 +1930,14 @@ code,
 
 .business-scope-reference-interfaces > div:last-child {
   justify-items: end;
+}
+
+.business-scope-reference-interfaces > div > strong {
+  color: #66769e;
+  font-family: Consolas, "Microsoft YaHei", monospace;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
 }
 
 .business-scope-reference-interfaces span {
@@ -2201,7 +2209,40 @@ code,
   display: block;
 }
 
-.runtime-node[data-implementation="business-scope-reference"] .runtime-port {
+.reference-context-heading {
+  position: absolute;
+  top: 34px;
+  left: 10px;
+  color: #63739c;
+  font-family: Consolas, "Microsoft YaHei", monospace;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port-input {
+  left: 8px;
+  width: 120px;
+  padding: 0 8px 0 12px;
+  border-color: rgba(57, 167, 255, 0.4);
+  border-style: dashed;
+  color: #8da3ca;
+  background: rgba(7, 13, 30, 0.78);
+  box-shadow: none;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port-input b {
+  display: block;
+  width: auto;
+  flex: 1;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port-input > i {
+  left: -12px;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port-output {
+  right: -4px;
   width: 14px;
   padding: 0;
   border-color: transparent;
@@ -2209,16 +2250,8 @@ code,
   box-shadow: none;
 }
 
-.runtime-node[data-implementation="business-scope-reference"] .runtime-port b {
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port-output b {
   display: none;
-}
-
-.runtime-node[data-implementation="business-scope-reference"] .runtime-port-input {
-  left: -4px;
-}
-
-.runtime-node[data-implementation="business-scope-reference"] .runtime-port-output {
-  right: -4px;
 }
 
 .business-node.lod-summary {

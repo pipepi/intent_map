@@ -2310,6 +2310,7 @@ export default function Home() {
           <p>{businessScope.description}</p>
           <div className="business-scope-reference-interfaces">
             <div>
+              <strong>业务输入</strong>
               {businessScope.inputs.map((port) => (
                 <span key={port.id}>
                   <i />
@@ -2318,6 +2319,7 @@ export default function Home() {
               ))}
             </div>
             <div>
+              <strong>业务输出</strong>
               {businessScope.outputs.map((port) => (
                 <span key={port.id}>
                   {port.name}

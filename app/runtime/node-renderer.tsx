@@ -47,6 +47,12 @@ export type NodeRendererProps = {
 const portRows = (node: IntentNode) =>
   Math.max(node.inputs.length, node.outputs.length);
 
+const referenceContextLabels: Record<string, string> = {
+  document: "文档快照",
+  scope: "目标作用域",
+  selection: "选中节点",
+};
+
 export function NodeRenderer({
   node,
   scale,
@@ -163,15 +169,26 @@ export function NodeRenderer({
 
           {rows > 0 && (
             <div className="runtime-node-ports" aria-hidden="true">
+              {businessReference && (
+                <small className="reference-context-heading">引用上下文</small>
+              )}
               {node.inputs.map((input, index) => (
                 <span
                   className={`runtime-port runtime-port-input channel-${input.channel ?? "data"}`}
                   style={{ top: 54 + index * 26 }}
                   key={input.id}
-                  title={input.name}
+                  title={
+                    businessReference
+                      ? referenceContextLabels[input.id] ?? input.name
+                      : input.name
+                  }
                 >
                   <i />
-                  <b>{input.name}</b>
+                  <b>
+                    {businessReference
+                      ? referenceContextLabels[input.id] ?? input.name
+                      : input.name}
+                  </b>
                 </span>
               ))}
               {node.outputs.map((output, index) => (

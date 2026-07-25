@@ -167,6 +167,10 @@ test("protects core composition and preserves business editing", async () => {
     new URL("app/runtime/business-canvas.ts", root),
     "utf8",
   );
+  const shell = await readFile(
+    new URL("app/runtime/node-renderer.tsx", root),
+    "utf8",
+  );
 
   assert.match(page, /selected\.implementation\?\.core/);
   assert.match(page, /window\.confirm\(`「\$\{selected\.name\}」是核心节点/);
@@ -229,6 +233,21 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /key === "current-container"/);
   assert.doesNotMatch(page, /renderBusinessCanvas/);
   assert.match(css, /\.business-scope-reference-card/);
+  assert.match(page, /<strong>业务输入<\/strong>/);
+  assert.match(page, /<strong>业务输出<\/strong>/);
+  assert.match(shell, /referenceContextLabels/);
+  assert.match(shell, /document:\s*"文档快照"/);
+  assert.match(shell, /scope:\s*"目标作用域"/);
+  assert.match(shell, /selection:\s*"选中节点"/);
+  assert.match(shell, /reference-context-heading/);
+  assert.match(
+    css,
+    /\.runtime-node\[data-implementation="business-scope-reference"\] \.runtime-port-input\s*\{[\s\S]*width:\s*120px;[\s\S]*border-style:\s*dashed;/,
+  );
+  assert.match(
+    css,
+    /\.business-scope-reference-card\s*\{[\s\S]*padding:\s*14px 14px 14px 144px;/,
+  );
   assert.match(css, /\.root-boundary\.business-scope-root/);
 });
 
