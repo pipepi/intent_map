@@ -64,6 +64,8 @@ export function NodeRenderer({
   const size = runtimeNodeRenderSize(node);
   const minimized = nodeDisplayMode(node) === "minimized";
   const alwaysLive = node.implementation?.config?.lod === "always-live";
+  const businessReference =
+    node.implementation?.key === "business-scope-reference";
   const summary = scale < 0.75 && !active && !alwaysLive;
   const rows = portRows(node);
   const resizeMode = node.resizeMode ?? "simple";
@@ -121,9 +123,15 @@ export function NodeRenderer({
               if (!layoutLocked) onMoveStart(node, event);
             }}
           >
-            <span className="runtime-kind-chip">{node.kind.toUpperCase()}</span>
+            <span className="runtime-kind-chip">
+              {businessReference ? "REFERENCE" : node.kind.toUpperCase()}
+            </span>
             <strong>{node.name}</strong>
-            <small>{node.implementation?.key ?? "intent"}</small>
+            <small>
+              {businessReference
+                ? "active business scope"
+                : node.implementation?.key ?? "intent"}
+            </small>
             {node.implementation?.core && <i title="核心节点">◆</i>}
             <button
               className="node-display-toggle"

@@ -73,6 +73,12 @@ test("migrates v1 without changing the business tree", () => {
   );
   assert.equal(currentContainer.children.length, 1);
   assert.equal(currentContainer.children[0].id, ACTIVE_BUSINESS_SCOPE_REF_ID);
+  assert.deepEqual(currentContainer.canvasSize, { width: 900, height: 560 });
+  assert.deepEqual(currentContainer.children[0].position, { x: 150, y: 150 });
+  assert.deepEqual(currentContainer.children[0].size, {
+    width: 600,
+    height: 330,
+  });
   assert.equal(
     currentContainer.children[0].implementation.key,
     "business-scope-reference",

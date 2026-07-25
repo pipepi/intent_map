@@ -228,6 +228,25 @@ test("keeps node movement and automatic lanes inside the active root", async () 
   assert.match(page, /height: Math\.max\(1500, maximumBottom\)/);
 });
 
+test("keeps scope changes visible and separates the reference from business content", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+
+  assert.match(page, /cameraKeepsScopeVisible/);
+  assert.match(page, /visibleWidth >= 96 && visibleHeight >= 96/);
+  assert.match(page, /centerScopeAtScale\(1\)/);
+  assert.match(page, /lastEnterAtRef\.current < 280/);
+  assert.match(page, /className="scope-navigation-bar"/);
+  assert.match(page, /scopeNode\.implementation\?\.key !== "current-container"/);
+  assert.match(page, /const lodSummary = camera\.scale < 0\.75/);
+  assert.match(css, /\.root-boundary\.scope-arrival/);
+  assert.match(css, /\.business-node\.lod-summary/);
+  assert.match(css, /\.everything-app\s*\{[\s\S]*height:\s*100dvh;[\s\S]*min-height:\s*0;/);
+  assert.match(css, /\.business-scope-reference-card\s*\{[\s\S]*overflow:\s*hidden;/);
+});
+
 test("copies all deployment assets into the static output", async () => {
   await Promise.all([
     access(new URL("out/og.png", root)),

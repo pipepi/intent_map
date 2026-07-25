@@ -175,8 +175,8 @@ const businessScopeReferenceNode = (): IntentNode => ({
     port("navigate", "层级导航", "object", "event"),
     port("edit", "文档编辑", "object", "event"),
   ],
-  position: { x: 250, y: 150 },
-  size: { width: 520, height: 300 },
+  position: { x: 150, y: 150 },
+  size: { width: 600, height: 330 },
   resizeMode: "simple",
   displayMode: "expanded",
   implementation: {
@@ -211,7 +211,7 @@ const wireCurrentContainerReference = (node: IntentNode): IntentNode => {
         portId: output.id,
       },
     })),
-    canvasSize: node.canvasSize ?? { width: 1020, height: 680 },
+    canvasSize: node.canvasSize ?? { width: 900, height: 560 },
   };
 };
 

@@ -25,7 +25,8 @@
 html,
 body {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   margin: 0;
   background: var(--bg);
   color: var(--text);
@@ -804,9 +805,9 @@ code,
 
 .everything-app {
   width: 100vw;
-  height: 100vh;
-  min-width: 760px;
-  min-height: 620px;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   color: #e8edff;
   background: #060816;
@@ -865,6 +866,88 @@ code,
   border-radius: 18px;
   background: transparent;
   box-shadow: none;
+}
+
+.root-boundary.scope-arrival {
+  animation: root-scope-arrival 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: 50% 50%;
+}
+
+@keyframes root-scope-arrival {
+  from {
+    opacity: 0.18;
+    filter: blur(2px);
+    transform: scale(1.025);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+.scope-navigation-bar {
+  z-index: 18;
+  height: 38px;
+  position: absolute;
+  left: 150px;
+  right: 150px;
+  top: 70px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 7px;
+  border: 1px solid rgba(73, 90, 148, 0.78);
+  border-radius: 8px;
+  background: rgba(8, 13, 30, 0.92);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px);
+}
+
+.scope-navigation-bar > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.scope-navigation-bar button {
+  min-width: 0;
+  padding: 5px 8px;
+  overflow: hidden;
+  border: 1px solid rgba(64, 80, 133, 0.72);
+  border-radius: 5px;
+  color: #aebbe0;
+  background: rgba(20, 29, 61, 0.92);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-navigation-bar > div button {
+  max-width: 220px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.scope-navigation-bar button:not(:disabled):hover {
+  border-color: rgba(78, 167, 239, 0.7);
+  color: #eef4ff;
+}
+
+.scope-navigation-bar button:disabled {
+  color: #d8e2ff;
+  opacity: 1;
+}
+
+.scope-navigation-bar i,
+.scope-navigation-bar > span {
+  color: #7180a8;
+  font-family: Consolas, monospace;
+  font-size: 10px;
+  font-style: normal;
 }
 
 .scope-boundary-ports {
@@ -1747,7 +1830,7 @@ code,
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 9px;
   padding: 14px;
-  overflow: auto;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 0, rgba(139, 92, 246, 0.13), transparent 46%),
     linear-gradient(145deg, rgba(20, 29, 59, 0.9), rgba(8, 13, 31, 0.82));
@@ -2060,6 +2143,52 @@ code,
 .business-node > strong,
 .business-node > small {
   display: block;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port {
+  width: 14px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port b {
+  display: none;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port-input {
+  left: -4px;
+}
+
+.runtime-node[data-implementation="business-scope-reference"] .runtime-port-output {
+  right: -4px;
+}
+
+.business-node.lod-summary {
+  border-width: 3px;
+  background:
+    radial-gradient(circle at 50% 0, rgba(57, 167, 255, 0.12), transparent 58%),
+    linear-gradient(145deg, #162143, #0d142d);
+}
+
+.business-node.lod-summary > span {
+  top: 20px;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+
+.business-node.lod-summary > strong {
+  top: 58px;
+  font-size: 23px;
+}
+
+.business-node.lod-summary > small {
+  top: auto;
+  bottom: 22px;
+  height: auto;
+  color: #91a0c7;
+  font: 13px/1.2 Consolas, monospace;
 }
 
 .business-node > strong {
@@ -2434,6 +2563,11 @@ code,
 }
 
 @media (max-width: 900px) {
+  .scope-navigation-bar {
+    left: 122px;
+    right: 122px;
+  }
+
   .root-legend span:last-child {
     display: none;
   }

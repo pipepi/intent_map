@@ -94,7 +94,6 @@ type ScopeBoundaryEdge = {
   channel: "data" | "event";
 };
 
-const DEFAULT_CAMERA: CameraState = { scale: 1, x: 0, y: 0 };
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 2;
 const NODE_MIN_SIZE = { width: 220, height: 140 };
@@ -521,6 +520,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRunRef = useRef(false);
   const cameraRef = useRef(camera);
+  const lastEnterAtRef = useRef(0);
   const touchPointersRef = useRef(
     new Map<number, { x: number; y: number }>(),
   );
@@ -612,6 +612,39 @@ export default function Home() {
   const scopeMinimized =
     !isBusinessScope && nodeDisplayMode(scopeNode) === "minimized";
   const activeCameraKey = scopeCameraKey(activeAddress);
+  const scopeWorldSize = useMemo(
+    () =>
+      scopeMinimized
+        ? MINIMIZED_NODE_SIZE
+        : scopeNode.canvasSize ?? {
+            width: Math.max(
+              900,
+              ...visibleNodes.map(
+                (node) =>
+                  node.position.x + nodeSize(node).width + 100,
+              ),
+            ),
+            height: Math.max(
+              600,
+              ...visibleNodes.map(
+                (node) =>
+                  node.position.y + nodeSize(node).height + 100,
+              ),
+            ),
+          },
+    [scopeMinimized, scopeNode.canvasSize, visibleNodes],
+  );
+  const scopePath = useMemo(
+    () =>
+      navigationStack.map((address) => {
+        const root = address.domain === "business" ? businessRoot : appRoot;
+        return (
+          findNode(root, address.nodeId)?.name ??
+          (address.domain === "business" ? "业务作用域" : "应用作用域")
+        );
+      }),
+    [appRoot, businessRoot, navigationStack],
+  );
 
   const commit = useCallback(
     (next: IntentDocumentV2) => {
@@ -677,31 +710,73 @@ export default function Home() {
     [activeCameraKey],
   );
 
-  const fitScope = useCallback(() => {
+  const calculateFitCamera = useCallback((): CameraState | undefined => {
     const viewport = viewportRef.current;
-    if (!viewport) return;
-    const world = scopeMinimized
-      ? MINIMIZED_NODE_SIZE
-      : scopeNode.canvasSize ?? {
-          width: Math.max(900, ...visibleNodes.map((node) => node.position.x + nodeSize(node).width + 100)),
-          height: Math.max(600, ...visibleNodes.map((node) => node.position.y + nodeSize(node).height + 100)),
-        };
+    if (!viewport) return undefined;
+    const world = scopeWorldSize;
     const scale = Math.max(
       MIN_SCALE,
       Math.min(MAX_SCALE, Math.min((viewport.clientWidth - 36) / world.width, (viewport.clientHeight - 36) / world.height)),
     );
-    setScopeCamera({
+    return {
       scale,
       x: (viewport.clientWidth - world.width * scale) / 2,
       y: (viewport.clientHeight - world.height * scale) / 2,
-    });
-  }, [scopeMinimized, scopeNode, setScopeCamera, visibleNodes]);
+    };
+  }, [scopeWorldSize]);
+
+  const cameraKeepsScopeVisible = useCallback(
+    (candidate: CameraState) => {
+      const viewport = viewportRef.current;
+      if (!viewport) return false;
+      const scale = Math.max(
+        MIN_SCALE,
+        Math.min(MAX_SCALE, candidate.scale),
+      );
+      const left = candidate.x;
+      const top = candidate.y;
+      const right = left + scopeWorldSize.width * scale;
+      const bottom = top + scopeWorldSize.height * scale;
+      const visibleWidth =
+        Math.min(viewport.clientWidth, right) - Math.max(0, left);
+      const visibleHeight =
+        Math.min(viewport.clientHeight, bottom) - Math.max(0, top);
+      return visibleWidth >= 96 && visibleHeight >= 96;
+    },
+    [scopeWorldSize],
+  );
+
+  const fitScope = useCallback(() => {
+    const next = calculateFitCamera();
+    if (next) setScopeCamera(next, true);
+  }, [calculateFitCamera, setScopeCamera]);
+
+  const centerScopeAtScale = useCallback(
+    (scale: number): CameraState | undefined => {
+      const viewport = viewportRef.current;
+      if (!viewport) return undefined;
+      const safeScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+      return {
+        scale: safeScale,
+        x: (viewport.clientWidth - scopeWorldSize.width * safeScale) / 2,
+        y: (viewport.clientHeight - scopeWorldSize.height * safeScale) / 2,
+      };
+    },
+    [scopeWorldSize],
+  );
 
   useEffect(() => {
     const saved = documentState.viewState.cameras[activeCameraKey];
     const frame = window.requestAnimationFrame(() => {
-      if (saved) setScopeCamera(saved);
-      else fitScope();
+      if (saved && cameraKeepsScopeVisible(saved)) {
+        setScopeCamera({
+          scale: Math.max(MIN_SCALE, Math.min(MAX_SCALE, saved.scale)),
+          x: saved.x,
+          y: saved.y,
+        });
+      } else {
+        fitScope();
+      }
     });
     return () => window.cancelAnimationFrame(frame);
     // Scope identity is the intentional trigger.
@@ -734,6 +809,24 @@ export default function Home() {
     });
   }, [scopeNode.id, setBusinessScopeId, setSelectedBusinessNodeId]);
 
+  const navigateToScopeFrame = useCallback(
+    (index: number) => {
+      setNavigationStack((path) => {
+        if (index < 0 || index >= path.length - 1) return path;
+        const next = path.slice(0, index + 1);
+        const target = next.at(-1);
+        if (target?.domain === "business") {
+          setBusinessScopeId(target.nodeId);
+          setSelectedBusinessNodeId(target.nodeId);
+        } else if (target) {
+          setSelectedAppNodeId(target.nodeId);
+        }
+        return next;
+      });
+    },
+    [setBusinessScopeId, setSelectedBusinessNodeId],
+  );
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && navigationStack.length > 1) {
@@ -745,13 +838,15 @@ export default function Home() {
       }
       if (event.key === "0") {
         event.preventDefault();
-        setScopeCamera({ scale: 1, x: 0, y: 0 }, true);
+        const centered = centerScopeAtScale(1);
+        if (centered) setScopeCamera(centered, true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
     fitScope,
+    centerScopeAtScale,
     navigateToParent,
     navigationStack.length,
     setScopeCamera,
@@ -766,6 +861,9 @@ export default function Home() {
   }, [dirty]);
 
   const enterNode = (node: IntentNode) => {
+    const now = performance.now();
+    if (now - lastEnterAtRef.current < 280) return;
+    lastEnterAtRef.current = now;
     if (node.id === ACTIVE_BUSINESS_SCOPE_REF_ID) {
       const address: ScopeAddress = {
         domain: "business",
@@ -775,10 +873,6 @@ export default function Home() {
       setNavigationStack((path) => [...path, address]);
       setBusinessScopeId(businessScope.id);
       setSelectedBusinessNodeId(businessScope.id);
-      setScopeCamera(
-        documentState.viewState.cameras[scopeCameraKey(address)] ??
-          DEFAULT_CAMERA,
-      );
       return;
     }
     if (isBusinessScope) {
@@ -790,19 +884,11 @@ export default function Home() {
       setNavigationStack((path) => [...path, address]);
       setBusinessScopeId(node.id);
       setSelectedBusinessNodeId(node.id);
-      setScopeCamera(
-        documentState.viewState.cameras[scopeCameraKey(address)] ??
-          DEFAULT_CAMERA,
-      );
       return;
     }
     const address: ScopeAddress = { domain: "app", nodeId: node.id };
     setNavigationStack((path) => [...path, address]);
     setSelectedAppNodeId(node.id);
-    setScopeCamera(
-      documentState.viewState.cameras[scopeCameraKey(address)] ??
-        DEFAULT_CAMERA,
-    );
   };
 
   const nearestNode = (clientX: number, clientY: number) => {
@@ -1721,7 +1807,7 @@ export default function Home() {
   };
 
   const renderBusinessScopeLayer = () => {
-    const size = businessScope.canvasSize ?? { width: 1400, height: 850 };
+    const size = scopeWorldSize;
     const businessVisualEdges = deriveBusinessVisualEdges(businessScope);
     return (
       <>
@@ -1810,12 +1896,13 @@ export default function Home() {
             const visibleDirections = resizeDirectionsFor(resizeMode);
             const selected = selectedBusinessNodeId === node.id;
             const minimized = nodeDisplayMode(node) === "minimized";
+            const lodSummary = camera.scale < 0.75 && !minimized;
             return (
               <Fragment key={node.id}>
                 <article
                   role="button"
                   tabIndex={0}
-                  className={`business-node ${minimized ? "minimized" : "expanded"} ${selected ? "selected" : ""}`}
+                  className={`business-node ${minimized ? "minimized" : "expanded"} ${lodSummary ? "lod-summary" : ""} ${selected ? "selected" : ""}`}
                   style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
                   onClick={() => setSelectedBusinessNodeId(node.id)}
                   onDoubleClick={(event) => {
@@ -1835,6 +1922,14 @@ export default function Home() {
                 >
                   {minimized ? (
                     <strong>{node.name}</strong>
+                  ) : lodSummary ? (
+                    <>
+                      <span>{node.kind.toUpperCase()}</span>
+                      <strong>{node.name}</strong>
+                      <small>
+                        {node.inputs.length} 输入 · {node.outputs.length} 输出
+                      </small>
+                    </>
                   ) : (
                     <>
                       <span>{node.kind.toUpperCase()}</span>
@@ -1898,7 +1993,7 @@ export default function Home() {
                     </>
                   )}
                 </article>
-                {!layoutLocked && !minimized && (
+                {!layoutLocked && !minimized && !lodSummary && (
                   <button
                     className={`resize-mode-toggle business-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
                     style={{
@@ -2366,10 +2461,14 @@ export default function Home() {
     );
   };
 
-  const worldSize = scopeNode.canvasSize ?? { width: 1200, height: 800 };
+  const worldSize = scopeWorldSize;
   const renderedWorldSize = scopeMinimized ? MINIMIZED_NODE_SIZE : worldSize;
   const focusedLeaf =
     navigationStack.length > 1 && !scopeNode.children?.length;
+  const canAddRuntimeChild =
+    !isBusinessScope &&
+    scopeNode.implementation?.key !== "current-container" &&
+    focusedLeaf;
 
   return (
     <main className="everything-app">
@@ -2382,10 +2481,33 @@ export default function Home() {
       >
         <div className="root-grid" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`, width: renderedWorldSize.width, height: renderedWorldSize.height }}>
           <div
-            className={`root-boundary ${scopeMinimized ? "minimized" : "expanded"} ${isBusinessScope ? "business-scope-root" : ""}`}
+            key={activeCameraKey}
+            className={`root-boundary scope-arrival ${scopeMinimized ? "minimized" : "expanded"} ${isBusinessScope ? "business-scope-root" : ""}`}
             style={{ width: renderedWorldSize.width, height: renderedWorldSize.height }}
             data-display-mode={scopeMinimized ? "minimized" : "expanded"}
           >
+            {!scopeMinimized && navigationStack.length > 1 && (
+              <nav
+                className="scope-navigation-bar"
+                aria-label="当前作用域导航"
+              >
+                <button onClick={navigateToParent}>← 返回上级</button>
+                <div>
+                  {scopePath.map((name, index) => (
+                    <Fragment key={`${navigationStack[index].domain}:${navigationStack[index].nodeId}`}>
+                      <button
+                        disabled={index === scopePath.length - 1}
+                        onClick={() => navigateToScopeFrame(index)}
+                      >
+                        {name}
+                      </button>
+                      {index < scopePath.length - 1 && <i>›</i>}
+                    </Fragment>
+                  ))}
+                </div>
+                <span>{Math.round(camera.scale * 100)}%</span>
+              </nav>
+            )}
             {scopeMinimized ? (
               <button
                 className="root-minimized-node"
@@ -2501,7 +2623,7 @@ export default function Home() {
             )}
             {!scopeMinimized &&
               !isBusinessScope &&
-              (focusedLeaf || !visibleNodes.length) && (
+              canAddRuntimeChild && (
               <button className="runtime-add-child" onClick={addRuntimeChild}>＋ 添加子节点</button>
             )}
             {!scopeMinimized && !layoutLocked && (
