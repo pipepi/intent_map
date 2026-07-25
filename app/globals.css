@@ -860,6 +860,70 @@ code,
   pointer-events: none;
 }
 
+.root-boundary.business-scope-root {
+  border-color: transparent;
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.scope-boundary-ports {
+  z-index: 4;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scope-boundary-ports > span {
+  width: 112px;
+  height: 24px;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  overflow: visible;
+  border: 1px solid rgba(57, 167, 255, 0.62);
+  border-radius: 6px;
+  color: #b9c9e9;
+  background: rgba(8, 14, 33, 0.94);
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.scope-boundary-inputs > span {
+  left: 8px;
+}
+
+.scope-boundary-outputs > span {
+  right: 8px;
+  justify-content: flex-end;
+  border-color: rgba(139, 92, 246, 0.68);
+}
+
+.scope-boundary-ports i {
+  width: 8px;
+  height: 8px;
+  position: absolute;
+  top: 50%;
+  border: 2px solid #39a7ff;
+  border-radius: 50%;
+  background: #070a18;
+  box-shadow: 0 0 7px rgba(57, 167, 255, 0.52);
+  transform: translateY(-50%);
+}
+
+.scope-boundary-inputs i {
+  left: -21px;
+}
+
+.scope-boundary-outputs i {
+  right: -21px;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 7px rgba(139, 92, 246, 0.58);
+}
+
 .root-caption .node-display-toggle {
   pointer-events: auto;
 }
@@ -1224,6 +1288,18 @@ code,
   background: rgba(8, 13, 29, 0.93);
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(16px);
+}
+
+.runtime-boundary-edge {
+  fill: none;
+  stroke: #39a7ff;
+  stroke-width: 2;
+  opacity: 0.72;
+}
+
+.runtime-boundary-edge.channel-event {
+  stroke: #f0b95b;
+  stroke-dasharray: 8 6;
 }
 
 .root-legend {
@@ -1663,6 +1739,117 @@ code,
 .business-preview-world {
   position: relative;
   transform-origin: 0 0;
+}
+
+.business-scope-reference-card {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 9px;
+  padding: 14px;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 50% 0, rgba(139, 92, 246, 0.13), transparent 46%),
+    linear-gradient(145deg, rgba(20, 29, 59, 0.9), rgba(8, 13, 31, 0.82));
+}
+
+.business-scope-reference-card > header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.business-scope-reference-card > header span {
+  padding: 3px 7px;
+  border: 1px solid rgba(139, 92, 246, 0.48);
+  border-radius: 4px;
+  color: #bca7ff;
+  background: rgba(139, 92, 246, 0.13);
+  font-family: Consolas, monospace;
+  font-size: 9px;
+}
+
+.business-scope-reference-card > header strong {
+  overflow: hidden;
+  color: #eef2ff;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.business-scope-reference-card > header > i {
+  width: 9px;
+  height: 9px;
+  border: 2px solid #31d6a5;
+  border-radius: 50%;
+  box-shadow: 0 0 9px rgba(49, 214, 165, 0.48);
+}
+
+.business-scope-reference-card > p {
+  margin: 0;
+  color: #7e8bae;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.business-scope-reference-interfaces {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.business-scope-reference-interfaces > div {
+  align-content: start;
+  display: grid;
+  gap: 5px;
+}
+
+.business-scope-reference-interfaces > div:last-child {
+  justify-items: end;
+}
+
+.business-scope-reference-interfaces span {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  overflow: hidden;
+  border: 1px solid rgba(57, 167, 255, 0.52);
+  border-radius: 5px;
+  color: #b8c8e9;
+  background: rgba(8, 14, 33, 0.88);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.business-scope-reference-interfaces > div:last-child span {
+  border-color: rgba(139, 92, 246, 0.62);
+}
+
+.business-scope-reference-interfaces i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border: 2px solid #39a7ff;
+  border-radius: 50%;
+}
+
+.business-scope-reference-interfaces > div:last-child i {
+  border-color: #8b5cf6;
+}
+
+.business-scope-reference-card > footer {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid rgba(54, 68, 113, 0.58);
+  color: #69779d;
+  font-family: Consolas, monospace;
+  font-size: 9px;
 }
 
 .business-container-node {

@@ -4,11 +4,14 @@ import test from "node:test";
 import {
   ACTIVE_BUSINESS_SCOPE_REF_ID,
   APPLICATION_NODE_IDS,
+  appScopeAddress,
+  businessScopeAddress,
   createApplicationDocument,
   exportCompatibleV1,
   getBusinessRoot,
   loadIntentDocument,
   nodeDisplayMode,
+  parentScopeStack,
   scopeCameraKey,
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
@@ -190,5 +193,29 @@ test("rejects an unknown version and a missing business root", () => {
   assert.throws(
     () => loadIntentDocument({ ...v2, businessRootId: "missing" }),
     /业务根节点不存在/,
+  );
+});
+
+test("namespaces application and business navigation frames", () => {
+  const stack = [
+    appScopeAddress("application_root"),
+    appScopeAddress("current_container"),
+    businessScopeAddress("business_root"),
+    businessScopeAddress("child"),
+  ];
+
+  assert.deepEqual(
+    stack.map(scopeCameraKey),
+    [
+      "app:application_root",
+      "app:current_container",
+      "business:business_root",
+      "business:child",
+    ],
+  );
+  assert.deepEqual(parentScopeStack(stack), stack.slice(0, -1));
+  assert.deepEqual(
+    parentScopeStack([appScopeAddress("application_root")]),
+    [appScopeAddress("application_root")],
   );
 });

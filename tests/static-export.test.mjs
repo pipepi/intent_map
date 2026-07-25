@@ -57,7 +57,9 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /const MIN_SCALE = 0\.5/);
   assert.match(page, /const MAX_SCALE = 2/);
   assert.match(page, /nearestNode\(event\.clientX, event\.clientY\)/);
-  assert.match(page, /setScopePath\(\(path\) => path\.slice\(0, -1\)\)/);
+  assert.match(page, /const \[navigationStack, setNavigationStack\]/);
+  assert.match(page, /navigateToParent\(\)/);
+  assert.match(page, /scopeCameraKey\(activeAddress\)/);
   assert.match(page, /event\.key === "Escape"/);
   assert.match(page, /event\.key === "Home"/);
   assert.match(page, /event\.key === "0"/);
@@ -189,9 +191,11 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /deriveBusinessVisualEdges/);
   assert.match(businessGeometry, /BUSINESS_PORT_TOP \+\s*BUSINESS_PORT_HEIGHT \/ 2/);
   assert.match(businessGeometry, /sourceSize!\.width \+\s*\(sourceMinimized \? 0 : BUSINESS_PORT_DOT_OFFSET\)/);
-  assert.match(page, /scopeNode\.id !== node\.id/);
-  assert.match(page, /nearestBusinessNode/);
-  assert.match(page, /businessScopePath\.length > 1/);
+  assert.match(page, /ACTIVE_BUSINESS_SCOPE_REF_ID/);
+  assert.match(page, /key === "business-scope-reference"/);
+  assert.match(page, /isBusinessScope &&\s*renderBusinessScopeLayer\(\)/);
+  assert.match(page, /!isBusinessScope && visibleNodes\.map/);
+  assert.match(page, /navigationStack\.length > 1/);
   assert.match(css, /\.business-node-ports i::before/);
   assert.match(css, /\.business-node-ports i\.input\s*\{\s*left:\s*8px/);
   assert.match(css, /\.business-node-ports i\.input::before\s*\{\s*left:\s*-21px/);
@@ -208,8 +212,10 @@ test("protects core composition and preserves business editing", async () => {
     page,
     /const moveBusinessNodeStart = \([\s\S]*?event\.stopPropagation\(\);[\s\S]*?if \(layoutLocked/,
   );
-  assert.match(page, /scopeNode\.implementation\?\.key === "current-container"/);
-  assert.match(page, /expanded \? 1 : 0\.58/);
+  assert.match(page, /key === "current-container"/);
+  assert.doesNotMatch(page, /renderBusinessCanvas/);
+  assert.match(css, /\.business-scope-reference-card/);
+  assert.match(css, /\.root-boundary\.business-scope-root/);
 });
 
 test("keeps node movement and automatic lanes inside the active root", async () => {

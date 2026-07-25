@@ -112,6 +112,22 @@ export const scopeCameraKey = (
   address: Pick<ScopeAddress, "domain" | "nodeId">,
 ) => `${address.domain}:${address.nodeId}`;
 
+export const appScopeAddress = (nodeId: string): ScopeAddress => ({
+  domain: "app",
+  nodeId,
+});
+
+export const businessScopeAddress = (nodeId: string): ScopeAddress => ({
+  domain: "business",
+  nodeId,
+  viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+});
+
+export const parentScopeStack = (
+  stack: readonly ScopeAddress[],
+): ScopeAddress[] =>
+  stack.length > 1 ? stack.slice(0, -1) : [...stack];
+
 const ref = (nodeId: string, portId: string): Expression => ({
   kind: "ref",
   nodeId,

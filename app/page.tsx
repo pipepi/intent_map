@@ -13,11 +13,13 @@ import {
 } from "react";
 
 import {
+  ACTIVE_BUSINESS_SCOPE_REF_ID,
   createApplicationDocument,
   exportCompatibleV1,
   getBusinessRoot,
   loadIntentDocument,
   nodeDisplayMode,
+  scopeCameraKey,
   serializeIntentDocument,
   type CameraState,
   type Expression,
@@ -25,6 +27,7 @@ import {
   type IntentNode,
   type JsonValue,
   type PublishedModule,
+  type ScopeAddress,
 } from "./runtime/model";
 import {
   MINIMIZED_NODE_SIZE,
@@ -78,6 +81,17 @@ type DerivedEdge = {
 type AggregatedEdge = DerivedEdge & {
   count: number;
   members: DerivedEdge[];
+};
+
+type ScopeBoundaryEdge = {
+  id: string;
+  sourceKind: "environment" | "node";
+  sourceId?: string;
+  sourcePortId: string;
+  targetKind: "node" | "container-output";
+  targetId?: string;
+  targetPortId: string;
+  channel: "data" | "event";
 };
 
 const DEFAULT_CAMERA: CameraState = { scale: 1, x: 0, y: 0 };
@@ -282,6 +296,35 @@ const aggregateEdges = (edges: DerivedEdge[]): AggregatedEdge[] => {
   }));
 };
 
+const deriveScopeBoundaryEdges = (scope: IntentNode): ScopeBoundaryEdge[] => [
+  ...(scope.children ?? []).flatMap((target) =>
+    target.inputs.flatMap((input) =>
+      collectRefs(input.binding)
+        .filter((reference) => reference.env)
+        .map((reference, index) => ({
+          id: `environment:${reference.portId}>${target.id}:${input.id}:${index}`,
+          sourceKind: "environment" as const,
+          sourcePortId: reference.portId,
+          targetKind: "node" as const,
+          targetId: target.id,
+          targetPortId: input.id,
+          channel: input.channel ?? "data",
+        })),
+    ),
+  ),
+  ...scope.outputs.flatMap((output) =>
+    collectRefs(output.mapping).map((reference, index) => ({
+      id: `scope-output:${reference.env ? "environment" : reference.nodeId}:${reference.portId}>${output.id}:${index}`,
+      sourceKind: reference.env ? ("environment" as const) : ("node" as const),
+      sourceId: reference.nodeId,
+      sourcePortId: reference.portId,
+      targetKind: "container-output" as const,
+      targetPortId: output.id,
+      channel: output.channel ?? "data",
+    })),
+  ),
+];
+
 const detectCycle = (scope: IntentNode): string[] | null => {
   const dataEdges = deriveEdges(scope).filter((edge) => edge.channel === "data");
   const graph = new Map<string, string[]>();
@@ -447,7 +490,9 @@ export default function Home() {
   const [documentState, setDocumentState] = useState<IntentDocumentV2>(() => sampleDocument());
   const [history, setHistory] = useState<IntentDocumentV2[]>([]);
   const [future, setFuture] = useState<IntentDocumentV2[]>([]);
-  const [scopePath, setScopePath] = useState<string[]>(["application_root"]);
+  const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>([
+    { domain: "app", nodeId: "application_root" },
+  ]);
   const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container");
   const [camera, setCamera] = useState<CameraState>({ scale: 0.5, x: 12, y: 12 });
   const [search, setSearch] = useState("");
@@ -533,25 +578,40 @@ export default function Home() {
   }, [eventTick, pendingEvents, runtimeState]);
 
   const appRoot = documentState.rootIntent;
-  const scopeNode = useMemo(
-    () => findNode(appRoot, scopePath.at(-1) ?? appRoot.id) ?? appRoot,
-    [appRoot, scopePath],
-  );
   const businessRoot = useMemo(() => getBusinessRoot(documentState), [documentState]);
-  const businessScope = useMemo(
-    () => findNode(businessRoot, businessScopeId) ?? businessRoot,
-    [businessRoot, businessScopeId],
+  const activeAddress = useMemo(
+    () =>
+      navigationStack.at(-1) ??
+      ({ domain: "app", nodeId: appRoot.id } as const),
+    [appRoot.id, navigationStack],
   );
-  const businessScopePath = useMemo(
-    () => findPath(businessRoot, businessScope.id) ?? [businessRoot],
-    [businessRoot, businessScope.id],
+  const isBusinessScope = activeAddress.domain === "business";
+  const scopeNode = useMemo(
+    () =>
+      activeAddress.domain === "business"
+        ? findNode(businessRoot, activeAddress.nodeId) ?? businessRoot
+        : findNode(appRoot, activeAddress.nodeId) ?? appRoot,
+    [activeAddress, appRoot, businessRoot],
+  );
+  const businessScope = useMemo(
+    () =>
+      isBusinessScope
+        ? scopeNode
+        : findNode(businessRoot, businessScopeId) ?? businessRoot,
+    [businessRoot, businessScopeId, isBusinessScope, scopeNode],
   );
   const selectedBusinessNode =
     findNode(businessRoot, selectedBusinessNodeId) ?? businessScope;
   const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
+  const scopeBoundaryEdges = useMemo(
+    () => deriveScopeBoundaryEdges(scopeNode),
+    [scopeNode],
+  );
   const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
-  const scopeMinimized = nodeDisplayMode(scopeNode) === "minimized";
+  const scopeMinimized =
+    !isBusinessScope && nodeDisplayMode(scopeNode) === "minimized";
+  const activeCameraKey = scopeCameraKey(activeAddress);
 
   const commit = useCallback(
     (next: IntentDocumentV2) => {
@@ -606,12 +666,15 @@ export default function Home() {
           ...active,
           viewState: {
             ...active.viewState,
-            cameras: { ...active.viewState.cameras, [scopeNode.id]: next },
+            cameras: {
+              ...active.viewState.cameras,
+              [activeCameraKey]: next,
+            },
           },
         }));
       }
     },
-    [scopeNode.id],
+    [activeCameraKey],
   );
 
   const fitScope = useCallback(() => {
@@ -635,7 +698,7 @@ export default function Home() {
   }, [scopeMinimized, scopeNode, setScopeCamera, visibleNodes]);
 
   useEffect(() => {
-    const saved = documentState.viewState.cameras[scopeNode.id];
+    const saved = documentState.viewState.cameras[activeCameraKey];
     const frame = window.requestAnimationFrame(() => {
       if (saved) setScopeCamera(saved);
       else fitScope();
@@ -643,7 +706,7 @@ export default function Home() {
     return () => window.cancelAnimationFrame(frame);
     // Scope identity is the intentional trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeNode.id]);
+  }, [activeCameraKey]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(fitScope);
@@ -658,10 +721,23 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  const navigateToParent = useCallback(() => {
+    setNavigationStack((path) => {
+      if (path.length <= 1) return path;
+      const next = path.slice(0, -1);
+      const parent = next.at(-1);
+      if (parent?.domain === "business") {
+        setBusinessScopeId(parent.nodeId);
+        setSelectedBusinessNodeId(scopeNode.id);
+      }
+      return next;
+    });
+  }, [scopeNode.id, setBusinessScopeId, setSelectedBusinessNodeId]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && scopePath.length > 1) {
-        setScopePath((path) => path.slice(0, -1));
+      if (event.key === "Escape" && navigationStack.length > 1) {
+        navigateToParent();
       }
       if (event.key === "Home") {
         event.preventDefault();
@@ -674,7 +750,12 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fitScope, scopePath.length, setScopeCamera]);
+  }, [
+    fitScope,
+    navigateToParent,
+    navigationStack.length,
+    setScopeCamera,
+  ]);
 
   useEffect(() => {
     const warning = (event: BeforeUnloadEvent) => {
@@ -685,9 +766,43 @@ export default function Home() {
   }, [dirty]);
 
   const enterNode = (node: IntentNode) => {
-    setScopePath((path) => [...path, node.id]);
+    if (node.id === ACTIVE_BUSINESS_SCOPE_REF_ID) {
+      const address: ScopeAddress = {
+        domain: "business",
+        nodeId: businessScope.id,
+        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+      };
+      setNavigationStack((path) => [...path, address]);
+      setBusinessScopeId(businessScope.id);
+      setSelectedBusinessNodeId(businessScope.id);
+      setScopeCamera(
+        documentState.viewState.cameras[scopeCameraKey(address)] ??
+          DEFAULT_CAMERA,
+      );
+      return;
+    }
+    if (isBusinessScope) {
+      const address: ScopeAddress = {
+        domain: "business",
+        nodeId: node.id,
+        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+      };
+      setNavigationStack((path) => [...path, address]);
+      setBusinessScopeId(node.id);
+      setSelectedBusinessNodeId(node.id);
+      setScopeCamera(
+        documentState.viewState.cameras[scopeCameraKey(address)] ??
+          DEFAULT_CAMERA,
+      );
+      return;
+    }
+    const address: ScopeAddress = { domain: "app", nodeId: node.id };
+    setNavigationStack((path) => [...path, address]);
     setSelectedAppNodeId(node.id);
-    setScopeCamera(documentState.viewState.cameras[node.id] ?? DEFAULT_CAMERA);
+    setScopeCamera(
+      documentState.viewState.cameras[scopeCameraKey(address)] ??
+        DEFAULT_CAMERA,
+    );
   };
 
   const nearestNode = (clientX: number, clientY: number) => {
@@ -698,34 +813,14 @@ export default function Home() {
     const y = (clientY - rect.top - cameraRef.current.y) / cameraRef.current.scale;
     return visibleNodes.reduce<IntentNode | undefined>((closest, node) => {
       if (!closest) return node;
-      const size = runtimeNodeRenderSize(node);
-      const closestSize = runtimeNodeRenderSize(closest);
+      const size = isBusinessScope
+        ? businessNodeSize(node)
+        : runtimeNodeRenderSize(node);
+      const closestSize = isBusinessScope
+        ? businessNodeSize(closest)
+        : runtimeNodeRenderSize(closest);
       const distance = (node.position.x + size.width / 2 - x) ** 2 + (node.position.y + size.height / 2 - y) ** 2;
       const closestDistance = (closest.position.x + closestSize.width / 2 - x) ** 2 + (closest.position.y + closestSize.height / 2 - y) ** 2;
-      return distance < closestDistance ? node : closest;
-    }, undefined);
-  };
-
-  const nearestBusinessNode = (clientX: number, clientY: number) => {
-    const viewport = viewportRef.current;
-    const nodes = businessScope.children ?? [];
-    const world = viewport?.querySelector<HTMLElement>(".business-preview-world");
-    if (!world || !nodes.length || world.offsetWidth <= 0) return undefined;
-    const rect = world.getBoundingClientRect();
-    const renderedScale = rect.width / world.offsetWidth;
-    if (renderedScale <= 0) return undefined;
-    const x = (clientX - rect.left) / renderedScale;
-    const y = (clientY - rect.top) / renderedScale;
-    return nodes.reduce<IntentNode | undefined>((closest, node) => {
-      if (!closest) return node;
-      const size = businessNodeSize(node);
-      const closestSize = businessNodeSize(closest);
-      const distance =
-        (node.position.x + size.width / 2 - x) ** 2 +
-        (node.position.y + size.height / 2 - y) ** 2;
-      const closestDistance =
-        (closest.position.x + closestSize.width / 2 - x) ** 2 +
-        (closest.position.y + closestSize.height / 2 - y) ** 2;
       return distance < closestDistance ? node : closest;
     }, undefined);
   };
@@ -756,16 +851,6 @@ export default function Home() {
     const direction = event.deltaY < 0 ? 1 : -1;
     const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, old.scale * Math.exp(-event.deltaY * 0.002)));
     if (direction > 0 && nextScale >= MAX_SCALE) {
-      if (scopeNode.implementation?.key === "current-container") {
-        const businessTarget = nearestBusinessNode(event.clientX, event.clientY);
-        if (businessTarget) {
-          setBusinessScopeId(businessTarget.id);
-          setSelectedBusinessNodeId(businessTarget.id);
-          setScopeCamera(DEFAULT_CAMERA, true);
-          setToast(`进入「${businessTarget.name}」`);
-          return;
-        }
-      }
       const target = nearestNode(event.clientX, event.clientY);
       if (target) {
         enterNode(target);
@@ -777,22 +862,17 @@ export default function Home() {
     if (
       direction < 0 &&
       nextScale <= MIN_SCALE &&
-      scopeNode.implementation?.key === "current-container" &&
-      businessScopePath.length > 1
+      navigationStack.length > 1
     ) {
-      const parent = businessScopePath.at(-2)!;
-      setBusinessScopeId(parent.id);
-      setSelectedBusinessNodeId(businessScope.id);
-      setScopeCamera(DEFAULT_CAMERA, true);
-      setToast("返回上级业务意图");
-      return;
-    }
-    if (direction < 0 && nextScale <= MIN_SCALE && scopePath.length > 1) {
-      setScopePath((path) => path.slice(0, -1));
+      navigateToParent();
       setToast("返回上级节点");
       return;
     }
-    if (direction < 0 && nextScale <= MIN_SCALE && scopePath.length === 1) {
+    if (
+      direction < 0 &&
+      nextScale <= MIN_SCALE &&
+      navigationStack.length === 1
+    ) {
       setToast("已到达全屏应用根节点");
     }
     const pointerX = event.clientX - rect.left;
@@ -989,7 +1069,9 @@ export default function Home() {
     const origin = { x: event.clientX, y: event.clientY };
     const contentMinimum = visibleNodes.reduce(
       (minimum, node) => {
-        const size = runtimeNodeRenderSize(node);
+        const size = isBusinessScope
+          ? businessNodeSize(node)
+          : runtimeNodeRenderSize(node);
         return {
           width: Math.max(
             minimum.width,
@@ -1136,7 +1218,9 @@ export default function Home() {
         scopeId: loaded.businessRootId,
         selectionId: loaded.businessRootId,
       });
-      setScopePath([loaded.rootIntent.id]);
+      setNavigationStack([
+        { domain: "app", nodeId: loaded.rootIntent.id },
+      ]);
       setDirty(false);
       setToast("文档已在临时状态校验并加载");
     } catch (error) {
@@ -1296,7 +1380,9 @@ export default function Home() {
     setHistory((items) => [...items.slice(-29), documentState]);
     setFuture([]);
     setDocumentState(reset);
-    setScopePath([reset.rootIntent.id]);
+    setNavigationStack([
+      { domain: "app", nodeId: reset.rootIntent.id },
+    ]);
     setSelectedAppNodeId("current_container");
     dispatchRuntimeEvent("DOCUMENT_LOADED", "application_root", {
       scopeId: reset.businessRootId,
@@ -1338,7 +1424,9 @@ export default function Home() {
     setHistory((items) => [...items, documentState]);
     setFuture([]);
     setDocumentState(next);
-    setScopePath([next.rootIntent.id]);
+    setNavigationStack([
+      { domain: "app", nodeId: next.rootIntent.id },
+    ]);
     dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
       scopeId: next.businessRootId,
       selectionId: next.businessRootId,
@@ -1371,8 +1459,11 @@ export default function Home() {
         if (command.type === "DUPLICATE_APP_NODE") duplicateAppNode();
         if (command.type === "DELETE_APP_NODE") deleteAppNode();
         if (command.type === "RESET_APP_GRAPH") resetApplicationGraph();
-        if (command.type === "NAVIGATE_APP_PARENT" && scopePath.length > 1)
-          setScopePath((path) => path.slice(0, -1));
+        if (
+          command.type === "NAVIGATE_APP_PARENT" &&
+          navigationStack.length > 1
+        )
+          navigateToParent();
         if (command.type === "FIT_SCOPE") fitScope();
         if (command.type === "RESET_CAMERA")
           setScopeCamera({ scale: 1, x: 0, y: 0 }, true);
@@ -1387,6 +1478,21 @@ export default function Home() {
     dispatchRuntimeEvent(command.type, command.source ?? "renderer", command.payload);
   };
 
+  const navigateToBusinessNode = (node: IntentNode) => {
+    const path = findPath(businessRoot, node.id) ?? [businessRoot];
+    setNavigationStack([
+      { domain: "app", nodeId: appRoot.id },
+      { domain: "app", nodeId: "current_container" },
+      ...path.map<ScopeAddress>((item) => ({
+        domain: "business",
+        nodeId: item.id,
+        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+      })),
+    ]);
+    setBusinessScopeId(node.id);
+    setSelectedBusinessNodeId(node.id);
+  };
+
   const renderTree = (node: IntentNode, depth = 0): React.ReactNode => {
     const matches =
       !search ||
@@ -1399,7 +1505,7 @@ export default function Home() {
             className={`runtime-tree-row ${businessScope.id === node.id ? "scope" : ""} ${selectedBusinessNodeId === node.id ? "selected" : ""}`}
             style={{ paddingLeft: 12 + depth * 14 }}
             onClick={() => setSelectedBusinessNodeId(node.id)}
-            onDoubleClick={() => setBusinessScopeId(node.id)}
+            onDoubleClick={() => navigateToBusinessNode(node)}
           >
             <span>{node.children?.length ? "◇" : "ƒ"}</span>
             <strong>{node.name}</strong>
@@ -1614,34 +1720,11 @@ export default function Home() {
     setSelectedBusinessNodeId(node.id);
   };
 
-  const renderBusinessCanvas = () => {
+  const renderBusinessScopeLayer = () => {
     const size = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const businessVisualEdges = deriveBusinessVisualEdges(businessScope);
-    const expanded =
-      scopePath.length > 1 &&
-      scopeNode.implementation?.key === "current-container";
-    const focusedCanvas = scopeNode.canvasSize ?? { width: 1200, height: 800 };
-    const availableWidth = expanded
-      ? Math.max(650, focusedCanvas.width - 80)
-      : 650;
-    const availableHeight = expanded
-      ? Math.max(360, focusedCanvas.height - 100)
-      : 360;
-    const scale = Math.min(
-      expanded ? 1 : 0.58,
-      availableWidth / size.width,
-      availableHeight / size.height,
-    );
     return (
-      <div className="business-preview">
-        <div
-          className="business-preview-world"
-          style={{
-            width: size.width,
-            height: size.height,
-            transform: `scale(${scale})`,
-          }}
-        >
+      <>
           <section
             className="business-container-node"
             aria-label={`当前业务容器：${businessScope.name}`}
@@ -1738,9 +1821,15 @@ export default function Home() {
                   onDoubleClick={(event) => {
                     event.stopPropagation();
                     if (minimized) toggleBusinessDisplayMode(node);
-                    else setBusinessScopeId(node.id);
+                    // The handler dereferences navigation state only after input.
+                    // eslint-disable-next-line react-hooks/refs
+                    else enterNode(node);
                   }}
-                  onPointerDown={(event) => moveBusinessNodeStart(node, scale, event)}
+                  onPointerDown={(event) => {
+                    // Pointer geometry reads the live camera only after input.
+                    // eslint-disable-next-line react-hooks/refs
+                    moveBusinessNodeStart(node, 1, event);
+                  }}
                   data-display-mode={minimized ? "minimized" : "expanded"}
                   title={minimized ? "双击展开节点" : undefined}
                 >
@@ -1794,9 +1883,16 @@ export default function Home() {
                             key={direction}
                             onClick={(event) => event.stopPropagation()}
                             onDoubleClick={(event) => event.stopPropagation()}
-                            onPointerDown={(event) =>
-                              resizeBusinessNodeStart(node, direction, scale, event)
-                            }
+                            onPointerDown={(event) => {
+                              // Resize geometry reads the live camera after input.
+                              // eslint-disable-next-line react-hooks/refs
+                              resizeBusinessNodeStart(
+                                node,
+                                direction,
+                                1,
+                                event,
+                              );
+                            }}
                           />
                         ))}
                     </>
@@ -1831,8 +1927,7 @@ export default function Home() {
           {!businessScope.children?.length && (
             <button className="business-empty" onClick={addBusinessChild}>＋ 添加子意图</button>
           )}
-        </div>
-      </div>
+      </>
     );
   };
 
@@ -1947,7 +2042,7 @@ export default function Home() {
     }
     if (key === "breadcrumb") {
       const path = findPath(businessRoot, businessScope.id) ?? [businessRoot];
-      return <div className="breadcrumb-surface">{path.map((item, index) => <Fragment key={item.id}><button onClick={() => setBusinessScopeId(item.id)}>{item.name}</button>{index < path.length - 1 && <i>›</i>}</Fragment>)}</div>;
+      return <div className="breadcrumb-surface">{path.map((item, index) => <Fragment key={item.id}><button onClick={() => navigateToBusinessNode(item)}>{item.name}</button>{index < path.length - 1 && <i>›</i>}</Fragment>)}</div>;
     }
     if (key === "scope-toolbar") {
       return (
@@ -1955,8 +2050,14 @@ export default function Home() {
           <div className="scope-toolbar-context">
             <span>{scopeNode.kind.toUpperCase()}</span>
             <strong>
-              {scopePath
-                .map((id) => findNode(appRoot, id)?.name ?? id)
+              {navigationStack
+                .map((address) =>
+                  address.domain === "business"
+                    ? findNode(businessRoot, address.nodeId)?.name ??
+                      address.nodeId
+                    : findNode(appRoot, address.nodeId)?.name ??
+                      address.nodeId,
+                )
                 .join(" / ")}
             </strong>
             <small>
@@ -1966,7 +2067,7 @@ export default function Home() {
           </div>
           <div className="scope-toolbar-actions">
             <button
-              disabled={scopePath.length === 1}
+              disabled={navigationStack.length === 1}
               onClick={() =>
                 dispatchRuntimeEvent(
                   "NAVIGATE_APP_PARENT",
@@ -2032,7 +2133,7 @@ export default function Home() {
             >
               {Math.round(camera.scale * 100)}%
             </button>
-            <button onClick={() => setBusinessScopeId(businessRoot.id)}>
+            <button onClick={() => navigateToBusinessNode(businessRoot)}>
               业务根
             </button>
             <button
@@ -2050,15 +2151,51 @@ export default function Home() {
       );
     }
     if (key === "current-container") {
-      if (scopeNode.id !== node.id) {
-        return (
-          <div className="runtime-lod-summary current-container-preview">
-            <span>进入节点后显示“当前业务容器”及其直属子意图</span>
-            <small>{businessScope.inputs.length} 输入 · {businessScope.children?.length ?? 0} 子意图 · {businessScope.outputs.length} 输出</small>
+      return (
+        <div className="runtime-lod-summary current-container-preview">
+          <span>进入后显示一个显式的当前业务容器引用节点</span>
+          <small>
+            {businessScope.inputs.length} 输入 ·{" "}
+            {businessScope.children?.length ?? 0} 子意图 ·{" "}
+            {businessScope.outputs.length} 输出
+          </small>
+        </div>
+      );
+    }
+    if (key === "business-scope-reference") {
+      return (
+        <div className="business-scope-reference-card">
+          <header>
+            <span>{businessScope.kind.toUpperCase()}</span>
+            <strong>{businessScope.name}</strong>
+            <i aria-hidden="true" />
+          </header>
+          <p>{businessScope.description}</p>
+          <div className="business-scope-reference-interfaces">
+            <div>
+              {businessScope.inputs.map((port) => (
+                <span key={port.id}>
+                  <i />
+                  {port.name}
+                </span>
+              ))}
+            </div>
+            <div>
+              {businessScope.outputs.map((port) => (
+                <span key={port.id}>
+                  {port.name}
+                  <i />
+                </span>
+              ))}
+            </div>
           </div>
-        );
-      }
-      return renderBusinessCanvas();
+          <footer>
+            <span>{businessScope.inputs.length} in</span>
+            <span>{businessScope.children?.length ?? 0} children</span>
+            <span>{businessScope.outputs.length} out</span>
+          </footer>
+        </div>
+      );
     }
     if (key === "canvas-status") {
       return (
@@ -2152,9 +2289,87 @@ export default function Home() {
     );
   };
 
+  const renderScopeBoundaryEdge = (edge: ScopeBoundaryEdge) => {
+    const source =
+      edge.sourceKind === "node" && edge.sourceId
+        ? scopeNode.children?.find((node) => node.id === edge.sourceId)
+        : undefined;
+    const target =
+      edge.targetKind === "node" && edge.targetId
+        ? scopeNode.children?.find((node) => node.id === edge.targetId)
+        : undefined;
+    if (edge.sourceKind === "node" && !source) return null;
+    if (edge.targetKind === "node" && !target) return null;
+    const sourceSize = source ? runtimeNodeRenderSize(source) : undefined;
+    const targetSize = target ? runtimeNodeRenderSize(target) : undefined;
+    const sourceIndex =
+      edge.sourceKind === "environment"
+        ? Math.max(
+            0,
+            scopeNode.inputs.findIndex(
+              (port) => port.id === edge.sourcePortId,
+            ),
+          )
+        : Math.max(
+            0,
+            source?.outputs.findIndex(
+              (port) => port.id === edge.sourcePortId,
+            ) ?? 0,
+          );
+    const targetIndex =
+      edge.targetKind === "container-output"
+        ? Math.max(
+            0,
+            scopeNode.outputs.findIndex(
+              (port) => port.id === edge.targetPortId,
+            ),
+          )
+        : Math.max(
+            0,
+            target?.inputs.findIndex(
+              (port) => port.id === edge.targetPortId,
+            ) ?? 0,
+          );
+    const sourceMinimized =
+      source && nodeDisplayMode(source) === "minimized";
+    const targetMinimized =
+      target && nodeDisplayMode(target) === "minimized";
+    const sx =
+      edge.sourceKind === "environment"
+        ? -10
+        : source!.position.x +
+          sourceSize!.width +
+          (sourceMinimized ? 0 : 6);
+    const sy =
+      edge.sourceKind === "environment"
+        ? PORT_TOP + sourceIndex * PORT_ROW
+        : sourceMinimized
+          ? source!.position.y + sourceSize!.height / 2
+          : source!.position.y + PORT_TOP + sourceIndex * PORT_ROW;
+    const tx =
+      edge.targetKind === "container-output"
+        ? worldSize.width + 10
+        : target!.position.x - (targetMinimized ? 0 : 6);
+    const ty =
+      edge.targetKind === "container-output"
+        ? PORT_TOP + targetIndex * PORT_ROW
+        : targetMinimized
+          ? target!.position.y + targetSize!.height / 2
+          : target!.position.y + PORT_TOP + targetIndex * PORT_ROW;
+    const bend = Math.max(70, Math.abs(tx - sx) * 0.42);
+    return (
+      <path
+        className={`runtime-boundary-edge channel-${edge.channel}`}
+        key={edge.id}
+        d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`}
+      />
+    );
+  };
+
   const worldSize = scopeNode.canvasSize ?? { width: 1200, height: 800 };
   const renderedWorldSize = scopeMinimized ? MINIMIZED_NODE_SIZE : worldSize;
-  const focusedLeaf = scopePath.length > 1 && !scopeNode.children?.length;
+  const focusedLeaf =
+    navigationStack.length > 1 && !scopeNode.children?.length;
 
   return (
     <main className="everything-app">
@@ -2167,7 +2382,7 @@ export default function Home() {
       >
         <div className="root-grid" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`, width: renderedWorldSize.width, height: renderedWorldSize.height }}>
           <div
-            className={`root-boundary ${scopeMinimized ? "minimized" : "expanded"}`}
+            className={`root-boundary ${scopeMinimized ? "minimized" : "expanded"} ${isBusinessScope ? "business-scope-root" : ""}`}
             style={{ width: renderedWorldSize.width, height: renderedWorldSize.height }}
             data-display-mode={scopeMinimized ? "minimized" : "expanded"}
           >
@@ -2187,7 +2402,7 @@ export default function Home() {
               >
                 {scopeNode.name}
               </button>
-            ) : (
+            ) : !isBusinessScope ? (
               <div className="root-caption">
                 <span>{scopeNode.kind.toUpperCase()}</span>
                 <strong>{scopeNode.name}</strong>
@@ -2205,9 +2420,50 @@ export default function Home() {
                   −
                 </button>
               </div>
+            ) : null}
+            {!scopeMinimized &&
+              isBusinessScope &&
+              renderBusinessScopeLayer()}
+            {!scopeMinimized && !isBusinessScope && (
+              <>
+                <div
+                  className="scope-boundary-ports scope-boundary-inputs"
+                  aria-hidden="true"
+                >
+                  {scopeNode.inputs.map((port, index) => (
+                    <span
+                      key={port.id}
+                      style={{ top: PORT_TOP - 12 + index * PORT_ROW }}
+                    >
+                      <i />
+                      {port.name}
+                    </span>
+                  ))}
+                </div>
+                <div
+                  className="scope-boundary-ports scope-boundary-outputs"
+                  aria-hidden="true"
+                >
+                  {scopeNode.outputs.map((port, index) => (
+                    <span
+                      key={port.id}
+                      style={{ top: PORT_TOP - 12 + index * PORT_ROW }}
+                    >
+                      {port.name}
+                      <i />
+                    </span>
+                  ))}
+                </div>
+                <svg
+                  className="runtime-edges"
+                  viewBox={`0 0 ${worldSize.width} ${worldSize.height}`}
+                >
+                  {appEdges.map(renderEdge)}
+                  {scopeBoundaryEdges.map(renderScopeBoundaryEdge)}
+                </svg>
+              </>
             )}
-            {!scopeMinimized && scopePath.length === 1 && <svg className="runtime-edges" viewBox={`0 0 ${worldSize.width} ${worldSize.height}`}>{appEdges.map(renderEdge)}</svg>}
-            {!scopeMinimized && visibleNodes.map((node) => (
+            {!scopeMinimized && !isBusinessScope && visibleNodes.map((node) => (
               <NodeRenderer
                 key={node.id}
                 node={node}
@@ -2216,7 +2472,12 @@ export default function Home() {
                 active={false}
                 layoutLocked={layoutLocked}
                 content={renderNodeContent(node)}
-                onSelect={setSelectedAppNodeId}
+                onSelect={(nodeId) => {
+                  setSelectedAppNodeId(nodeId);
+                  if (nodeId === ACTIVE_BUSINESS_SCOPE_REF_ID) {
+                    setSelectedBusinessNodeId(businessScope.id);
+                  }
+                }}
                 onEnter={enterNode}
                 onMoveStart={moveNodeStart}
                 onResizeStart={resizeNodeStart}
@@ -2224,7 +2485,10 @@ export default function Home() {
                 onDisplayModeToggle={toggleNodeDisplayMode}
               />
             ))}
-            {!scopeMinimized && scopePath.length > 1 && (
+            {!scopeMinimized &&
+              !isBusinessScope &&
+              navigationStack.length > 1 &&
+              !visibleNodes.length && (
               <section
                 className="focused-runtime-content"
                 style={{
@@ -2235,7 +2499,9 @@ export default function Home() {
                 {renderNodeContent(scopeNode)}
               </section>
             )}
-            {!scopeMinimized && (focusedLeaf || !visibleNodes.length) && (
+            {!scopeMinimized &&
+              !isBusinessScope &&
+              (focusedLeaf || !visibleNodes.length) && (
               <button className="runtime-add-child" onClick={addRuntimeChild}>＋ 添加子节点</button>
             )}
             {!scopeMinimized && !layoutLocked && (
@@ -2285,7 +2551,12 @@ export default function Home() {
         {!scopeMinimized && <div className="root-legend">
           <span><i className="data" />数据</span>
           <span><i className="event" />事件</span>
-          <span>{appEdges.length} 组聚合管道</span>
+          <span>
+            {isBusinessScope
+              ? deriveBusinessVisualEdges(businessScope).length
+              : appEdges.length + scopeBoundaryEdges.length}{" "}
+            组派生管道
+          </span>
           <span>双指平移 · Ctrl + 滚轮进入 / 返回</span>
         </div>}
         {toast && (
