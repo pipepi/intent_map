@@ -2187,7 +2187,7 @@ code,
   top: 8px;
 }
 
-.business-node > span {
+.business-node > span:not(.resize-handle) {
   position: absolute;
   left: 14px;
   top: 14px;

@@ -215,7 +215,11 @@ test("protects core composition and preserves business editing", async () => {
     css,
     /\.business-node > strong\s*\{[\s\S]*top:\s*42px;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/,
   );
-  assert.match(css, /\.business-node > span\s*\{[\s\S]*top:\s*14px;/);
+  assert.match(
+    css,
+    /\.business-node > span:not\(\.resize-handle\)\s*\{[\s\S]*top:\s*14px;/,
+  );
+  assert.doesNotMatch(css, /\.business-node > span\s*\{/);
   assert.match(css, /\.business-node > small\s*\{[\s\S]*top:\s*70px;/);
   assert.match(css, /\.business-node\s*\{[\s\S]*display:\s*block;/);
   assert.match(
