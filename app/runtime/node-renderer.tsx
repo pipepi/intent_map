@@ -72,7 +72,7 @@ export function NodeRenderer({
   const alwaysLive = node.implementation?.config?.lod === "always-live";
   const businessReference =
     node.implementation?.key === "business-scope-reference";
-  const summary = scale < 0.75 && !active && !alwaysLive;
+  const summary = scale < 0.55 && !active && !alwaysLive;
   const rows = portRows(node);
   const resizeMode = node.resizeMode ?? "simple";
   const visibleDirections =
@@ -95,8 +95,10 @@ export function NodeRenderer({
         top: node.position.y,
         width: size.width,
         height: size.height,
+        gridTemplateRows: rows > 0 ? "38px auto minmax(0, 1fr)" : undefined,
       }}
       data-node-id={node.id}
+      title={minimized ? undefined : `双击进入「${node.name}」`}
       data-implementation={node.implementation?.key ?? ""}
       data-display-mode={minimized ? "minimized" : "expanded"}
       onPointerDown={(event) => {
@@ -112,7 +114,7 @@ export function NodeRenderer({
       {minimized ? (
         <header
           className="runtime-minimized-titlebar"
-          title="双击展开节点"
+          title="双击展开 · 再次双击进入节点"
           onPointerDown={(event) => {
             event.stopPropagation();
             if (!layoutLocked) onMoveStart(node, event);
@@ -154,28 +156,19 @@ export function NodeRenderer({
             </button>
           </header>
 
-          <div className="runtime-node-body">
-            {summary ? (
-              <div className="runtime-lod-summary">
-                <span>{node.description}</span>
-                <small>
-                  {node.inputs.length} 输入 · {node.outputs.length} 输出
-                </small>
-              </div>
-            ) : (
-              content
-            )}
-          </div>
-
           {rows > 0 && (
-            <div className="runtime-node-ports" aria-hidden="true">
+            <div
+              className="runtime-node-ports"
+              aria-hidden="true"
+              style={{ height: rows * 26 + 16 }}
+            >
               {businessReference && (
                 <small className="reference-context-heading">引用上下文</small>
               )}
               {node.inputs.map((input, index) => (
                 <span
                   className={`runtime-port runtime-port-input channel-${input.channel ?? "data"}`}
-                  style={{ top: 54 + index * 26 }}
+                  style={{ top: 16 + index * 26 }}
                   key={input.id}
                   title={
                     businessReference
@@ -194,7 +187,7 @@ export function NodeRenderer({
               {node.outputs.map((output, index) => (
                 <span
                   className={`runtime-port runtime-port-output channel-${output.channel ?? "data"}`}
-                  style={{ top: 54 + index * 26 }}
+                  style={{ top: 16 + index * 26 }}
                   key={output.id}
                   title={output.name}
                 >
@@ -204,6 +197,22 @@ export function NodeRenderer({
               ))}
             </div>
           )}
+
+          <div className="runtime-node-body">
+            {summary ? (
+              <div className="runtime-lod-summary">
+                <span>{node.description}</span>
+                {node.implementation?.visual && (
+                  <small>放大至 75% 以上查看交互面板</small>
+                )}
+                <small>
+                  {node.inputs.length} 输入 · {node.outputs.length} 输出
+                </small>
+              </div>
+            ) : (
+              content
+            )}
+          </div>
 
           {!layoutLocked &&
             visibleDirections.map((direction) => (

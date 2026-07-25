@@ -499,6 +499,13 @@ export default function Home() {
   const [dirty, setDirty] = useState(false);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [scopeLegendOpen, setScopeLegendOpen] = useState(false);
+  const [pendingPipe, setPendingPipe] = useState<{
+    sourceNodeId: string;
+    sourcePortId: string;
+    sourcePortName: string;
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+  } | null>(null);
   const [toast, setToast] = useState("");
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
   const [trace, setTrace] = useState<Trace[]>([]);
@@ -521,6 +528,19 @@ export default function Home() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRunRef = useRef(false);
+  const actionRefs = useRef<{
+    undo: () => void;
+    redo: () => void;
+    enterNode: (node: IntentNode) => void;
+    deleteAppNode: () => void;
+    documentState: IntentDocumentV2;
+    visibleNodes: IntentNode[];
+    isBusinessScope: boolean;
+    scopeNode: IntentNode;
+    businessScope: IntentNode;
+    selectedAppNodeId: string;
+    selectedBusinessNodeId: string;
+  } | null>(null);
   const cameraRef = useRef(camera);
   const lastEnterAtRef = useRef(0);
   const fitOnNextScopeRef = useRef(false);
@@ -615,6 +635,50 @@ export default function Home() {
     [businessScope],
   );
   const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
+  const validationIssues = useMemo(() => {
+    const issues: Array<{ level: "error" | "warning" | "info"; text: string }> = [];
+    if (businessCycle)
+      issues.push({ level: "error", text: `循环依赖：${businessCycle.join(" → ")}` });
+    const children = businessScope.children ?? [];
+    for (const child of children) {
+      for (const input of child.inputs) {
+        if (!input.binding)
+          issues.push({ level: "warning", text: `「${child.name}」输入「${input.name}」未绑定` });
+      }
+    }
+    const consumedEnv = new Set<string>();
+    const consumedOutputs = new Set<string>();
+    for (const child of children) {
+      for (const input of child.inputs) {
+        for (const reference of collectRefs(input.binding)) {
+          if (reference.env) consumedEnv.add(reference.portId);
+          if (reference.nodeId) consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
+        }
+      }
+    }
+    for (const output of businessScope.outputs) {
+      for (const reference of collectRefs(output.mapping)) {
+        if (reference.env) consumedEnv.add(reference.portId);
+        if (reference.nodeId) consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
+      }
+    }
+    for (const port of businessScope.inputs) {
+      if (!consumedEnv.has(port.id))
+        issues.push({ level: "info", text: `环境输入「${port.name}」未被任何节点消费` });
+    }
+    for (const output of businessScope.outputs) {
+      if (!output.mapping)
+        issues.push({ level: "warning", text: `容器输出「${output.name}」未映射` });
+    }
+    for (const child of children) {
+      if (
+        child.outputs.length > 0 &&
+        child.outputs.every((output) => !consumedOutputs.has(`${child.id}:${output.id}`))
+      )
+        issues.push({ level: "info", text: `「${child.name}」的输出未被消费` });
+    }
+    return issues;
+  }, [businessScope, businessCycle]);
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
   const scopeMinimized =
     !isBusinessScope && nodeDisplayMode(scopeNode) === "minimized";
@@ -664,6 +728,25 @@ export default function Home() {
     [dispatchRuntimeEvent, documentState],
   );
 
+  const commitView = useCallback(
+    (next: IntentDocumentV2) => {
+      setDocumentState(next);
+      setDirty(true);
+      dispatchRuntimeEvent("DOCUMENT_CHANGED", "document-store");
+    },
+    [dispatchRuntimeEvent],
+  );
+
+  const updateDocumentNodeView = useCallback(
+    (id: string, updater: (node: IntentNode) => IntentNode) => {
+      commitView({
+        ...documentState,
+        rootIntent: updateNode(documentState.rootIntent, id, updater),
+      });
+    },
+    [commitView, documentState],
+  );
+
   const updateDocumentNode = useCallback(
     (id: string, updater: (node: IntentNode) => IntentNode) => {
       commit({
@@ -676,25 +759,25 @@ export default function Home() {
 
   const toggleNodeResizeMode = useCallback(
     (node: IntentNode) => {
-      updateDocumentNode(node.id, (item) => ({
+      updateDocumentNodeView(node.id, (item) => ({
         ...item,
         resizeMode: nodeResizeMode(item) === "simple" ? "full" : "simple",
       }));
       setSelectedAppNodeId(node.id);
     },
-    [updateDocumentNode],
+    [updateDocumentNodeView],
   );
 
   const toggleNodeDisplayMode = useCallback(
     (node: IntentNode) => {
-      updateDocumentNode(node.id, (item) => ({
+      updateDocumentNodeView(node.id, (item) => ({
         ...item,
         displayMode:
           nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
       }));
       setSelectedAppNodeId(node.id);
     },
-    [updateDocumentNode],
+    [updateDocumentNodeView],
   );
 
   const setScopeCamera = useCallback(
@@ -720,7 +803,24 @@ export default function Home() {
   const calculateFitCamera = useCallback((): CameraState | undefined => {
     const viewport = viewportRef.current;
     if (!viewport) return undefined;
-    const world = scopeWorldSize;
+    const world = (() => {
+      // 业务画布按内容包围盒适配，避免大片留白。
+      if (isBusinessScope && visibleNodes.length) {
+        const rawLeft = Math.min(...visibleNodes.map((n) => n.position.x));
+        const left = Math.max(0, rawLeft - 200);
+        const top = Math.min(...visibleNodes.map((n) => n.position.y));
+        const rawRight = Math.max(...visibleNodes.map((n) => n.position.x + businessNodeSize(n).width));
+        const right = Math.min(scopeNode.canvasSize?.width ?? rawRight, rawRight + 200);
+        const bottom = Math.max(...visibleNodes.map((n) => n.position.y + businessNodeSize(n).height));
+        return {
+          width: right - left + 160,
+          height: bottom - top + 160,
+          offsetX: left - 80,
+          offsetY: top - 80,
+        };
+      }
+      return { width: scopeWorldSize.width, height: scopeWorldSize.height, offsetX: 0, offsetY: 0 };
+    })();
     const availableWidth = Math.max(
       1,
       viewport.clientWidth - FIT_VIEW_PADDING * 2,
@@ -741,10 +841,10 @@ export default function Home() {
     );
     return {
       scale,
-      x: (viewport.clientWidth - world.width * scale) / 2,
-      y: (viewport.clientHeight - world.height * scale) / 2,
+      x: (viewport.clientWidth - world.width * scale) / 2 - world.offsetX * scale,
+      y: (viewport.clientHeight - world.height * scale) / 2 - world.offsetY * scale,
     };
-  }, [scopeWorldSize]);
+  }, [scopeWorldSize, isBusinessScope, visibleNodes]);
 
   const cameraKeepsScopeVisible = useCallback(
     (candidate: CameraState) => {
@@ -868,6 +968,59 @@ export default function Home() {
       if (event.key === "Escape" && navigationStack.length > 1) {
         navigateToParent();
       }
+      const actions = actionRefs.current;
+      const editingTarget = event.target as HTMLElement | null;
+      const isEditing = !!(
+        editingTarget &&
+        (editingTarget.tagName === "INPUT" ||
+          editingTarget.tagName === "TEXTAREA" ||
+          editingTarget.tagName === "SELECT" ||
+          editingTarget.isContentEditable)
+      );
+      if (actions) {
+        const key = event.key.toLowerCase();
+        if (!isEditing && (event.ctrlKey || event.metaKey) && key === "z") {
+          event.preventDefault();
+          if (event.shiftKey) actions.redo();
+          else actions.undo();
+          return;
+        }
+        if (!isEditing && (event.ctrlKey || event.metaKey) && key === "y") {
+          event.preventDefault();
+          actions.redo();
+          return;
+        }
+        if ((event.ctrlKey || event.metaKey) && key === "s") {
+          event.preventDefault();
+          downloadJson("intent-map-v2.intent-map.json", actions.documentState);
+          setToast("已导出 v2 文档");
+          return;
+        }
+        if (!isEditing && event.key === "Enter") {
+          const pool = actions.isBusinessScope
+            ? (actions.businessScope.children ?? [])
+            : actions.visibleNodes;
+          const selected = pool.find(
+            (node) =>
+              node.id ===
+              (actions.isBusinessScope
+                ? actions.selectedBusinessNodeId
+                : actions.selectedAppNodeId),
+          );
+          if (selected) actions.enterNode(selected);
+          return;
+        }
+        if (!isEditing && (event.key === "Delete" || event.key === "Backspace")) {
+          if (
+            !actions.isBusinessScope &&
+            findNode(actions.scopeNode, actions.selectedAppNodeId)
+          ) {
+            event.preventDefault();
+            actions.deleteAppNode();
+          }
+          return;
+        }
+      }
       if (event.key === "Home") {
         event.preventDefault();
         fitScope();
@@ -902,6 +1055,18 @@ export default function Home() {
     lastEnterAtRef.current = now;
     fitOnNextScopeRef.current = true;
     setScopeLegendOpen(false);
+    if (node.implementation?.key === "current-container") {
+      // 双击“当前容器渲染器”直接解引用进入业务画布，跳过引用占位层。
+      const directAddress: ScopeAddress = {
+        domain: "business",
+        nodeId: businessScope.id,
+        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+      };
+      setNavigationStack((path) => [...path, directAddress]);
+      setBusinessScopeId(businessScope.id);
+      setSelectedBusinessNodeId(businessScope.id);
+      return;
+    }
     if (node.id === ACTIVE_BUSINESS_SCOPE_REF_ID) {
       const address: ScopeAddress = {
         domain: "business",
@@ -1015,6 +1180,15 @@ export default function Home() {
 
   const onViewportPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    // 交互控件与功能面板优先响应自身事件；平移手势只在空白画布上启动，
+    // 否则 setPointerCapture 会把 click 重定向到视口，吞掉面板内的鼠标点击。
+    const panOrigin = event.target as HTMLElement;
+    if (
+      panOrigin.closest(
+        "button, input, select, textarea, a, option, [contenteditable], .focused-runtime-content, .scope-navigation-bar"
+      )
+    )
+      return;
     if (event.pointerType === "touch") {
       event.preventDefault();
       const target = event.currentTarget;
@@ -1122,6 +1296,7 @@ export default function Home() {
     const up = () => {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
+      if (latest.x === start.x && latest.y === start.y) return;
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
@@ -1138,12 +1313,14 @@ export default function Home() {
   ) => {
     if (layoutLocked || event.button !== 0) return;
     const startSize = nodeSize(node);
+    let dragged = false;
     const startPosition = { ...node.position };
     const bounds = scopeNode.canvasSize ?? { width: 2400, height: 1500 };
     const origin = { x: event.clientX, y: event.clientY };
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
+      if (Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 3) dragged = true;
       const dx = (moveEvent.clientX - origin.x) / cameraRef.current.scale;
       const dy = (moveEvent.clientY - origin.y) / cameraRef.current.scale;
       let x = startPosition.x;
@@ -1174,6 +1351,7 @@ export default function Home() {
     const up = () => {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
+      if (!dragged) return;
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
@@ -1522,7 +1700,24 @@ export default function Home() {
     try {
       await executeBusinessNode(
         businessRoot,
-        rootInput,
+        Object.fromEntries(
+          businessRoot.inputs.map((port) => {
+            const raw = rootInput[port.id];
+            const trimmed = typeof raw === "string" ? raw.trim() : "";
+            if (
+              (port.type === "object" || port.type === "array") &&
+              trimmed &&
+              (trimmed.startsWith("{") || trimmed.startsWith("["))
+            ) {
+              try {
+                return [port.id, JSON.parse(trimmed)] as const;
+              } catch {
+                throw new Error(`根输入「${port.name}」不是有效的 JSON：${trimmed.slice(0, 40)}`);
+              }
+            }
+            return [port.id, raw] as const;
+          }),
+        ),
         businessRoot.name,
         (next) =>
           setTrace((items) => {
@@ -1534,6 +1729,8 @@ export default function Home() {
       );
       setRunState("success");
     } catch (error) {
+      if (error instanceof Error && error.message !== "cancelled")
+        setToast(error.message);
       setRunState(error instanceof Error && error.message === "cancelled" ? "idle" : "failed");
     }
   };
@@ -1543,7 +1740,26 @@ export default function Home() {
     setRunState("idle");
   };
 
+  actionRefs.current = {
+    undo,
+    redo,
+    enterNode,
+    deleteAppNode,
+    documentState,
+    visibleNodes,
+    isBusinessScope,
+    scopeNode,
+    businessScope,
+    selectedAppNodeId,
+    selectedBusinessNodeId,
+  };
+
   const newDocument = () => {
+    if (
+      dirty &&
+      !window.confirm("当前文档有未导出的修改，确定要新建并丢弃这些修改吗？")
+    )
+      return;
     const next = sampleDocument();
     setHistory((items) => [...items, documentState]);
     setFuture([]);
@@ -1611,7 +1827,7 @@ export default function Home() {
     setScopeLegendOpen(false);
     setNavigationStack([
       { domain: "app", nodeId: appRoot.id },
-      { domain: "app", nodeId: "current_container" },
+      // 树导航直接进入业务域，不再压入容器渲染器技术层
       ...path.map<ScopeAddress>((item) => ({
         domain: "business",
         nodeId: item.id,
@@ -1691,6 +1907,72 @@ export default function Home() {
     }));
   };
 
+  const startPipeDrag = (
+    node: IntentNode,
+    port: IntentNode["outputs"][number],
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const toWorld = (clientX: number, clientY: number) => {
+      const rect = viewport.getBoundingClientRect();
+      return {
+        x: (clientX - rect.left - cameraRef.current.x) / cameraRef.current.scale,
+        y: (clientY - rect.top - cameraRef.current.y) / cameraRef.current.scale,
+      };
+    };
+    const size = businessNodeSize(node);
+    const outputIndex = node.outputs.findIndex((output) => output.id === port.id);
+    const from = {
+      x: node.position.x + size.width,
+      y:
+        node.position.y +
+        BUSINESS_PORT_TOP +
+        Math.max(0, outputIndex) * BUSINESS_PORT_ROW +
+        BUSINESS_PORT_ROW / 2,
+    };
+    setPendingPipe({
+      sourceNodeId: node.id,
+      sourcePortId: port.id,
+      sourcePortName: port.name,
+      from,
+      to: toWorld(event.clientX, event.clientY),
+    });
+    const move = (moveEvent: PointerEvent) => {
+      setPendingPipe((active) =>
+        active
+          ? { ...active, to: toWorld(moveEvent.clientX, moveEvent.clientY) }
+          : active,
+      );
+    };
+    const up = (upEvent: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setPendingPipe(null);
+      const dropTarget = document
+        .elementFromPoint(upEvent.clientX, upEvent.clientY)
+        ?.closest("[data-port-kind]");
+      if (!dropTarget || dropTarget.getAttribute("data-port-kind") !== "input")
+        return;
+      const targetNodeId = dropTarget.getAttribute("data-port-node");
+      const targetPortId = dropTarget.getAttribute("data-port-id");
+      if (!targetNodeId || !targetPortId || targetNodeId === node.id) return;
+      const targetNode = findNode(businessRoot, targetNodeId);
+      const targetPort = targetNode?.inputs.find(
+        (input) => input.id === targetPortId,
+      );
+      updateInputBinding(targetNodeId, targetPortId, `ref:${node.id}:${port.id}`);
+      setToast(
+        `已连接 ${node.name} · ${port.name} → ${targetNode?.name ?? targetNodeId} · ${targetPort?.name ?? targetPortId}`,
+      );
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   const outputMappingOptionsFor = (node: IntentNode) => [
     ...node.inputs.map((input) => ({
       value: `env:${input.id}`,
@@ -1738,6 +2020,7 @@ export default function Home() {
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
     const start = { ...node.position };
+    let dragged = false;
     const size = businessNodeSize(node);
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
     const world = target.closest<HTMLElement>(".business-preview-world");
@@ -1748,6 +2031,7 @@ export default function Home() {
     const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
+      if (Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 3) dragged = true;
       const position = clampBusinessNodePosition(
         start,
         {
@@ -1770,6 +2054,7 @@ export default function Home() {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
+      if (!dragged) return;
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
@@ -1791,6 +2076,7 @@ export default function Home() {
     const target = event.currentTarget;
     const origin = { x: event.clientX, y: event.clientY };
     const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
+    let dragged = false;
     const world = target.closest<HTMLElement>(".business-preview-world");
     const renderedScale =
       world && world.offsetWidth > 0
@@ -1799,6 +2085,7 @@ export default function Home() {
     const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
     target.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
+      if (Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 3) dragged = true;
       const geometry = resizeBusinessNodeGeometry(
         node,
         direction,
@@ -1822,6 +2109,7 @@ export default function Home() {
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
+      if (!dragged) return;
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDirty(true);
@@ -1833,7 +2121,7 @@ export default function Home() {
   };
 
   const toggleBusinessResizeMode = (node: IntentNode) => {
-    updateDocumentNode(node.id, (item) => ({
+    updateDocumentNodeView(node.id, (item) => ({
       ...item,
       resizeMode: nodeResizeMode(item) === "simple" ? "full" : "simple",
     }));
@@ -1841,7 +2129,7 @@ export default function Home() {
   };
 
   const toggleBusinessDisplayMode = (node: IntentNode) => {
-    updateDocumentNode(node.id, (item) => ({
+    updateDocumentNodeView(node.id, (item) => ({
       ...item,
       displayMode:
         nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
@@ -1905,6 +2193,15 @@ export default function Home() {
                 <path d="M 0 0 L 10 5 L 0 10 z" />
               </marker>
             </defs>
+            {pendingPipe && (
+              <line
+                className="pending-pipe"
+                x1={pendingPipe.from.x}
+                y1={pendingPipe.from.y}
+                x2={pendingPipe.to.x}
+                y2={pendingPipe.to.y}
+              />
+            )}
             {businessVisualEdges.map((edge) => {
               const geometry = businessEdgeGeometry(
                 businessScope,
@@ -1923,7 +2220,7 @@ export default function Home() {
               return (
                 <path
                   key={edge.id}
-                  className={`business-edge ${edgeClass} channel-${edge.channel}`}
+                  className={`business-edge ${edgeClass} channel-${edge.channel} ${selectedBusinessNodeId ? (edge.sourceId === selectedBusinessNodeId || edge.targetId === selectedBusinessNodeId ? "edge-connected" : "edge-dim") : ""}`}
                   data-source-port={edge.sourcePortId}
                   data-target-port={edge.targetPortId}
                   d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`}
@@ -1938,7 +2235,7 @@ export default function Home() {
             const visibleDirections = resizeDirectionsFor(resizeMode);
             const selected = selectedBusinessNodeId === node.id;
             const minimized = nodeDisplayMode(node) === "minimized";
-            const lodSummary = camera.scale < 0.75 && !minimized;
+            const lodSummary = camera.scale < 0.55 && !minimized;
             return (
               <Fragment key={node.id}>
                 <article
@@ -1976,7 +2273,6 @@ export default function Home() {
                     <>
                       <span>{node.kind.toUpperCase()}</span>
                       <strong>{node.name}</strong>
-                      <small>{node.description}</small>
                       <button
                         className="node-display-toggle business-display-toggle"
                         aria-label={`最小化「${node.name}」`}
@@ -1996,7 +2292,19 @@ export default function Home() {
                       >
                         {node.inputs.map((port, index) => (
                           <i
-                            className="input"
+                            className={`input pipe-target ${port.binding ? "bound" : ""}`}
+                            data-port-kind="input"
+                            data-port-node={node.id}
+                            data-port-id={port.id}
+                            title={port.binding ? "双击断开此管道" : "从输出端口拖线到此连接"}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onDoubleClick={(event) => {
+                              event.stopPropagation();
+                              if (port.binding) {
+                                updateInputBinding(node.id, port.id, "");
+                                setToast(`已断开「${node.name} · ${port.name}」的管道`);
+                              }
+                            }}
                             style={{ top: index * BUSINESS_PORT_ROW }}
                             key={port.id}
                           >
@@ -2005,7 +2313,12 @@ export default function Home() {
                         ))}
                         {node.outputs.map((port, index) => (
                           <i
-                            className="output"
+                            className="output pipe-source"
+                            data-port-kind="output"
+                            data-port-node={node.id}
+                            data-port-id={port.id}
+                            title="拖拽到输入端口创建管道"
+                            onPointerDown={(event) => startPipeDrag(node, port, event)}
                             style={{ top: index * BUSINESS_PORT_ROW }}
                             key={port.id}
                           >
@@ -2013,6 +2326,7 @@ export default function Home() {
                           </i>
                         ))}
                       </div>
+                      <small style={{ top: BUSINESS_PORT_TOP + Math.max(node.inputs.length, node.outputs.length) * BUSINESS_PORT_ROW + 8 }}>{node.description}</small>
                       {!layoutLocked &&
                         visibleDirections.map((direction) => (
                           <span
@@ -2132,7 +2446,7 @@ export default function Home() {
     if (key === "global-toolbar") {
       return (
         <div className="global-toolbar-surface">
-          <div className="runtime-brand"><i>◈</i><span><strong>Intent Map</strong><small>一切皆节点 · v2</small></span></div>
+          <div className="runtime-brand"><i>◈</i><span><strong>Intent Map</strong><small>一切皆管道（节点）· v2</small></span></div>
           <div className="runtime-command-grid">
             <button onClick={() => dispatchRuntimeEvent("NEW_DOCUMENT", "global_toolbar")}>新建</button>
             <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "global_toolbar")}>导入</button>
@@ -2172,8 +2486,18 @@ export default function Home() {
     if (key === "validation") {
       return (
         <div className={`validation-surface ${businessCycle ? "error" : "ok"}`}>
-          <i>{businessCycle ? "!" : "✓"}</i>
-          <span><strong>{businessCycle ? "发现循环依赖" : "作用域有效"}</strong><small>{businessCycle ? businessCycle.join(" → ") : "端口、可见性与数据 DAG 校验通过"}</small></span>
+          <i>{validationIssues.some((issue) => issue.level === "error") ? "!" : validationIssues.length ? "△" : "✓"}</i>
+          <span><strong>{validationIssues.length ? `${validationIssues.filter((issue) => issue.level === "error").length} 错误 · ${validationIssues.filter((issue) => issue.level === "warning").length} 警告 · ${validationIssues.filter((issue) => issue.level === "info").length} 提示` : "作用域有效"}</strong><small>{validationIssues.length ? "端口、依赖与消费关系检查" : "端口、可见性与数据 DAG 校验通过"}</small></span>
+          {validationIssues.length > 0 && (
+            <ul className="validation-issue-list">
+              {validationIssues.slice(0, 8).map((issue, index) => (
+                <li key={index} className={`issue-${issue.level}`}>{issue.text}</li>
+              ))}
+              {validationIssues.length > 8 && (
+                <li className="issue-info">… 其余 {validationIssues.length - 8} 项</li>
+              )}
+            </ul>
+          )}
         </div>
       );
     }
@@ -2342,7 +2666,7 @@ export default function Home() {
           <span><i className="data" />数据管道</span>
           <span><i className="event" />事件管道</span>
           <span>{deriveBusinessVisualEdges(businessScope).length} 条业务引用</span>
-          <span>双指平移 · Ctrl+滚轮 50%–200%</span>
+          <span>双指平移 · Ctrl+滚轮 50%–200% · 拖端口连线 · 双击输入端口断开</span>
         </div>
       );
     }
@@ -2381,13 +2705,27 @@ export default function Home() {
       return (
         <div className="trace-surface">
           <div className="run-state"><i className={runState} /><span><small>本地确定性执行</small><strong>{runState === "idle" ? "尚未运行" : runState === "running" ? "运行中" : runState === "success" ? "执行成功" : "执行失败"}</strong></span><button onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "run_trace")} disabled={runState === "running"}>重新运行</button></div>
-          <div className="run-input-grid">{businessRoot.inputs.map((port) => <label key={port.id}><span>{port.name}<small>{port.type}</small></span><input value={String(rootInput[port.id] ?? "")} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} /></label>)}</div>
-          <div className="trace-list">{trace.length ? trace.map((item, index) => <div className={`trace-row ${item.status}`} key={`${item.id}-${item.path}`}><b>{String(index + 1).padStart(2, "0")}</b><span><strong>{item.name}</strong><small>{item.path}</small></span><i>{item.status}{item.duration ? ` · ${item.duration}ms` : ""}</i></div>) : <div className="surface-empty">运行后显示每层输入、输出与耗时</div>}</div>
+          <div className="run-input-grid">{businessRoot.inputs.map((port) => {
+            const structured = port.type === "object" || port.type === "array";
+            const rawValue = rootInput[port.id];
+            const textValue = typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue) ?? "";
+            return (
+              <label key={port.id}>
+                <span>{port.name}<small>{port.type}</small></span>
+                {structured ? (
+                  <textarea rows={2} placeholder='JSON，例如 ["角色A","角色B"]' value={textValue} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} />
+                ) : (
+                  <input value={textValue} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} />
+                )}
+              </label>
+            );
+          })}</div>
+          <div className="trace-list">{trace.length ? trace.map((item, index) => <div className={`trace-row ${item.status}`} key={`${item.id}-${item.path}`}><b>{String(index + 1).padStart(2, "0")}</b><span><strong>{item.name}</strong><small>{item.path}</small>{item.output !== undefined && <code>输出 {JSON.stringify(item.output)?.slice(0, 220)}</code>}{item.error && <code>错误 {item.error}</code>}</span><i>{item.status}{item.duration ? ` · ${item.duration}ms` : ""}</i></div>) : <div className="surface-empty">运行后显示每层输入、输出与耗时</div>}</div>
         </div>
       );
     }
     const Renderer = resolveRenderer(node);
-    return <Renderer node={node} document={documentState} scale={camera.scale} active={scopeNode.id === node.id} selected={selectedAppNodeId === node.id} summary={camera.scale < 0.75} emit={emit} />;
+    return <Renderer node={node} document={documentState} scale={camera.scale} active={scopeNode.id === node.id} selected={selectedAppNodeId === node.id} summary={camera.scale < 0.55} emit={emit} />;
   };
 
   const renderEdge = (edge: AggregatedEdge) => {
@@ -2413,7 +2751,7 @@ export default function Home() {
     const selected = selectedEdgeId === edge.id;
     return (
       <g
-        className={`runtime-edge channel-${edge.channel} ${selected ? "selected" : ""}`}
+        className={`runtime-edge channel-${edge.channel} ${selected ? "selected" : ""} ${selectedAppNodeId ? (edge.sourceId === selectedAppNodeId || edge.targetId === selectedAppNodeId ? "edge-connected" : "edge-dim") : ""}`}
         key={edge.id}
         onPointerDown={(event) => {
           event.stopPropagation();
@@ -2559,7 +2897,7 @@ export default function Home() {
                       >
                         {index === scopePath.length - 1 &&
                         navigationStack[index].domain === "business"
-                          ? "当前业务容器"
+                          ? name
                           : name}
                       </button>
                       {index < scopePath.length - 1 && <i>›</i>}
@@ -2568,6 +2906,7 @@ export default function Home() {
                 </div>
                 <button
                   className="scope-pipeline-trigger"
+                  title="本作用域内的数据/事件管道数量，点击查看图例"
                   aria-expanded={scopeLegendOpen}
                   onClick={() => setScopeLegendOpen((open) => !open)}
                 >
@@ -2579,6 +2918,9 @@ export default function Home() {
                     <span><i className="data" />数据管道</span>
                     <span><i className="event" />事件管道</span>
                     <small>Ctrl + 滚轮进入或返回</small>
+                    <small>双击展开 · 再双击进入 · Esc 返回</small>
+                    <small>Ctrl+Z 撤销 · Ctrl+S 导出 · Enter 进入选中</small>
+                    <small>◆ 核心节点</small>
                   </div>
                 )}
               </nav>

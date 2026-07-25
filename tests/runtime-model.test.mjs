@@ -147,7 +147,7 @@ test("keeps the scope toolbar live and backfills older v2 documents", () => {
     mapping: undefined,
   }));
   v2.viewState.cameras = {
-    application_root: { scale: 0.75, x: 20, y: 30 },
+    application_root: { scale: 0.55, x: 20, y: 30 },
     business_root: { scale: 1.25, x: 40, y: 50 },
   };
 
@@ -173,7 +173,7 @@ test("keeps the scope toolbar live and backfills older v2 documents", () => {
     true,
   );
   assert.deepEqual(loaded.viewState.cameras["app:application_root"], {
-    scale: 0.75,
+    scale: 0.55,
     x: 20,
     y: 30,
   });

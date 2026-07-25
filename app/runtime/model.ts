@@ -512,8 +512,11 @@ export const createApplicationDocument = (
       position: definition.position,
       size: definition.size,
       resizeMode: "simple",
-      displayMode:
-        definition.id === "current_container" ? "expanded" : "minimized",
+      displayMode: ["current_container", "global_toolbar", "intent_tree"].includes(
+        definition.id,
+      )
+        ? "expanded"
+        : "minimized",
       implementation: {
         key: definition.key,
         core: true,

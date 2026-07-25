@@ -21,7 +21,7 @@ type BusinessIntentNode = {
   displayMode?: "expanded" | "minimized";
 };
 
-export const BUSINESS_PORT_TOP = 112;
+export const BUSINESS_PORT_TOP = 66;
 export const BUSINESS_PORT_ROW = 28;
 export const BUSINESS_PORT_HEIGHT = 24;
 export const BUSINESS_PORT_DOT_OFFSET = 9;
@@ -77,6 +77,8 @@ export const businessNodeMinimumHeight = (node: BusinessIntentNode) => {
     rows > 0
       ? BUSINESS_PORT_TOP +
           rows * BUSINESS_PORT_ROW +
+          8 +
+          40 +
           BUSINESS_NODE_BOTTOM_PADDING
       : 140,
   );
