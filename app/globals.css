@@ -2940,8 +2940,8 @@ code,
 
 .runtime-mode-toggle {
   right: 8px;
-  top: auto;
-  bottom: 8px;
+  top: calc(100% + 8px);
+  bottom: auto;
 }
 
 .business-node-ports i.output > span {
@@ -2951,8 +2951,8 @@ code,
 .business-mode-toggle {
   z-index: 8;
   right: 8px;
-  top: auto;
-  bottom: 8px;
+  top: calc(100% + 8px);
+  bottom: auto;
 }
 
 .resize-mode-toggle {

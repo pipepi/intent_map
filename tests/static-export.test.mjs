@@ -269,11 +269,15 @@ test("keeps scope changes visible and separates the reference from business cont
   assert.match(css, /\.business-node\s*\{[\s\S]*z-index:\s*2;/);
   assert.match(css, /\.business-container-interfaces\s*\{[\s\S]*z-index:\s*3;/);
   assert.match(css, /\.business-node:focus-visible:not\(\.selected\)/);
-  assert.match(css, /\.runtime-mode-toggle\s*\{[\s\S]*bottom:\s*8px;/);
   assert.match(
     css,
-    /\.business-mode-toggle\s*\{[\s\S]*right:\s*8px;[\s\S]*top:\s*auto;[\s\S]*bottom:\s*8px;/,
+    /\.runtime-mode-toggle\s*\{[\s\S]*top:\s*calc\(100% \+ 8px\);[\s\S]*bottom:\s*auto;/,
   );
+  assert.match(
+    css,
+    /\.business-mode-toggle\s*\{[\s\S]*right:\s*8px;[\s\S]*top:\s*calc\(100% \+ 8px\);[\s\S]*bottom:\s*auto;/,
+  );
+  assert.match(page, /top:\s*worldSize\.height \+ 8/);
   assert.match(css, /\.everything-app\s*\{[\s\S]*height:\s*100dvh;[\s\S]*min-height:\s*0;/);
   assert.match(css, /\.business-scope-reference-card\s*\{[\s\S]*overflow:\s*hidden;/);
 });

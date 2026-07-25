@@ -2722,7 +2722,7 @@ export default function Home() {
                   className={`resize-mode-toggle container-mode-toggle ${nodeResizeMode(scopeNode)} ${selectedAppNodeId === scopeNode.id ? "selected" : ""}`}
                   style={{
                     left: worldSize.width - 40,
-                    top: worldSize.height - 30,
+                    top: worldSize.height + 8,
                   }}
                   aria-label={
                     nodeResizeMode(scopeNode) === "simple"
