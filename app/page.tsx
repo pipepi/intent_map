@@ -41,6 +41,12 @@ import {
   type RuntimeCommand,
 } from "./runtime/registry";
 import {
+  DEFAULT_PIP_LOADER_SOURCE,
+  decodePip,
+  encodePip,
+  runPipLoader,
+} from "./runtime/pip";
+import {
   BUSINESS_CONTAINER_PORT_TOP,
   BUSINESS_PORT_ROW,
   BUSINESS_PORT_TOP,
@@ -478,6 +484,16 @@ const downloadJson = (name: string, value: unknown) => {
   const blob = new Blob([serializeIntentDocument(value as IntentDocumentV2)], {
     type: "application/json",
   });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const downloadBytes = (name: string, bytes: Uint8Array, type: string) => {
+  const blob = new Blob([bytes as BlobPart], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -1508,22 +1524,68 @@ export default function Home() {
     setDocumentState(next);
   };
 
+  const applyLoadedDocument = (loaded: IntentDocumentV2) => {
+    setHistory((items) => [...items, documentState]);
+    setDocumentState(loaded);
+    dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
+      scopeId: loaded.businessRootId,
+      selectionId: loaded.businessRootId,
+    });
+    setNavigationStack([{ domain: "app", nodeId: loaded.rootIntent.id }]);
+    setDirty(false);
+  };
+
+  const exportPip = async () => {
+    try {
+      const bytes = await encodePip({
+        manifest: {
+          packageId: "intent-map.document",
+          name: "Intent Map",
+          packageVersion: "0.1.0",
+          rootNodeId: documentState.rootIntent.id,
+          loaderAbi: "pip-loader/1",
+          requiredCapabilities: [],
+          createdAt: new Date().toISOString(),
+          contentType: "application/vnd.intent-map.pip",
+        },
+        loaderSource: DEFAULT_PIP_LOADER_SOURCE,
+        rootTreeText: serializeIntentDocument(documentState),
+        assets: [],
+      });
+      downloadBytes("intent-map.pip", bytes, "application/vnd.intent-map.pip");
+      setDirty(false);
+      setToast("PIP 种子已导出");
+    } catch (error) {
+      setToast(error instanceof Error ? `PIP 导出失败：${error.message}` : "PIP 导出失败");
+    }
+  };
+
+  const loadPipBytes = async (bytes: ArrayBuffer, requireConfirmation: boolean) => {
+    const pip = await decodePip(bytes);
+    if (
+      requireConfirmation &&
+      !window.confirm(
+        `“${pip.manifest.name}”包含 JavaScript Loader。SHA-256 只能验证完整性，不能证明发布者可信。是否在隔离 Worker 中运行？`,
+      )
+    ) {
+      throw new Error("用户取消运行 PIP Loader");
+    }
+    const parsed = await runPipLoader(
+      pip.loaderSource,
+      pip.manifest,
+      pip.rootTreeText,
+    );
+    return loadIntentDocument(parsed);
+  };
+
   const importDocument = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      const loaded = loadIntentDocument(parsed);
-      setHistory((items) => [...items, documentState]);
-      setDocumentState(loaded);
-      dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
-        scopeId: loaded.businessRootId,
-        selectionId: loaded.businessRootId,
-      });
-      setNavigationStack([
-        { domain: "app", nodeId: loaded.rootIntent.id },
-      ]);
-      setDirty(false);
+      const loaded = file.name.toLowerCase().endsWith(".pip")
+        ? await loadPipBytes(await file.arrayBuffer(), true)
+        : loadIntentDocument(JSON.parse(await file.text()) as unknown);
+      applyLoadedDocument(loaded);
       setToast("文档已在临时状态校验并加载");
     } catch (error) {
       setToast(error instanceof Error ? `导入失败：${error.message}` : "导入失败");
@@ -1531,6 +1593,34 @@ export default function Home() {
       event.target.value = "";
     }
   };
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (!token) return;
+    let cancelled = false;
+    void fetch(`/__pip/package?token=${encodeURIComponent(token)}`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Host 返回 ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then((bytes) => loadPipBytes(bytes, false))
+      .then((loaded) => {
+        if (!cancelled) {
+          applyLoadedDocument(loaded);
+          setToast("已从 Rust 种皮加载 PIP 内树");
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setToast(error instanceof Error ? `种皮加载失败：${error.message}` : "种皮加载失败");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Rust seed bootstraps once from the immutable URL token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const publishModule = () => {
     const existing = documentState.publishedModules.filter(
@@ -2452,6 +2542,7 @@ export default function Home() {
             <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "global_toolbar")}>导入</button>
             <button onClick={() => dispatchRuntimeEvent("EXPORT_V2", "global_toolbar")}>导出 v2</button>
             <button onClick={() => dispatchRuntimeEvent("EXPORT_V1", "global_toolbar")}>兼容 v1</button>
+            <button onClick={() => void exportPip()}>导出 .pip</button>
             <button disabled={!history.length} onClick={() => dispatchRuntimeEvent("UNDO", "global_toolbar")}>撤销</button>
             <button disabled={!future.length} onClick={() => dispatchRuntimeEvent("REDO", "global_toolbar")}>重做</button>
             <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "global_toolbar")}>泳道布局</button>
@@ -2857,7 +2948,7 @@ export default function Home() {
 
   return (
     <main className="everything-app">
-      <input ref={fileInputRef} type="file" accept=".json,.intent-map.json" hidden onChange={importDocument} />
+      <input ref={fileInputRef} type="file" accept=".json,.intent-map.json,.pip" hidden onChange={importDocument} />
       <div
         ref={viewportRef}
         className={`root-node-viewport ${layoutLocked ? "layout-locked" : ""}`}

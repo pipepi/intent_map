@@ -58,8 +58,10 @@ const align8 = (value: number) => (value + 7) & ~7;
 const equalBytes = (left: Uint8Array, right: Uint8Array) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-const sha256 = async (bytes: Uint8Array) =>
-  new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+const sha256 = async (bytes: Uint8Array) => {
+  const copy = Uint8Array.from(bytes);
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", copy.buffer));
+};
 
 const assertSafeLength = (length: number, label: string) => {
   if (!Number.isSafeInteger(length) || length < 0 || length > MAX_SECTION_SIZE) {
