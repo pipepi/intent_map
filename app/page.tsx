@@ -158,24 +158,21 @@ const freePanelContext = (document: IntentDocumentV3) => {
   );
   const container =
     candidate?.kind === "current-container" ? candidate : undefined;
-  const businessRoot = getBusinessRoot(document);
-  const storedIds =
-    container ? container.navigationStack : [document.businessRootId];
-  const addresses = storedIds.map<ScopeAddress>((nodeId) =>
-    findNode(businessRoot, nodeId)
-      ? {
+  const addresses: ScopeAddress[] = container
+    ? [...container.navigationStack]
+    : [
+        {
           domain: "business",
-          nodeId,
+          nodeId: document.businessRootId,
           viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-        }
-      : { domain: "app", nodeId },
-  );
+        },
+      ];
   if (addresses[0]?.nodeId !== document.rootIntent.id) {
     addresses.unshift({ domain: "app", nodeId: document.rootIntent.id });
   }
   return {
     navigationStack: addresses,
-    scopeId: container?.scopeNodeId ?? document.businessRootId,
+    scopeId: container?.scope.nodeId ?? document.businessRootId,
     selectionId:
       panel?.selection.primaryNodeId ?? document.businessRootId,
   };
@@ -608,18 +605,19 @@ export default function Home() {
         "free-layout-container",
         (surface) => {
           if (surface.kind !== "current-container") return surface;
-          const nextStack = navigationStack.map((address) => address.nodeId);
           if (
-            surface.scopeNodeId === scopeNode.id &&
+            scopeCameraKey(surface.scope) === scopeCameraKey(activeAddress) &&
             surface.nodeLayoutLocked === layoutLocked &&
-            surface.navigationStack.join("/") === nextStack.join("/")
+            surface.navigationStack
+              .map(scopeCameraKey)
+              .join("/") === navigationStack.map(scopeCameraKey).join("/")
           ) {
             return surface;
           }
           return {
             ...surface,
-            scopeNodeId: scopeNode.id,
-            navigationStack: nextStack,
+            scope: activeAddress,
+            navigationStack,
             nodeLayoutLocked: layoutLocked,
           };
         },
@@ -627,7 +625,7 @@ export default function Home() {
     );
     // The free-layout canvas persists its private container context.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-  }, [layoutLocked, navigationStack, scopeNode.id]);
+  }, [activeAddress, layoutLocked, navigationStack]);
 
   const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
   const scopeBoundaryEdges = useMemo(
@@ -798,12 +796,13 @@ export default function Home() {
               surface.kind === "current-container"
                 ? {
                     ...surface,
-                    camera: next,
-                    localState: {
-                      ...surface.localState,
-                      cameras: {
-                        ...(surface.localState.cameras ?? {}),
-                        [activeCameraKey]: next,
+                    projections: {
+                      ...surface.projections,
+                      [activeCameraKey]: {
+                        camera: next,
+                        nodeLayouts:
+                          surface.projections[activeCameraKey]?.nodeLayouts ??
+                          {},
                       },
                     },
                   }
@@ -916,7 +915,7 @@ export default function Home() {
       documentState,
       "panel-free-layout",
       "free-layout-container",
-    )?.localState.cameras?.[activeCameraKey];
+    )?.projections[activeCameraKey]?.camera;
     const frame = window.requestAnimationFrame(() => {
       if (fitOnNextScopeRef.current) {
         fitOnNextScopeRef.current = false;

@@ -118,6 +118,60 @@ test("round-trips v3 and rejects v1/v2 without mutating input", () => {
   assert.throws(() => loadIntentDocument({ version: 2 }), /v3 工作区文档/);
 });
 
+test("normalizes legacy v3 surface state only at the load boundary", () => {
+  const legacy = structuredClone(
+    createApplicationDocument(createSampleBusinessRoot()),
+  );
+  const panel = legacy.workspaceState.panels.find(
+    (candidate) => candidate.id === "panel-free-layout",
+  );
+  const container = panel.surfaces.find(
+    (surface) => surface.kind === "current-container",
+  );
+  const feature = legacy.workspaceState.panels[0].surfaces.find(
+    (surface) => surface.kind === "feature-panel",
+  );
+  container.scopeNodeId = "scenario_flow";
+  container.navigationStack = ["business_root", "scenario_flow"];
+  container.camera = { scale: 0.8, x: 24, y: 32 };
+  container.localState = {
+    cameras: {
+      "business:business_root": { scale: 0.7, x: 10, y: 11 },
+    },
+  };
+  delete container.scope;
+  delete container.projections;
+  delete feature.viewport;
+  const before = JSON.stringify(legacy);
+
+  const loaded = loadIntentDocument(legacy);
+  const normalized = getContainerSurface(
+    loaded,
+    "panel-free-layout",
+    "free-layout-container",
+  );
+  const loadedFeature = loaded.workspaceState.panels[0].surfaces.find(
+    (surface) => surface.id === feature.id,
+  );
+  const exported = serializeIntentDocument(loaded);
+
+  assert.equal(JSON.stringify(legacy), before, "load must not mutate its input");
+  assert.deepEqual(normalized.scope, businessScopeAddress("scenario_flow"));
+  assert.deepEqual(
+    normalized.navigationStack,
+    ["business_root", "scenario_flow"].map(businessScopeAddress),
+  );
+  assert.deepEqual(
+    normalized.projections["business:scenario_flow"].camera,
+    container.camera,
+  );
+  assert.deepEqual(loadedFeature.viewport, {
+    camera: { scale: 1, x: 0, y: 0 },
+    fitMode: "auto",
+  });
+  assert.doesNotMatch(exported, /"scopeNodeId"|"cameras"/);
+});
+
 test("resolves panel selection, fixed source, and fixed subject independently", () => {
   let document = createApplicationDocument(createSampleBusinessRoot());
   document = updatePanel(document, "panel-workbench", (panel) => ({

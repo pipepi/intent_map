@@ -19,10 +19,12 @@ import type {
   WorkspaceState,
 } from "./model";
 import {
+  businessScopeAddress,
   getBusinessRoot,
   isCoreWorkspacePanel,
   removeWorkspacePanel,
   resolveFeatureContext,
+  scopeCameraKey,
 } from "./model";
 
 type TraceItem = {
@@ -218,9 +220,14 @@ export function Workspace({
             title: "当前容器",
             frame: { x: 0.25, y: 0.08, width: 0.5, height: 0.55 },
             zIndex: 1,
-            scopeNodeId: businessRoot.id,
-            navigationStack: [businessRoot.id],
-            camera: { scale: 0.55, x: 12, y: 12 },
+            scope: businessScopeAddress(businessRoot.id),
+            navigationStack: [businessScopeAddress(businessRoot.id)],
+            projections: {
+              [scopeCameraKey(businessScopeAddress(businessRoot.id))]: {
+                camera: { scale: 0.55, x: 12, y: 12 },
+                nodeLayouts: {},
+              },
+            },
             nodeLayoutLocked: false,
             localState: {},
           };
@@ -250,6 +257,10 @@ export function Workspace({
         height: 0.4,
       },
       zIndex: Math.max(0, ...panel.surfaces.map((item) => item.zIndex)) + 1,
+      viewport: {
+        camera: { scale: 1, x: 0, y: 0 },
+        fitMode: "auto",
+      },
       contextSource: { mode: "follow-active-container" },
       subject: { mode: "follow-panel-selection" },
       localState: {},
@@ -422,6 +433,7 @@ export function Workspace({
   ) => {
     const path = findPath(businessRoot, nodeId);
     if (!path) return;
+    const navigationStack = path.map(businessScopeAddress);
     onWorkspaceChange(
       updateSurface(
         updatePanel(document.workspaceState, panelId, (panel) => ({
@@ -439,8 +451,8 @@ export function Workspace({
           candidate.kind === "current-container"
             ? {
                 ...candidate,
-                scopeNodeId: nodeId,
-                navigationStack: path,
+                scope: businessScopeAddress(nodeId),
+                navigationStack,
               }
             : candidate,
       ),
@@ -473,7 +485,7 @@ export function Workspace({
   ) => {
     const context = resolveFeatureContext(document, panel.id, surface.id);
     const containerScope = context.container
-      ? findNode(businessRoot, context.container.scopeNodeId)
+      ? findNode(businessRoot, context.container.scope.nodeId)
       : undefined;
 
     if (surface.featureNodeId === "intent_tree") {
@@ -571,7 +583,13 @@ export function Workspace({
     panel: PanelInstance,
     surface: ContainerSurface,
   ) => {
-    const scope = findNode(businessRoot, surface.scopeNodeId);
+    const scope = findNode(businessRoot, surface.scope.nodeId);
+    const projectionKey = scopeCameraKey(surface.scope);
+    const camera = surface.projections[projectionKey]?.camera ?? {
+      scale: 0.55,
+      x: 12,
+      y: 12,
+    };
     if (!scope) {
       return <div className="surface-empty">当前容器节点已不存在</div>;
     }
@@ -584,14 +602,17 @@ export function Workspace({
           <button
             disabled={surface.navigationStack.length <= 1}
             onClick={() => {
-              const parentId = surface.navigationStack.at(-2);
-              if (parentId) navigateContainer(panel.id, surface, parentId);
+              const parent = surface.navigationStack.at(-2);
+              if (parent) navigateContainer(panel.id, surface, parent.nodeId);
             }}
           >
             ←
           </button>
           <strong>{scope.name}</strong>
-          <span>{Math.round(surface.camera.scale * 100)}%</span>
+          <span>
+            {Math.round(camera.scale * 100)}
+            %
+          </span>
           <button
             onClick={() =>
               onWorkspaceChange(
@@ -603,12 +624,17 @@ export function Workspace({
                     candidate.kind === "current-container"
                       ? {
                           ...candidate,
-                          camera: {
-                            ...candidate.camera,
-                            scale: Math.max(
-                              0.5,
-                              candidate.camera.scale - 0.1,
-                            ),
+                          projections: {
+                            ...candidate.projections,
+                            [projectionKey]: {
+                              nodeLayouts:
+                                candidate.projections[projectionKey]
+                                  ?.nodeLayouts ?? {},
+                              camera: {
+                                ...camera,
+                                scale: Math.max(0.5, camera.scale - 0.1),
+                              },
+                            },
                           },
                         }
                       : candidate,
@@ -629,12 +655,17 @@ export function Workspace({
                     candidate.kind === "current-container"
                       ? {
                           ...candidate,
-                          camera: {
-                            ...candidate.camera,
-                            scale: Math.min(
-                              2,
-                              candidate.camera.scale + 0.1,
-                            ),
+                          projections: {
+                            ...candidate.projections,
+                            [projectionKey]: {
+                              nodeLayouts:
+                                candidate.projections[projectionKey]
+                                  ?.nodeLayouts ?? {},
+                              camera: {
+                                ...camera,
+                                scale: Math.min(2, camera.scale + 0.1),
+                              },
+                            },
                           },
                         }
                       : candidate,
@@ -652,7 +683,7 @@ export function Workspace({
         )}
         <div
           className="surface-container-grid"
-          style={{ "--surface-scale": surface.camera.scale } as CSSProperties}
+          style={{ "--surface-scale": camera.scale } as CSSProperties}
         >
           {(scope.children ?? []).map((node) => (
             <button

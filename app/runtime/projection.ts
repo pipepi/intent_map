@@ -1,29 +1,17 @@
 import type {
-  CameraState,
   IntentNode,
+  NodeProjectionLayout,
   ScopeAddress,
   SurfaceInstance,
 } from "./model";
 
 export const PROJECTION_LOD_THRESHOLD = 0.55;
 
-export type NodeProjectionFrame = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-export type NodeProjectionLayout = {
-  frame: NodeProjectionFrame;
-  displayMode: "expanded" | "minimized";
-  resizeMode: "simple" | "full";
-};
-
-export type ScopeProjectionState = {
-  camera: CameraState;
-  nodeLayouts: Record<string, NodeProjectionLayout>;
-};
+export type {
+  NodeProjectionFrame,
+  NodeProjectionLayout,
+  ScopeProjectionState,
+} from "./model";
 
 export const scopeProjectionKey = (
   scope: Pick<ScopeAddress, "domain" | "nodeId">,

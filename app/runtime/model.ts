@@ -111,6 +111,29 @@ export type SurfaceSubject =
   | { mode: "follow-panel-selection" }
   | { mode: "fixed-node"; nodeId: string };
 
+export type NodeProjectionFrame = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type NodeProjectionLayout = {
+  frame: NodeProjectionFrame;
+  displayMode: "expanded" | "minimized";
+  resizeMode: "simple" | "full";
+};
+
+export type ScopeProjectionState = {
+  camera: CameraState;
+  nodeLayouts: Record<string, NodeProjectionLayout>;
+};
+
+export type SurfaceViewport = {
+  camera: CameraState;
+  fitMode: "auto" | "manual";
+};
+
 export type FeaturePanelSurface = {
   kind: "feature-panel";
   id: string;
@@ -118,6 +141,7 @@ export type FeaturePanelSurface = {
   title: string;
   frame: NormalizedFrame;
   zIndex: number;
+  viewport: SurfaceViewport;
   contextSource: SurfaceContextSource;
   subject: SurfaceSubject;
   localState: Record<string, JsonValue>;
@@ -129,14 +153,11 @@ export type ContainerSurface = {
   title: string;
   frame: NormalizedFrame;
   zIndex: number;
-  scopeNodeId: string;
-  navigationStack: string[];
-  camera: CameraState;
+  scope: ScopeAddress;
+  navigationStack: ScopeAddress[];
+  projections: Record<string, ScopeProjectionState>;
   nodeLayoutLocked: boolean;
-  localState: {
-    cameras?: Record<string, CameraState>;
-    [key: string]: JsonValue | Record<string, CameraState> | undefined;
-  };
+  localState: Record<string, JsonValue>;
 };
 
 export type SurfaceInstance = FeaturePanelSurface | ContainerSurface;
@@ -623,15 +644,26 @@ const defaultContainerSurface = (
   title,
   frame,
   zIndex: 1,
-  scopeNodeId: businessRootId,
-  navigationStack: [businessRootId],
-  camera: { scale: 0.55, x: 12, y: 12 },
-  nodeLayoutLocked: false,
-  localState: {
-    cameras: {
-      [`business:${businessRootId}`]: { scale: 0.55, x: 12, y: 12 },
+  scope: {
+    domain: "business",
+    nodeId: businessRootId,
+    viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+  },
+  navigationStack: [
+    {
+      domain: "business",
+      nodeId: businessRootId,
+      viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+    },
+  ],
+  projections: {
+    [`business:${businessRootId}`]: {
+      camera: { scale: 0.55, x: 12, y: 12 },
+      nodeLayouts: {},
     },
   },
+  nodeLayoutLocked: false,
+  localState: {},
 });
 
 const defaultFeatureSurface = (
@@ -646,6 +678,10 @@ const defaultFeatureSurface = (
   featureNodeId,
   frame,
   zIndex: 2,
+  viewport: {
+    camera: { scale: 1, x: 0, y: 0 },
+    fitMode: "auto",
+  },
   contextSource: { mode: "follow-active-container" },
   subject: { mode: "follow-panel-selection" },
   localState: {},
@@ -833,6 +869,132 @@ export const createApplicationDocument = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+const isCameraState = (value: unknown): value is CameraState =>
+  isRecord(value) &&
+  ["scale", "x", "y"].every(
+    (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
+  );
+
+const normalizeScopeAddress = (
+  value: unknown,
+  root: IntentNode,
+  businessRoot: IntentNode,
+): ScopeAddress | undefined => {
+  if (isRecord(value) && typeof value.nodeId === "string") {
+    if (value.domain === "business" && findNode(businessRoot, value.nodeId)) {
+      return businessScopeAddress(value.nodeId);
+    }
+    if (value.domain === "app" && findNode(root, value.nodeId)) {
+      return appScopeAddress(value.nodeId);
+    }
+  }
+  if (typeof value !== "string") return undefined;
+  return findNode(businessRoot, value)
+    ? businessScopeAddress(value)
+    : findNode(root, value)
+      ? appScopeAddress(value)
+      : undefined;
+};
+
+const normalizeSurfaceState = (
+  rawSurface: unknown,
+  root: IntentNode,
+  businessRoot: IntentNode,
+) => {
+  if (!isRecord(rawSurface)) return;
+  if (rawSurface.kind === "feature-panel") {
+    if (!isRecord(rawSurface.viewport)) {
+      rawSurface.viewport = {
+        camera: { scale: 1, x: 0, y: 0 },
+        fitMode: "auto",
+      };
+    }
+    return;
+  }
+  if (rawSurface.kind !== "current-container") return;
+
+  const scope =
+    normalizeScopeAddress(rawSurface.scope, root, businessRoot) ??
+    normalizeScopeAddress(rawSurface.scopeNodeId, root, businessRoot) ??
+    businessScopeAddress(businessRoot.id);
+  const rawStack = Array.isArray(rawSurface.navigationStack)
+    ? rawSurface.navigationStack
+    : [];
+  const navigationStack = rawStack
+    .map((item) => normalizeScopeAddress(item, root, businessRoot))
+    .filter((item): item is ScopeAddress => Boolean(item));
+  rawSurface.scope = scope;
+  rawSurface.navigationStack = navigationStack.length
+    ? navigationStack
+    : [scope];
+
+  const projections = isRecord(rawSurface.projections)
+    ? rawSurface.projections
+    : {};
+  const legacyLocalState = isRecord(rawSurface.localState)
+    ? rawSurface.localState
+    : {};
+  const legacyCameras = isRecord(legacyLocalState.cameras)
+    ? legacyLocalState.cameras
+    : {};
+  for (const [key, camera] of Object.entries(legacyCameras)) {
+    if (isCameraState(camera) && !isRecord(projections[key])) {
+      projections[key] = { camera, nodeLayouts: {} };
+    }
+  }
+  const activeKey = scopeCameraKey(scope);
+  if (!isRecord(projections[activeKey])) {
+    projections[activeKey] = {
+      camera: isCameraState(rawSurface.camera)
+        ? rawSurface.camera
+        : { scale: 0.55, x: 12, y: 12 },
+      nodeLayouts: {},
+    };
+  }
+  rawSurface.projections = projections;
+  const localState = { ...legacyLocalState };
+  delete localState.cameras;
+  rawSurface.localState = localState;
+  delete rawSurface.scopeNodeId;
+  delete rawSurface.camera;
+};
+
+const normalizeV3Document = (input: Record<string, unknown>) => {
+  const normalized = cloneWithoutEdges(input) as unknown as Record<
+    string,
+    unknown
+  >;
+  if (
+    !isRecord(normalized.rootIntent) ||
+    typeof normalized.businessRootId !== "string"
+  ) {
+    return normalized;
+  }
+  const root = normalized.rootIntent as unknown as IntentNode;
+  const businessRoot = findNode(root, normalized.businessRootId);
+  if (!businessRoot) return normalized;
+  if (Array.isArray(normalized.views)) {
+    for (const view of normalized.views) {
+      if (!isRecord(view) || !Array.isArray(view.surfaceTemplates)) continue;
+      view.surfaceTemplates.forEach((surface) =>
+        normalizeSurfaceState(surface, root, businessRoot),
+      );
+    }
+  }
+  if (
+    isRecord(normalized.workspaceState) &&
+    Array.isArray(normalized.workspaceState.panels)
+  ) {
+    for (const panel of normalized.workspaceState.panels) {
+      if (!isRecord(panel) || !Array.isArray(panel.surfaces)) continue;
+      panel.surfaces.forEach((surface) =>
+        normalizeSurfaceState(surface, root, businessRoot),
+      );
+    }
+  }
+  return normalized;
+};
+
 const assertNodeShape: (
   value: unknown,
   path: string,
@@ -872,6 +1034,55 @@ const assertFrame = (value: unknown, path: string) => {
   }
 };
 
+const assertCamera = (value: unknown, path: string) => {
+  if (
+    !isRecord(value) ||
+    typeof value.scale !== "number" ||
+    !Number.isFinite(value.scale) ||
+    value.scale <= 0 ||
+    typeof value.x !== "number" ||
+    !Number.isFinite(value.x) ||
+    typeof value.y !== "number" ||
+    !Number.isFinite(value.y)
+  ) {
+    throw new Error(`${path}: invalid camera`);
+  }
+};
+
+const assertScopeAddressShape = (
+  value: unknown,
+  path: string,
+  root: IntentNode,
+) => {
+  if (
+    !isRecord(value) ||
+    !["app", "business"].includes(String(value.domain)) ||
+    typeof value.nodeId !== "string" ||
+    !findNode(root, value.nodeId)
+  ) {
+    throw new Error(`${path}: invalid scope address`);
+  }
+  if (
+    value.domain === "business" &&
+    value.viaReferenceId !== ACTIVE_BUSINESS_SCOPE_REF_ID
+  ) {
+    throw new Error(`${path}: invalid business reference`);
+  }
+};
+
+const assertProjectionFrame = (value: unknown, path: string) => {
+  if (
+    !isRecord(value) ||
+    !["x", "y", "width", "height"].every(
+      (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
+    ) ||
+    (value.width as number) <= 0 ||
+    (value.height as number) <= 0
+  ) {
+    throw new Error(`${path}: invalid node projection frame`);
+  }
+};
+
 function assertSurface(
   value: unknown,
   path: string,
@@ -887,12 +1098,41 @@ function assertSurface(
   assertFrame(value.frame, `${path}.frame`);
   if (value.kind === "current-container") {
     if (
-      typeof value.scopeNodeId !== "string" ||
-      !findNode(root, value.scopeNodeId) ||
       !Array.isArray(value.navigationStack) ||
-      !isRecord(value.camera)
+      !isRecord(value.projections)
     ) {
       throw new Error(`${path}: 无效当前容器 Surface`);
+    }
+    assertScopeAddressShape(value.scope, `${path}.scope`, root);
+    value.navigationStack.forEach((scope, index) =>
+      assertScopeAddressShape(
+        scope,
+        `${path}.navigationStack[${index}]`,
+        root,
+      ),
+    );
+    for (const [key, projection] of Object.entries(value.projections)) {
+      if (!isRecord(projection) || !isRecord(projection.nodeLayouts)) {
+        throw new Error(`${path}.projections.${key}: invalid projection`);
+      }
+      assertCamera(projection.camera, `${path}.projections.${key}.camera`);
+      for (const [nodeId, layout] of Object.entries(
+        projection.nodeLayouts,
+      )) {
+        if (
+          !isRecord(layout) ||
+          !["expanded", "minimized"].includes(String(layout.displayMode)) ||
+          !["simple", "full"].includes(String(layout.resizeMode))
+        ) {
+          throw new Error(
+            `${path}.projections.${key}.nodeLayouts.${nodeId}: invalid layout`,
+          );
+        }
+        assertProjectionFrame(
+          layout.frame,
+          `${path}.projections.${key}.nodeLayouts.${nodeId}.frame`,
+        );
+      }
     }
     return;
   }
@@ -903,11 +1143,14 @@ function assertSurface(
     if (
       !feature ||
       feature.kind !== "renderer" ||
+      !isRecord(value.viewport) ||
+      !["auto", "manual"].includes(String(value.viewport.fitMode)) ||
       !isRecord(value.contextSource) ||
       !isRecord(value.subject)
     ) {
       throw new Error(`${path}: 无效功能面板 Surface`);
     }
+    assertCamera(value.viewport.camera, `${path}.viewport.camera`);
     return;
   }
   throw new Error(`${path}: 不支持的 Surface 类型`);
@@ -1020,16 +1263,21 @@ export const loadIntentDocument = (input: unknown): IntentDocumentV3 => {
       `不支持的文档版本：${String(input.version)}；请导入 v3 工作区文档`,
     );
   }
-  assertNodeShape(input.rootIntent, "rootIntent");
+  const normalized = normalizeV3Document(input);
+  assertNodeShape(normalized.rootIntent, "rootIntent");
   if (
-    typeof input.businessRootId !== "string" ||
-    !findNode(input.rootIntent, input.businessRootId)
+    typeof normalized.businessRootId !== "string" ||
+    !findNode(normalized.rootIntent, normalized.businessRootId)
   ) {
     throw new Error(`业务根节点不存在：${String(input.businessRootId)}`);
   }
-  assertViews(input.views, input.rootIntent);
-  assertWorkspace(input.workspaceState, input.views, input.rootIntent);
-  const cloned = cloneWithoutEdges(input) as unknown as IntentDocumentV3;
+  assertViews(normalized.views, normalized.rootIntent);
+  assertWorkspace(
+    normalized.workspaceState,
+    normalized.views,
+    normalized.rootIntent,
+  );
+  const cloned = normalized as unknown as IntentDocumentV3;
   cloned.publishedModules ??= [];
   return cloned;
 };
