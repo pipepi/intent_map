@@ -668,9 +668,12 @@ export function Workspace({
     panelId: string,
     surface: ContainerSurface,
     nodeId: string,
+    resetCamera = false,
   ) => {
     const path = findPath(businessRoot, nodeId);
     if (!path) return;
+    const targetScope = businessScopeAddress(nodeId);
+    const targetProjectionKey = scopeCameraKey(targetScope);
     const navigationStack = path.map(businessScopeAddress);
     onWorkspaceChange(
       updateSurface(
@@ -687,11 +690,22 @@ export function Workspace({
         surface.id,
         (candidate) =>
           candidate.kind === "current-container"
-            ? {
-                ...candidate,
-                scope: businessScopeAddress(nodeId),
-                navigationStack,
-              }
+              ? {
+                  ...candidate,
+                  scope: targetScope,
+                  navigationStack,
+                  projections: resetCamera
+                    ? {
+                        ...candidate.projections,
+                        [targetProjectionKey]: {
+                          camera: { scale: 1, x: 12, y: 12 },
+                          nodeLayouts:
+                            candidate.projections[targetProjectionKey]
+                              ?.nodeLayouts ?? {},
+                        },
+                      }
+                    : candidate.projections,
+                }
             : candidate,
       ),
     );
@@ -771,7 +785,18 @@ export function Workspace({
           y: worldY,
         });
         if (nearestChild) {
-          navigateContainer(panel.id, surface, nearestChild.id);
+          navigateContainer(panel.id, surface, nearestChild.id, true);
+          return;
+        }
+      }
+      if (
+        event.deltaY > 0 &&
+        scale <= 0.5 &&
+        surface.navigationStack.length > 1
+      ) {
+        const parent = surface.navigationStack.at(-2);
+        if (parent) {
+          navigateContainer(panel.id, surface, parent.nodeId, true);
           return;
         }
       }

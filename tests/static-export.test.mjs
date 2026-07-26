@@ -73,6 +73,8 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /const MIN_SCALE = 0\.5/);
   assert.match(page, /const MAX_SCALE = 2/);
   assert.match(page, /nearestNode\(event\.clientX, event\.clientY\)/);
+  assert.match(page, /resetScaleOnNextScopeRef/);
+  assert.match(page, /centerScopeAtScale\(1\)/);
   assert.match(page, /const \[navigationStack, setNavigationStack\]/);
   assert.match(page, /navigateToParent\(\)/);
   assert.match(page, /scopeCameraKey\(activeAddress\)/);
@@ -244,7 +246,16 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   assert.match(workspace, /nearestBusinessChild\(scope\?\.children \?\? \[\]/);
   assert.match(
     workspace,
-    /navigateContainer\(panel\.id, surface, nearestChild\.id\)/,
+    /navigateContainer\(panel\.id, surface, nearestChild\.id, true\)/,
+  );
+  assert.match(workspace, /camera: \{ scale: 1, x: 12, y: 12 \}/);
+  assert.match(
+    workspace,
+    /scale <= 0\.5[\s\S]*?surface\.navigationStack\.length > 1/,
+  );
+  assert.match(
+    workspace,
+    /navigateContainer\(panel\.id, surface, parent\.nodeId, true\)/,
   );
   assert.match(workspace, /className="workspace-panel-switcher"/);
   assert.match(workspace, /const \[focusedPanelId,\s*setFocusedPanelId\]/);

@@ -550,6 +550,7 @@ export default function Home() {
   const cameraRef = useRef(camera);
   const lastEnterAtRef = useRef(0);
   const fitOnNextScopeRef = useRef(false);
+  const resetScaleOnNextScopeRef = useRef(false);
   const touchPointersRef = useRef(
     new Map<number, { x: number; y: number }>(),
   );
@@ -1074,7 +1075,12 @@ export default function Home() {
       "free-layout-container",
     )?.projections[activeCameraKey]?.camera;
     const frame = window.requestAnimationFrame(() => {
-      if (fitOnNextScopeRef.current) {
+      if (resetScaleOnNextScopeRef.current) {
+        resetScaleOnNextScopeRef.current = false;
+        fitOnNextScopeRef.current = false;
+        const centered = centerScopeAtScale(1);
+        if (centered) setScopeCamera(centered, true);
+      } else if (fitOnNextScopeRef.current) {
         fitOnNextScopeRef.current = false;
         fitScope();
       } else if (saved && cameraKeepsScopeVisible(saved)) {
@@ -1224,10 +1230,11 @@ export default function Home() {
     return () => window.removeEventListener("beforeunload", warning);
   }, [dirty]);
 
-  const enterNode = (node: IntentNode) => {
+  const enterNode = (node: IntentNode, resetScale = false) => {
     const now = performance.now();
     if (now - lastEnterAtRef.current < 280) return;
     lastEnterAtRef.current = now;
+    if (resetScale) resetScaleOnNextScopeRef.current = true;
     fitOnNextScopeRef.current = true;
     setScopeLegendOpen(false);
     if (node.implementation?.key === "current-container") {
@@ -1322,7 +1329,7 @@ export default function Home() {
     if (direction > 0 && nextScale >= MAX_SCALE) {
       const target = nearestNode(event.clientX, event.clientY);
       if (target) {
-        enterNode(target);
+        enterNode(target, true);
         setToast(`进入「${target.name}」`);
         return;
       }
@@ -1333,6 +1340,7 @@ export default function Home() {
       nextScale <= MIN_SCALE &&
       navigationStack.length > 1
     ) {
+      resetScaleOnNextScopeRef.current = true;
       navigateToParent();
       setToast("返回上级节点");
       return;
