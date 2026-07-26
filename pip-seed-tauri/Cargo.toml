@@ -1,0 +1,19 @@
+[package]
+name = "pip-seed-tauri"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+build = "build.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+pip-core = { path = "../pip-core" }
+tauri = { version = "2", features = [] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
