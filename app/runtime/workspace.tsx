@@ -349,22 +349,17 @@ export function Workspace({
     ? focusedPanelId
     : document.workspaceState.activePanelId;
   useEffect(() => {
-    const preventPageZoomInsideCanvas = (event: WheelEvent) => {
-      const target = event.target;
-      if (
-        event.ctrlKey &&
-        target instanceof Element &&
-        target.closest(".surface-business-viewport, .root-node-viewport")
-      ) {
+    const preventWebViewPageZoom = (event: WheelEvent) => {
+      if (event.ctrlKey) {
         event.preventDefault();
       }
     };
-    window.addEventListener("wheel", preventPageZoomInsideCanvas, {
+    window.addEventListener("wheel", preventWebViewPageZoom, {
       capture: true,
       passive: false,
     });
     return () =>
-      window.removeEventListener("wheel", preventPageZoomInsideCanvas, {
+      window.removeEventListener("wheel", preventWebViewPageZoom, {
         capture: true,
       });
   }, []);

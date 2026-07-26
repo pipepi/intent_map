@@ -166,10 +166,10 @@ fn run() -> Result<(), String> {
                 .title("Intent Map")
                 .inner_size(1440.0, 900.0)
                 .min_inner_size(960.0, 640.0)
-                // Keep the WebView itself at 100%. Touchscreen pointers and
-                // precision-touchpad Ctrl+wheel gestures are interpreted by
-                // the focused canvas so only its camera changes.
-                .zoom_hotkeys_enabled(false)
+                // WebView2 must expose precision-touchpad pinch as Ctrl+wheel.
+                // The application cancels its page-zoom default in a non-passive
+                // capture listener, then routes it to the focused canvas camera.
+                .zoom_hotkeys_enabled(true)
                 .build()?;
             Ok(())
         })
