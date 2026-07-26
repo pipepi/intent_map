@@ -569,6 +569,7 @@ export default function Home() {
     startCamera: CameraState;
     startCenter: { x: number; y: number };
     startDistance?: number;
+    allowSinglePan: boolean;
   } | null>(null);
   const businessScopeId = runtimeState.scopeId;
   const selectedBusinessNodeId = runtimeState.selectionId;
@@ -1212,6 +1213,10 @@ export default function Home() {
       const target = event.currentTarget;
       const points = touchPointersRef.current;
       points.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const allowSinglePan = !panOrigin.closest(
+        ".runtime-node, .business-node, .graph-node",
+      );
+      if (points.size > 1) event.stopPropagation();
       const measureTouch = () => {
         const active = [...points.values()];
         const rect = target.getBoundingClientRect();
@@ -1238,6 +1243,7 @@ export default function Home() {
         startCamera: { ...cameraRef.current },
         startCenter: startTouch.center,
         startDistance: startTouch.distance,
+        allowSinglePan,
       };
       target.setPointerCapture(event.pointerId);
       const move = (moveEvent: PointerEvent) => {
@@ -1248,6 +1254,11 @@ export default function Home() {
         });
         const gesture = touchGestureRef.current;
         if (!gesture || points.size === 0) return;
+        if (points.size === 1 && !gesture.allowSinglePan) return;
+        if (points.size > 1) {
+          moveEvent.preventDefault();
+          moveEvent.stopPropagation();
+        }
         const currentTouch = measureTouch();
         setScopeCamera(
           cameraForTouchGesture(
@@ -1263,25 +1274,31 @@ export default function Home() {
       };
       const finish = (finishEvent: PointerEvent) => {
         if (finishEvent.pointerId !== event.pointerId) return;
+        const wasPinching = points.size > 1;
+        if (wasPinching) {
+          finishEvent.preventDefault();
+          finishEvent.stopPropagation();
+        }
         points.delete(finishEvent.pointerId);
-        target.removeEventListener("pointermove", move);
-        target.removeEventListener("pointerup", finish);
-        target.removeEventListener("pointercancel", finish);
+        target.removeEventListener("pointermove", move, true);
+        target.removeEventListener("pointerup", finish, true);
+        target.removeEventListener("pointercancel", finish, true);
         if (points.size > 0) {
           const nextTouch = measureTouch();
           touchGestureRef.current = {
             startCamera: { ...cameraRef.current },
             startCenter: nextTouch.center,
             startDistance: nextTouch.distance,
+            allowSinglePan: false,
           };
         } else {
           touchGestureRef.current = null;
           setScopeCamera(cameraRef.current, true);
         }
       };
-      target.addEventListener("pointermove", move);
-      target.addEventListener("pointerup", finish);
-      target.addEventListener("pointercancel", finish);
+      target.addEventListener("pointermove", move, true);
+      target.addEventListener("pointerup", finish, true);
+      target.addEventListener("pointercancel", finish, true);
       return;
     }
     const start = { x: event.clientX, y: event.clientY };
@@ -2973,7 +2990,12 @@ export default function Home() {
         ref={viewportRef}
         className={`root-node-viewport ${layoutLocked ? "layout-locked" : ""}`}
         onWheel={onWheel}
-        onPointerDown={onViewportPointerDown}
+        onPointerDownCapture={(event) => {
+          if (event.pointerType === "touch") onViewportPointerDown(event);
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType !== "touch") onViewportPointerDown(event);
+        }}
       >
         <div className="root-grid" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`, width: renderedWorldSize.width, height: renderedWorldSize.height }}>
           <div
