@@ -213,6 +213,10 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
     new URL("app/runtime/workspace.tsx", root),
     "utf8",
   );
+  const businessProjection = await readFile(
+    new URL("app/runtime/business-graph-projection.tsx", root),
+    "utf8",
+  );
   const css = await readFile(new URL("app/globals.css", root), "utf8");
 
   assert.match(
@@ -227,6 +231,17 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   assert.match(workspace, /data-surface-id=\{surface\.id\}/);
   assert.match(workspace, /className="surface-container-ports"/);
   assert.match(workspace, /currentContainerNode\.inputs\.map/);
+  assert.match(workspace, /onContainerMoveStart=\{moveContainer\}/);
+  assert.match(workspace, /onContainerResizeStart=\{resizeContainer\}/);
+  assert.match(workspace, /scopeWorldSizes/);
+  assert.match(
+    businessProjection,
+    /resizeDirectionsFor\(containerResizeMode\)/,
+  );
+  assert.match(
+    businessProjection,
+    /business-container-mode-toggle/,
+  );
   assert.match(
     workspace,
     /candidate\.dataset\.portNode === nodeId/,

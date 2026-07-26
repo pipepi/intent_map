@@ -1183,6 +1183,7 @@ code,
 }
 
 .surface-container-content {
+  height: 100%;
   min-height: 100%;
   display: grid;
   grid-template-rows: 30px auto minmax(0, 1fr);
@@ -2472,6 +2473,13 @@ code,
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.business-container-header:active {
+  cursor: grabbing;
 }
 
 .business-container-header > span {
@@ -2603,6 +2611,11 @@ code,
   color: #69779d;
   font-family: Consolas, monospace;
   font-size: 9px;
+}
+
+.business-container-mode-toggle {
+  right: 8px;
+  bottom: 46px;
 }
 
 .business-node {

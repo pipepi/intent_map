@@ -796,7 +796,151 @@ export function Workspace({
     if (!scope) {
       return <div className="surface-empty">当前容器节点已不存在</div>;
     }
-    const worldSize = scope.canvasSize ?? { width: 1400, height: 850 };
+    const storedWorldSizes = surface.localState.scopeWorldSizes as
+      | Record<string, { width: number; height: number }>
+      | undefined;
+    const storedResizeModes = surface.localState.scopeResizeModes as
+      | Record<string, "simple" | "full">
+      | undefined;
+    const worldSize =
+      storedWorldSizes?.[projectionKey] ??
+      scope.canvasSize ??
+      { width: 1400, height: 850 };
+    const containerResizeMode =
+      storedResizeModes?.[projectionKey] === "full" ? "full" : "simple";
+    const moveContainer = (event: ReactPointerEvent<HTMLElement>) => {
+      if (surface.nodeLayoutLocked || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const origin = { x: event.clientX, y: event.clientY };
+      const startCamera = { ...camera };
+      const move = (moveEvent: PointerEvent) =>
+        updateCamera({
+          ...startCamera,
+          x: startCamera.x + moveEvent.clientX - origin.x,
+          y: startCamera.y + moveEvent.clientY - origin.y,
+        });
+      const finish = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    };
+    const resizeContainer = (
+      direction: Parameters<typeof resizeBusinessNodeGeometry>[1],
+      event: ReactPointerEvent<HTMLSpanElement>,
+    ) => {
+      if (surface.nodeLayoutLocked || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const origin = { x: event.clientX, y: event.clientY };
+      const startCamera = { ...camera };
+      const contentMinimum = (scope.children ?? []).reduce(
+        (minimum, node) => {
+          const size = businessNodeSize(node);
+          return {
+            width: Math.max(minimum.width, node.position.x + size.width + 80),
+            height: Math.max(minimum.height, node.position.y + size.height + 60),
+          };
+        },
+        { width: 640, height: 420 },
+      );
+      const move = (moveEvent: PointerEvent) => {
+        const dx = (moveEvent.clientX - origin.x) / camera.scale;
+        const dy = (moveEvent.clientY - origin.y) / camera.scale;
+        let width = worldSize.width;
+        let height = worldSize.height;
+        if (direction.includes("e")) {
+          width = Math.max(contentMinimum.width, worldSize.width + dx);
+        }
+        if (direction.includes("s")) {
+          height = Math.max(contentMinimum.height, worldSize.height + dy);
+        }
+        if (direction.includes("w")) {
+          width = Math.max(contentMinimum.width, worldSize.width - dx);
+        }
+        if (direction.includes("n")) {
+          height = Math.max(contentMinimum.height, worldSize.height - dy);
+        }
+        onWorkspaceChange(
+          updateSurface(
+            document.workspaceState,
+            panel.id,
+            surface.id,
+            (candidate) => {
+              if (candidate.kind !== "current-container") return candidate;
+              return {
+                ...candidate,
+                projections: {
+                  ...candidate.projections,
+                  [projectionKey]: {
+                    camera: {
+                      ...startCamera,
+                      x: direction.includes("w")
+                        ? startCamera.x +
+                          (worldSize.width - width) * startCamera.scale
+                        : startCamera.x,
+                      y: direction.includes("n")
+                        ? startCamera.y +
+                          (worldSize.height - height) * startCamera.scale
+                        : startCamera.y,
+                    },
+                    nodeLayouts:
+                      candidate.projections[projectionKey]?.nodeLayouts ?? {},
+                  },
+                },
+                localState: {
+                  ...candidate.localState,
+                  scopeWorldSizes: {
+                    ...((candidate.localState.scopeWorldSizes as Record<
+                      string,
+                      { width: number; height: number }
+                    >) ?? {}),
+                    [projectionKey]: { width, height },
+                  },
+                },
+              };
+            },
+          ),
+        );
+      };
+      const finish = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    };
+    const toggleContainerResizeMode = () =>
+      onWorkspaceChange(
+        updateSurface(
+          document.workspaceState,
+          panel.id,
+          surface.id,
+          (candidate) =>
+            candidate.kind === "current-container"
+              ? {
+                  ...candidate,
+                  localState: {
+                    ...candidate.localState,
+                    scopeResizeModes: {
+                      ...((candidate.localState.scopeResizeModes as Record<
+                        string,
+                        "simple" | "full"
+                      >) ?? {}),
+                      [projectionKey]:
+                        containerResizeMode === "simple" ? "full" : "simple",
+                    },
+                  },
+                }
+              : candidate,
+        ),
+      );
     const storeLayout = (node: IntentNode) =>
       onWorkspaceChange(
         updateSurface(
@@ -1147,11 +1291,15 @@ export function Workspace({
               scale={camera.scale}
               selectedNodeId={panel.selection.primaryNodeId}
               layoutLocked={surface.nodeLayoutLocked}
+              containerResizeMode={containerResizeMode}
               pendingPipe={
                 pendingContainerPipe?.surfaceId === surface.id
                   ? pendingContainerPipe
                   : null
               }
+              onContainerMoveStart={moveContainer}
+              onContainerResizeStart={resizeContainer}
+              onContainerResizeModeToggle={toggleContainerResizeMode}
               onSelect={(node) =>
                 selectNode(panel.id, node.id, surface.id)
               }

@@ -12,6 +12,7 @@ import {
 import {
   resizeDirectionsFor,
   type ResizeDirection,
+  type ResizeMode,
 } from "./node-renderer";
 import { projectionUsesSummary } from "./projection";
 import {
@@ -35,7 +36,16 @@ type BusinessGraphProjectionProps = {
   scale: number;
   selectedNodeId?: string;
   layoutLocked: boolean;
+  containerResizeMode?: ResizeMode;
   pendingPipe?: PendingBusinessPipe | null;
+  onContainerMoveStart?: (
+    event: ReactPointerEvent<HTMLElement>,
+  ) => void;
+  onContainerResizeStart?: (
+    direction: ResizeDirection,
+    event: ReactPointerEvent<HTMLSpanElement>,
+  ) => void;
+  onContainerResizeModeToggle?: () => void;
   onSelect: (node: IntentNode) => void;
   onEnter: (node: IntentNode) => void;
   onMoveStart: (
@@ -67,7 +77,11 @@ export function BusinessGraphProjection({
   scale,
   selectedNodeId,
   layoutLocked,
+  containerResizeMode,
   pendingPipe,
+  onContainerMoveStart,
+  onContainerResizeStart,
+  onContainerResizeModeToggle,
   onSelect,
   onEnter,
   onMoveStart,
@@ -86,7 +100,10 @@ export function BusinessGraphProjection({
         className="business-container-node"
         aria-label={`当前业务容器：${scope.name}`}
       >
-        <header className="business-container-header">
+        <header
+          className="business-container-header"
+          onPointerDown={onContainerMoveStart}
+        >
           <span>{scope.kind.toUpperCase()}</span>
           <div>
             <strong>{scope.name}</strong>
@@ -129,6 +146,39 @@ export function BusinessGraphProjection({
           <span>{scope.children?.length ?? 0} children</span>
           <span>{scope.outputs.length} out</span>
         </footer>
+        {!layoutLocked &&
+          containerResizeMode &&
+          onContainerResizeStart &&
+          onContainerResizeModeToggle && (
+          <>
+            <span className="container-resize-layer" aria-hidden="true">
+              {resizeDirectionsFor(containerResizeMode).map((direction) => (
+                <span
+                  className={`resize-handle resize-${direction}`}
+                  key={direction}
+                  onPointerDown={(event) =>
+                    onContainerResizeStart(direction, event)
+                  }
+                />
+              ))}
+            </span>
+            <button
+              className={`resize-mode-toggle container-mode-toggle business-container-mode-toggle ${containerResizeMode}`}
+              title={
+                containerResizeMode === "simple"
+                  ? "当前容器：右边、下边和右下角 · 点击切换为八向"
+                  : "当前容器：四边四角 · 点击切换为三向"
+              }
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onContainerResizeModeToggle();
+              }}
+            >
+              {containerResizeMode === "simple" ? "┘" : "⤢"}
+            </button>
+          </>
+        )}
       </section>
       <svg
         className="business-edges"
