@@ -33,6 +33,7 @@ import {
   projectIntentTree,
 } from "./projection";
 import { cameraForTouchGesture } from "./camera";
+import { derivePanelPipelineEdges } from "./panel-pipelines";
 import {
   businessScopeAddress,
   getBusinessRoot,
@@ -1160,6 +1161,52 @@ export function Workspace({
     );
   };
 
+  const renderPanelPipelines = (panel: PanelInstance) => {
+    const edges = derivePanelPipelineEdges(document.rootIntent, panel);
+    if (!edges.length) return null;
+    return (
+      <svg
+        className="panel-pipeline-overlay"
+        viewBox="0 0 1000 1000"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        {edges.map((edge) => {
+          const sx = edge.source.x * 1000;
+          const sy = edge.source.y * 1000;
+          const tx = edge.target.x * 1000;
+          const ty = edge.target.y * 1000;
+          const bend = Math.max(55, Math.abs(tx - sx) * 0.42);
+          const highlighted =
+            panel.selection.primaryNodeId === edge.sourceNodeId ||
+            panel.selection.primaryNodeId === edge.targetNodeId ||
+            panel.activeContainerSurfaceId === edge.sourceSurfaceId ||
+            panel.activeContainerSurfaceId === edge.targetSurfaceId;
+          return (
+            <g
+              key={edge.id}
+              className={`panel-pipeline channel-${edge.channel} ${
+                highlighted ? "highlighted" : ""
+              }`}
+              data-source-surface={edge.sourceSurfaceId ?? ""}
+              data-target-surface={edge.targetSurfaceId ?? ""}
+            >
+              <path
+                d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`}
+              />
+              {edge.source.boundary && (
+                <circle className="pipeline-boundary-stub" cx={sx} cy={sy} r="7" />
+              )}
+              {edge.target.boundary && (
+                <circle className="pipeline-boundary-stub" cx={tx} cy={ty} r="7" />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+
   return (
     <div className="workspace-v3">
       <header className="workspace-v3-bar">
@@ -1289,6 +1336,7 @@ export function Workspace({
                 )}
               </header>
               <div className="workspace-panel-body">
+                {!freeLayout && renderPanelPipelines(panel)}
                 {freeLayout ? (
                   <article className="workspace-surface free-layout-surface">
                     <header className="workspace-surface-header">

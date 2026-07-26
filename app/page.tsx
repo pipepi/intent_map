@@ -69,6 +69,10 @@ import {
 } from "./runtime/business-canvas";
 import { BusinessGraphProjection } from "./runtime/business-graph-projection";
 import {
+  deriveNodeBindingEdges,
+  type NodeBindingEdge,
+} from "./runtime/panel-pipelines";
+import {
   createRuntimeEvent,
   processEventBatch,
   type ApplicationRuntimeState,
@@ -87,18 +91,9 @@ type Trace = {
   error?: string;
 };
 
-type DerivedEdge = {
-  id: string;
-  sourceId: string;
-  sourcePortId: string;
-  targetId: string;
-  targetPortId: string;
-  channel: "data" | "event";
-};
-
-type AggregatedEdge = DerivedEdge & {
+type AggregatedEdge = NodeBindingEdge & {
   count: number;
-  members: DerivedEdge[];
+  members: NodeBindingEdge[];
 };
 
 type ScopeBoundaryEdge = {
@@ -207,26 +202,10 @@ const collectRefs = (expression?: Expression): Array<Extract<Expression, { kind:
 
 const nodeSize = (node: IntentNode) => node.size ?? { width: 320, height: 220 };
 const nodeResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
-const deriveEdges = (scope: IntentNode): DerivedEdge[] =>
-  (scope.children ?? []).flatMap((target) =>
-    target.inputs.flatMap((input) =>
-      collectRefs(input.binding)
-        .filter((reference) => reference.nodeId)
-        .map((reference, index) => ({
-          id: `${reference.nodeId}:${reference.portId}>${target.id}:${input.id}:${index}`,
-          sourceId: reference.nodeId!,
-          sourcePortId: reference.portId,
-          targetId: target.id,
-          targetPortId: input.id,
-          channel: input.channel ?? "data",
-        })),
-    ),
-  );
-
-const aggregateEdges = (edges: DerivedEdge[]): AggregatedEdge[] => {
-  const groups = new Map<string, DerivedEdge[]>();
+const aggregateEdges = (edges: NodeBindingEdge[]): AggregatedEdge[] => {
+  const groups = new Map<string, NodeBindingEdge[]>();
   for (const edge of edges) {
-    const key = `${edge.sourceId}>${edge.targetId}:${edge.channel}`;
+    const key = `${edge.sourceNodeId}>${edge.targetNodeId}:${edge.channel}`;
     groups.set(key, [...(groups.get(key) ?? []), edge]);
   }
   return [...groups.entries()].map(([id, members]) => ({
@@ -267,10 +246,14 @@ const deriveScopeBoundaryEdges = (scope: IntentNode): ScopeBoundaryEdge[] => [
 ];
 
 const detectCycle = (scope: IntentNode): string[] | null => {
-  const dataEdges = deriveEdges(scope).filter((edge) => edge.channel === "data");
+  const dataEdges = deriveNodeBindingEdges(scope).filter(
+    (edge) => edge.channel === "data",
+  );
   const graph = new Map<string, string[]>();
   (scope.children ?? []).forEach((child) => graph.set(child.id, []));
-  dataEdges.forEach((edge) => graph.get(edge.targetId)?.push(edge.sourceId));
+  dataEdges.forEach((edge) =>
+    graph.get(edge.targetNodeId)?.push(edge.sourceNodeId),
+  );
   const visiting = new Set<string>();
   const visited = new Set<string>();
   const walk = (id: string, path: string[]): string[] | null => {
@@ -721,7 +704,10 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [activeAddress, layoutLocked, navigationStack]);
 
-  const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
+  const appEdges = useMemo(
+    () => aggregateEdges(deriveNodeBindingEdges(scopeNode)),
+    [scopeNode],
+  );
   const scopeBoundaryEdges = useMemo(
     () => deriveScopeBoundaryEdges(scopeNode),
     [scopeNode],
@@ -2862,8 +2848,8 @@ export default function Home() {
   };
 
   const renderEdge = (edge: AggregatedEdge) => {
-    const source = findNode(scopeNode, edge.sourceId);
-    const target = findNode(scopeNode, edge.targetId);
+    const source = findNode(scopeNode, edge.sourceNodeId);
+    const target = findNode(scopeNode, edge.targetNodeId);
     if (!source || !target) return null;
     const sourceSize = runtimeNodeRenderSize(source);
     const targetSize = runtimeNodeRenderSize(target);
@@ -2884,7 +2870,7 @@ export default function Home() {
     const selected = selectedEdgeId === edge.id;
     return (
       <g
-        className={`runtime-edge channel-${edge.channel} ${selected ? "selected" : ""} ${selectedAppNodeId ? (edge.sourceId === selectedAppNodeId || edge.targetId === selectedAppNodeId ? "edge-connected" : "edge-dim") : ""}`}
+        className={`runtime-edge channel-${edge.channel} ${selected ? "selected" : ""} ${selectedAppNodeId ? (edge.sourceNodeId === selectedAppNodeId || edge.targetNodeId === selectedAppNodeId ? "edge-connected" : "edge-dim") : ""}`}
         key={edge.id}
         onPointerDown={(event) => {
           event.stopPropagation();

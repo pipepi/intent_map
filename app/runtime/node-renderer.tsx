@@ -179,6 +179,9 @@ export function NodeProjection({
               {node.inputs.map((input, index) => (
                 <span
                   className={`runtime-port runtime-port-input channel-${input.channel ?? "data"}`}
+                  data-port-kind="input"
+                  data-port-node={node.id}
+                  data-port-id={input.id}
                   style={{ top: 16 + index * 26 }}
                   key={input.id}
                   title={
@@ -198,6 +201,9 @@ export function NodeProjection({
               {node.outputs.map((output, index) => (
                 <span
                   className={`runtime-port runtime-port-output channel-${output.channel ?? "data"}`}
+                  data-port-kind="output"
+                  data-port-node={node.id}
+                  data-port-id={output.id}
                   style={{ top: 16 + index * 26 }}
                   key={output.id}
                   title={output.name}

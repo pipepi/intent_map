@@ -194,8 +194,14 @@ test("builds distributable PIP assets from a clean and coherent static export", 
 test("derives and aggregates root pipes without persisting edges", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
   const model = await readFile(new URL("app/runtime/model.ts", root), "utf8");
+  const pipelines = await readFile(
+    new URL("app/runtime/panel-pipelines.ts", root),
+    "utf8",
+  );
 
-  assert.match(page, /const deriveEdges/);
+  assert.match(page, /deriveNodeBindingEdges\(scopeNode\)/);
+  assert.match(pipelines, /export const deriveNodeBindingEdges/);
+  assert.match(pipelines, /deriveNodeBindingEdges\(root\)/);
   assert.match(page, /const aggregateEdges/);
   assert.match(page, /selectedEdgeId/);
   assert.match(page, /edge\.members\.map/);
