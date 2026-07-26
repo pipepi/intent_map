@@ -244,7 +244,7 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   );
   assert.match(
     css,
-    /\.resize-mode-toggle\.business-container-mode-toggle\s*\{[^}]*opacity:\s*1[^}]*pointer-events:\s*auto/s,
+    /\.resize-mode-toggle\.business-container-mode-toggle\s*\{[^}]*top:\s*calc\(100% \+ 8px\)[^}]*bottom:\s*auto[^}]*opacity:\s*1[^}]*pointer-events:\s*auto/s,
   );
   assert.match(
     css,

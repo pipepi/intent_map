@@ -2615,7 +2615,8 @@ code,
 
 .resize-mode-toggle.business-container-mode-toggle {
   right: 8px;
-  bottom: 46px;
+  top: calc(100% + 8px);
+  bottom: auto;
   opacity: 1;
   pointer-events: auto;
 }
