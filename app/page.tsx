@@ -124,17 +124,6 @@ const uid = (prefix = "id") =>
 const sampleDocument = () =>
   createApplicationDocument(createSampleBusinessRoot());
 
-const initialNavigationStack = (
-  document: Pick<IntentDocumentV3, "rootIntent" | "businessRootId">,
-): ScopeAddress[] => [
-  { domain: "app", nodeId: document.rootIntent.id },
-  {
-    domain: "business",
-    nodeId: document.businessRootId,
-    viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-  },
-];
-
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const findNode = (node: IntentNode, id: string): IntentNode | undefined => {
@@ -154,6 +143,38 @@ const findPath = (node: IntentNode, id: string, path: IntentNode[] = []): Intent
     if (found) return found;
   }
   return null;
+};
+
+const freePanelContext = (document: IntentDocumentV3) => {
+  const panel = document.workspaceState.panels.find(
+    (candidate) => candidate.id === "panel-free-layout",
+  );
+  const candidate = panel?.surfaces.find(
+    (surface) => surface.id === panel.activeContainerSurfaceId,
+  );
+  const container =
+    candidate?.kind === "current-container" ? candidate : undefined;
+  const businessRoot = getBusinessRoot(document);
+  const storedIds =
+    container ? container.navigationStack : [document.businessRootId];
+  const addresses = storedIds.map<ScopeAddress>((nodeId) =>
+    findNode(businessRoot, nodeId)
+      ? {
+          domain: "business",
+          nodeId,
+          viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+        }
+      : { domain: "app", nodeId },
+  );
+  if (addresses[0]?.nodeId !== document.rootIntent.id) {
+    addresses.unshift({ domain: "app", nodeId: document.rootIntent.id });
+  }
+  return {
+    navigationStack: addresses,
+    scopeId: container?.scopeNodeId ?? document.businessRootId,
+    selectionId:
+      panel?.selection.primaryNodeId ?? document.businessRootId,
+  };
 };
 
 const updateNode = (
@@ -419,7 +440,7 @@ export default function Home() {
   const [history, setHistory] = useState<IntentDocumentV3[]>([]);
   const [future, setFuture] = useState<IntentDocumentV3[]>([]);
   const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>(() =>
-    initialNavigationStack(sampleDocument()),
+    freePanelContext(sampleDocument()).navigationStack,
   );
   const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container");
   const [camera, setCamera] = useState<CameraState>({ scale: 0.5, x: 12, y: 12 });
@@ -986,8 +1007,8 @@ export default function Home() {
         }
         if ((event.ctrlKey || event.metaKey) && key === "s") {
           event.preventDefault();
-          downloadJson("intent-map-v2.intent-map.json", actions.documentState);
-          setToast("已导出 v2 文档");
+          downloadJson("intent-map-v3.intent-map.json", actions.documentState);
+          setToast("已导出 v3 工作区文档");
           return;
         }
         if (!isEditing && event.key === "Enter") {
@@ -1537,13 +1558,14 @@ export default function Home() {
   };
 
   const applyLoadedDocument = (loaded: IntentDocumentV3) => {
+    const restored = freePanelContext(loaded);
     setHistory((items) => [...items, documentState]);
     setDocumentState(loaded);
     dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
-      scopeId: loaded.businessRootId,
-      selectionId: loaded.businessRootId,
+      scopeId: restored.scopeId,
+      selectionId: restored.selectionId,
     });
-    setNavigationStack(initialNavigationStack(loaded));
+    setNavigationStack(restored.navigationStack);
     setDirty(false);
   };
 
@@ -1781,14 +1803,15 @@ export default function Home() {
   const resetApplicationGraph = () => {
     if (!window.confirm("重置全部应用节点布局和系统绑定？业务意图与模块快照会保留。")) return;
     const reset = createApplicationDocument(clone(businessRoot), clone(documentState.publishedModules));
+    const restored = freePanelContext(reset);
     setHistory((items) => [...items.slice(-29), documentState]);
     setFuture([]);
     setDocumentState(reset);
-    setNavigationStack(initialNavigationStack(reset));
+    setNavigationStack(restored.navigationStack);
     setSelectedAppNodeId("current_container");
     dispatchRuntimeEvent("DOCUMENT_LOADED", "application_root", {
-      scopeId: reset.businessRootId,
-      selectionId: reset.businessRootId,
+      scopeId: restored.scopeId,
+      selectionId: restored.selectionId,
     });
     setDirty(true);
   };
@@ -1861,13 +1884,14 @@ export default function Home() {
     )
       return;
     const next = sampleDocument();
+    const restored = freePanelContext(next);
     setHistory((items) => [...items, documentState]);
     setFuture([]);
     setDocumentState(next);
-    setNavigationStack(initialNavigationStack(next));
+    setNavigationStack(restored.navigationStack);
     dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
-      scopeId: next.businessRootId,
-      selectionId: next.businessRootId,
+      scopeId: restored.scopeId,
+      selectionId: restored.selectionId,
     });
     setDirty(false);
   };
@@ -1878,10 +1902,8 @@ export default function Home() {
       lastCommands.forEach((command) => {
         if (command.type === "NEW_DOCUMENT") newDocument();
         if (command.type === "IMPORT_REQUEST") fileInputRef.current?.click();
-        if (command.type === "EXPORT_V2")
+        if (command.type === "EXPORT_DOCUMENT")
           downloadJson("intent-map-v3.intent-map.json", documentState);
-        if (command.type === "EXPORT_V1")
-          setToast("v3 工作区不再导出旧版 v1/v2 文档");
         if (command.type === "UNDO") undo();
         if (command.type === "REDO") redo();
         if (command.type === "AUTO_LAYOUT") autoLayout();
@@ -2541,12 +2563,11 @@ export default function Home() {
     if (key === "global-toolbar") {
       return (
         <div className="global-toolbar-surface">
-          <div className="runtime-brand"><i>◈</i><span><strong>Intent Map</strong><small>一切皆管道（节点）· v2</small></span></div>
+          <div className="runtime-brand"><i>◈</i><span><strong>Intent Map</strong><small>一切皆管道（节点）· v3</small></span></div>
           <div className="runtime-command-grid">
             <button onClick={() => dispatchRuntimeEvent("NEW_DOCUMENT", "global_toolbar")}>新建</button>
             <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "global_toolbar")}>导入</button>
-            <button onClick={() => dispatchRuntimeEvent("EXPORT_V2", "global_toolbar")}>导出 v2</button>
-            <button onClick={() => dispatchRuntimeEvent("EXPORT_V1", "global_toolbar")}>兼容 v1</button>
+            <button onClick={() => dispatchRuntimeEvent("EXPORT_DOCUMENT", "global_toolbar")}>导出 v3</button>
             <button onClick={() => void exportPip()}>导出 .pip</button>
             <button disabled={!history.length} onClick={() => dispatchRuntimeEvent("UNDO", "global_toolbar")}>撤销</button>
             <button disabled={!future.length} onClick={() => dispatchRuntimeEvent("REDO", "global_toolbar")}>重做</button>
@@ -2966,6 +2987,61 @@ export default function Home() {
         }}
         onNodeChange={(nodeId, patch) => {
           updateDocumentNode(nodeId, (node) => ({ ...node, ...patch }));
+        }}
+        onUpdateView={(panelId) => {
+          setDocumentState((active) => {
+            const panel = active.workspaceState.panels.find(
+              (candidate) => candidate.id === panelId,
+            );
+            if (!panel) return active;
+            return {
+              ...active,
+              views: active.views.map((view) =>
+                view.id === panel.viewId
+                  ? {
+                      ...view,
+                      layoutLocked: panel.layoutLocked,
+                      surfaceTemplates: clone(panel.surfaces),
+                    }
+                  : view,
+              ),
+            };
+          });
+          setDirty(true);
+          setToast("已用当前 Panel 实例更新 View");
+        }}
+        onSaveViewAs={(panelId) => {
+          const name = window.prompt("新 View 名称");
+          if (!name?.trim()) return;
+          setDocumentState((active) => {
+            const panel = active.workspaceState.panels.find(
+              (candidate) => candidate.id === panelId,
+            );
+            const sourceView = active.views.find(
+              (view) => view.id === panel?.viewId,
+            );
+            if (!panel || !sourceView) return active;
+            const viewId = uid("view");
+            const withPanel = updatePanel(active, panelId, (candidate) => ({
+              ...candidate,
+              viewId,
+            }));
+            return {
+              ...withPanel,
+              views: [
+                ...withPanel.views,
+                {
+                  ...sourceView,
+                  id: viewId,
+                  name: name.trim(),
+                  layoutLocked: panel.layoutLocked,
+                  surfaceTemplates: clone(panel.surfaces),
+                },
+              ],
+            };
+          });
+          setDirty(true);
+          setToast(`已另存 View：${name.trim()}`);
         }}
         freeCanvas={<div
         ref={viewportRef}

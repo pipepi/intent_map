@@ -858,6 +858,21 @@ code,
   margin-left: auto;
 }
 
+.workspace-v3-bar button {
+  padding: 5px 9px;
+  border: 1px solid #334169;
+  border-radius: 4px;
+  color: #b8c4e4;
+  background: #151d38;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.workspace-v3-bar button:hover {
+  border-color: #4aa9ff;
+  color: #fff;
+}
+
 .workspace-v3-stage {
   min-width: 0;
   min-height: 0;
@@ -919,17 +934,28 @@ code,
 }
 
 .workspace-panel-header > button {
-  width: 24px;
+  min-width: 24px;
   height: 22px;
+  padding: 0 5px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 8px;
 }
 
 .workspace-panel-header > button:hover {
   background: #202a4b;
+}
+
+.workspace-panel-header > select {
+  max-width: 64px;
+  height: 21px;
+  border: 1px solid #303d66;
+  border-radius: 4px;
+  color: #9facca;
+  background: #111936;
+  font-size: 8px;
 }
 
 .workspace-panel-body {
@@ -1001,6 +1027,23 @@ code,
 .surface-header-actions button.active {
   color: #fff;
   background: rgba(76, 151, 255, 0.24);
+}
+
+.workspace-surface-header .surface-close {
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  color: #7783a5;
+  background: transparent;
+  cursor: pointer;
+}
+
+.workspace-surface-header .surface-close:hover {
+  color: #ff8aa5;
+  background: rgba(255, 109, 143, 0.14);
 }
 
 .workspace-surface-body {

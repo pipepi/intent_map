@@ -35,6 +35,8 @@ type WorkspaceProps = {
     nodeId: string,
     patch: Pick<IntentNode, "name" | "description">,
   ) => void;
+  onUpdateView: (panelId: string) => void;
+  onSaveViewAs: (panelId: string) => void;
 };
 
 type DragTarget =
@@ -116,9 +118,167 @@ export function Workspace({
   trace,
   onWorkspaceChange,
   onNodeChange,
+  onUpdateView,
+  onSaveViewAs,
 }: WorkspaceProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const businessRoot = getBusinessRoot(document);
+  const workspaceUid = (prefix: string) =>
+    `${prefix}_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 6)}`;
+
+  const duplicateActivePanel = () => {
+    const source = document.workspaceState.panels.find(
+      (panel) => panel.id === document.workspaceState.activePanelId,
+    );
+    if (!source) return;
+    const suffix = workspaceUid("copy");
+    const surfaceIds = new Map(
+      source.surfaces.map((surface) => [
+        surface.id,
+        `${surface.id}_${suffix}`,
+      ]),
+    );
+    const surfaces = source.surfaces.map<SurfaceInstance>((surface) => {
+      const id = surfaceIds.get(surface.id)!;
+      if (surface.kind === "current-container") {
+        return { ...surface, id, title: `${surface.title} · 副本` };
+      }
+      return {
+        ...surface,
+        id,
+        contextSource:
+          surface.contextSource.mode === "fixed-container"
+            ? {
+                mode: "fixed-container",
+                surfaceId:
+                  surfaceIds.get(surface.contextSource.surfaceId) ??
+                  surface.contextSource.surfaceId,
+              }
+            : surface.contextSource,
+      };
+    });
+    const panelId = workspaceUid("panel");
+    onWorkspaceChange({
+      activePanelId: panelId,
+      panels: [
+        ...document.workspaceState.panels,
+        {
+          ...source,
+          id: panelId,
+          title: `${source.title} · 副本`,
+          frame: clampFrame({
+            ...source.frame,
+            x: source.frame.x + 0.025,
+            y: source.frame.y + 0.025,
+          }),
+          zIndex:
+            Math.max(
+              0,
+              ...document.workspaceState.panels.map((panel) => panel.zIndex),
+            ) + 1,
+          activeContainerSurfaceId: source.activeContainerSurfaceId
+            ? surfaceIds.get(source.activeContainerSurfaceId)
+            : undefined,
+          surfaces,
+        },
+      ],
+    });
+  };
+
+  const addContainerSurface = (panel: PanelInstance) => {
+    const active = panel.surfaces.find(
+      (surface) =>
+        surface.id === panel.activeContainerSurfaceId &&
+        surface.kind === "current-container",
+    );
+    const id = workspaceUid("container");
+    const surface: ContainerSurface =
+      active?.kind === "current-container"
+        ? {
+            ...active,
+            id,
+            title: "当前容器",
+            frame: clampFrame({
+              ...active.frame,
+              x: active.frame.x + 0.04,
+              y: active.frame.y + 0.04,
+            }),
+            zIndex: Math.max(0, ...panel.surfaces.map((item) => item.zIndex)) + 1,
+          }
+        : {
+            kind: "current-container",
+            id,
+            title: "当前容器",
+            frame: { x: 0.25, y: 0.08, width: 0.5, height: 0.55 },
+            zIndex: 1,
+            scopeNodeId: businessRoot.id,
+            navigationStack: [businessRoot.id],
+            camera: { scale: 0.55, x: 12, y: 12 },
+            nodeLayoutLocked: false,
+            localState: {},
+          };
+    onWorkspaceChange(
+      updatePanel(document.workspaceState, panel.id, (candidate) => ({
+        ...candidate,
+        activeContainerSurfaceId: id,
+        surfaces: [...candidate.surfaces, surface],
+      })),
+    );
+  };
+
+  const addFeatureSurface = (panel: PanelInstance, featureNodeId: string) => {
+    const node = findNode(document.rootIntent, featureNodeId);
+    if (!node || node.kind !== "renderer") return;
+    const id = workspaceUid(featureNodeId);
+    const offset = (panel.surfaces.length % 5) * 0.025;
+    const surface: FeaturePanelSurface = {
+      kind: "feature-panel",
+      id,
+      featureNodeId,
+      title: node.name,
+      frame: {
+        x: 0.08 + offset,
+        y: 0.1 + offset,
+        width: 0.34,
+        height: 0.4,
+      },
+      zIndex: Math.max(0, ...panel.surfaces.map((item) => item.zIndex)) + 1,
+      contextSource: { mode: "follow-active-container" },
+      subject: { mode: "follow-panel-selection" },
+      localState: {},
+    };
+    onWorkspaceChange(
+      updatePanel(document.workspaceState, panel.id, (candidate) => ({
+        ...candidate,
+        surfaces: [...candidate.surfaces, surface],
+      })),
+    );
+  };
+
+  const removeSurfaceFromPanel = (
+    panel: PanelInstance,
+    surfaceId: string,
+  ) => {
+    onWorkspaceChange(
+      updatePanel(document.workspaceState, panel.id, (candidate) => {
+        const surfaces = candidate.surfaces.filter(
+          (surface) => surface.id !== surfaceId,
+        );
+        return {
+          ...candidate,
+          surfaces,
+          activeContainerSurfaceId:
+            candidate.activeContainerSurfaceId === surfaceId
+              ? surfaces.find(
+                  (surface) => surface.kind === "current-container",
+                )?.id
+              : candidate.activeContainerSurfaceId,
+        };
+      }),
+    );
+  };
 
   const beginDrag = (
     target: DragTarget,
@@ -591,6 +751,7 @@ export function Workspace({
         <span>根内树 · 多视图工作区</span>
         <i>v3</i>
         <small>Panel 独立上下文 · Surface 同步选择</small>
+        <button onClick={duplicateActivePanel}>复制当前 Panel</button>
       </header>
       <div className="workspace-v3-stage" ref={stageRef}>
         {document.workspaceState.panels.map((panel) => {
@@ -625,6 +786,54 @@ export function Workspace({
                 <span>{view?.kind === "workbench" ? "▦" : "◇"}</span>
                 <strong>{panel.title}</strong>
                 <small>{panel.surfaces.length} Surface</small>
+                {view?.kind === "workbench" && (
+                  <>
+                    <button
+                      title="新增可独立下探的当前容器 Surface"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() => addContainerSurface(panel)}
+                    >
+                      ＋容器
+                    </button>
+                    <select
+                      aria-label={`向${panel.title}打开功能面板`}
+                      value=""
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          addFeatureSurface(panel, event.target.value);
+                        }
+                      }}
+                    >
+                      <option value="">＋功能</option>
+                      {(document.rootIntent.children ?? [])
+                        .filter(
+                          (node) =>
+                            node.kind === "renderer" &&
+                            node.id !== "current_container",
+                        )
+                        .map((node) => (
+                          <option key={node.id} value={node.id}>
+                            {node.name}
+                          </option>
+                        ))}
+                    </select>
+                  </>
+                )}
+                <button
+                  title="用当前实例布局更新 View"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => onUpdateView(panel.id)}
+                >
+                  更新
+                </button>
+                <button
+                  title="把当前实例另存为新 View"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => onSaveViewAs(panel.id)}
+                >
+                  另存
+                </button>
                 <button
                   title={panel.layoutLocked ? "解锁布局" : "锁定布局"}
                   onPointerDown={(event) => event.stopPropagation()}
@@ -690,6 +899,17 @@ export function Workspace({
                         </small>
                         {surface.kind === "feature-panel" &&
                           renderFeatureHeaderActions(panel, surface)}
+                        <button
+                          className="surface-close"
+                          title={`关闭 ${surface.title}`}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            removeSurfaceFromPanel(panel, surface.id);
+                          }}
+                        >
+                          ×
+                        </button>
                       </header>
                       <div className="workspace-surface-body">
                         {surface.kind === "current-container"

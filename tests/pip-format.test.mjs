@@ -6,6 +6,12 @@ import {
   decodePip,
   encodePip,
 } from "../app/runtime/pip.ts";
+import {
+  createApplicationDocument,
+  loadIntentDocument,
+  serializeIntentDocument,
+} from "../app/runtime/model.ts";
+import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts";
 
 const manifest = {
   packageId: "intent-map.test",
@@ -60,4 +66,34 @@ test("PIP v1 rejects corruption, truncation, and overlapping sections", async ()
   const oversized = bytes.slice();
   new DataView(oversized.buffer).setBigUint64(24, BigInt(64 * 1024 * 1024 + 1), true);
   await assert.rejects(() => decodePip(oversized), /size limit/);
+});
+
+test("PIP preserves the v3 multi-panel workspace and four-level tree", async () => {
+  const document = createApplicationDocument(createSampleBusinessRoot());
+  const bytes = await encodePip({
+    manifest,
+    loaderSource: DEFAULT_PIP_LOADER_SOURCE,
+    rootTreeText: serializeIntentDocument(document),
+    assets: [],
+  });
+  const decoded = await decodePip(bytes);
+  const loaded = loadIntentDocument(JSON.parse(decoded.rootTreeText));
+
+  assert.equal(loaded.version, 3);
+  assert.deepEqual(
+    loaded.workspaceState.panels.map((panel) => panel.viewId),
+    ["view-workbench", "view-free-layout"],
+  );
+  assert.equal(
+    loaded.workspaceState.panels[0].surfaces.filter(
+      (surface) => surface.kind === "feature-panel",
+    ).length,
+    4,
+  );
+  assert.equal(
+    loaded.rootIntent.children
+      .find((node) => node.id === "document_loader")
+      .children[0].children[0].children[0].children[0].id,
+    "scenario_actor_leaf",
+  );
 });

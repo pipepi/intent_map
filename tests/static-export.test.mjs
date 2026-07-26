@@ -14,7 +14,7 @@ test("exports the everything-node application as a static page", async () => {
   assert.match(html, /根内树 · 多视图工作区/);
   assert.match(html, />v3</);
   assert.match(page, /intent-map-v3\.intent-map\.json/);
-  assert.match(page, /v3 工作区不再导出旧版 v1\/v2 文档/);
+  assert.match(page, /已导出 v3 工作区文档/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 
@@ -43,6 +43,10 @@ test("implements panel selection and both surface binding dimensions", async () 
   assert.match(workspace, /revision: panel\.selection\.revision \+ 1/);
   assert.match(workspace, /共享选择位于当前范围之外/);
   assert.match(workspace, /当前 Panel 没有 Surface/);
+  assert.match(workspace, /duplicateActivePanel/);
+  assert.match(workspace, /addContainerSurface/);
+  assert.match(workspace, /addFeatureSurface/);
+  assert.match(workspace, /removeSurfaceFromPanel/);
 });
 
 test("supports root camera navigation, layout editing, and semantic LOD", async () => {

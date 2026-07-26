@@ -831,7 +831,11 @@ const assertFrame = (value: unknown, path: string) => {
       (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
     ) ||
     (value.width as number) <= 0 ||
-    (value.height as number) <= 0
+    (value.height as number) <= 0 ||
+    (value.x as number) < 0 ||
+    (value.y as number) < 0 ||
+    (value.x as number) + (value.width as number) > 1.000001 ||
+    (value.y as number) + (value.height as number) > 1.000001
   ) {
     throw new Error(`${path}: 无效矩形视口`);
   }
@@ -862,7 +866,9 @@ function assertSurface(
     return;
   }
   if (value.kind === "feature-panel") {
-    const feature = findNode(root, String(value.featureNodeId));
+    const feature = root.children?.find(
+      (node) => node.id === String(value.featureNodeId),
+    );
     if (
       !feature ||
       feature.kind !== "renderer" ||
@@ -874,6 +880,38 @@ function assertSurface(
     return;
   }
   throw new Error(`${path}: 不支持的 Surface 类型`);
+}
+
+function assertViews(
+  value: unknown,
+  root: IntentNode,
+): asserts value is ViewDefinition[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("views: 至少需要一个 View 定义");
+  }
+  const ids = new Set<string>();
+  value.forEach((rawView, viewIndex) => {
+    const path = `views[${viewIndex}]`;
+    if (
+      !isRecord(rawView) ||
+      typeof rawView.id !== "string" ||
+      typeof rawView.name !== "string" ||
+      !["free-layout", "workbench"].includes(String(rawView.kind)) ||
+      !Array.isArray(rawView.surfaceTemplates)
+    ) {
+      throw new Error(`${path}: 无效 View 定义`);
+    }
+    if (ids.has(rawView.id)) throw new Error(`${path}: View ID 重复`);
+    ids.add(rawView.id);
+    const surfaceIds = new Set<string>();
+    rawView.surfaceTemplates.forEach((surface, surfaceIndex) => {
+      assertSurface(surface, `${path}.surfaceTemplates[${surfaceIndex}]`, root);
+      if (surfaceIds.has(surface.id)) {
+        throw new Error(`${path}: Surface 模板 ID 重复`);
+      }
+      surfaceIds.add(surface.id);
+    });
+  });
 }
 
 function assertWorkspace(
@@ -958,11 +996,8 @@ export const loadIntentDocument = (input: unknown): IntentDocumentV3 => {
   ) {
     throw new Error(`业务根节点不存在：${String(input.businessRootId)}`);
   }
-  if (!Array.isArray(input.views) || input.views.length === 0) {
-    throw new Error("views: 至少需要一个 View 定义");
-  }
-  const views = input.views as ViewDefinition[];
-  assertWorkspace(input.workspaceState, views, input.rootIntent);
+  assertViews(input.views, input.rootIntent);
+  assertWorkspace(input.workspaceState, input.views, input.rootIntent);
   const cloned = cloneWithoutEdges(input) as unknown as IntentDocumentV3;
   cloned.publishedModules ??= [];
   return cloned;
