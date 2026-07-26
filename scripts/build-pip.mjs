@@ -10,6 +10,7 @@ import {
   createApplicationDocument,
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
+import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -60,25 +61,12 @@ const collectAssets = async (directory, relative = "") => {
   return assets;
 };
 
-const defaultBusinessRoot = {
-  id: "business_root",
-  name: "Intent Map Seed",
-  description: "由最小 Rust 种皮加载的唯一根业务意图。",
-  kind: "composite",
-  inputs: [],
-  outputs: [],
-  children: [],
-  position: { x: 0, y: 0 },
-  canvasSize: { width: 1400, height: 850 },
-  resizeMode: "simple",
-};
-
 const treePath = option("--tree");
 const assetsDirectory = path.resolve(root, option("--assets", "out"));
 const output = path.resolve(root, option("--output", "dist/pip/intent-map.pip"));
 const tree = treePath
   ? JSON.parse(await readFile(path.resolve(root, treePath), "utf8"))
-  : createApplicationDocument(defaultBusinessRoot);
+  : createApplicationDocument(createSampleBusinessRoot());
 const rootTreeText = serializeIntentDocument(tree);
 const assetsInfo = await stat(assetsDirectory);
 if (!assetsInfo.isDirectory()) {
