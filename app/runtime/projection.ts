@@ -1,7 +1,9 @@
 import type {
+  ContainerSurface,
   IntentNode,
   NodeProjectionLayout,
   ScopeAddress,
+  ScopeProjectionState,
   SurfaceInstance,
 } from "./model";
 
@@ -29,6 +31,45 @@ export const defaultNodeProjectionLayout = (
   displayMode: node.displayMode ?? "expanded",
   resizeMode: node.resizeMode ?? "simple",
 });
+
+export const nodeProjectionLayout = (
+  node: IntentNode,
+  projection?: ScopeProjectionState,
+): NodeProjectionLayout =>
+  projection?.nodeLayouts[node.id] ?? defaultNodeProjectionLayout(node);
+
+export const projectNode = (
+  node: IntentNode,
+  projection?: ScopeProjectionState,
+): IntentNode => {
+  const layout = nodeProjectionLayout(node, projection);
+  return {
+    ...node,
+    position: { x: layout.frame.x, y: layout.frame.y },
+    size: { width: layout.frame.width, height: layout.frame.height },
+    displayMode: layout.displayMode,
+    resizeMode: layout.resizeMode,
+  };
+};
+
+export const projectIntentTree = (
+  root: IntentNode,
+  businessRootId: string,
+  projections: ContainerSurface["projections"],
+): IntentNode => {
+  const visit = (node: IntentNode, domain: ScopeAddress["domain"]): IntentNode => {
+    const nodeDomain =
+      domain === "business" || node.id === businessRootId ? "business" : "app";
+    const projection = projections[`${nodeDomain}:${node.id}`];
+    return {
+      ...node,
+      children: node.children?.map((child) =>
+        visit(projectNode(child, projection), nodeDomain),
+      ),
+    };
+  };
+  return visit(root, "app");
+};
 
 export const surfaceProjectionNodeId = (
   surface: SurfaceInstance,

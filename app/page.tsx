@@ -35,7 +35,7 @@ import {
 } from "./runtime/model";
 import {
   MINIMIZED_NODE_SIZE,
-  NodeRenderer,
+  NodeProjection,
   resizeDirectionsFor,
   runtimeNodeRenderSize,
   type ResizeDirection,
@@ -53,6 +53,8 @@ import {
 import { cameraForTouchGesture } from "./runtime/camera";
 import {
   PROJECTION_LOD_THRESHOLD,
+  defaultNodeProjectionLayout,
+  projectIntentTree,
   projectionUsesSummary,
 } from "./runtime/projection";
 import { createSampleBusinessRoot } from "./runtime/sample-business-tree";
@@ -571,8 +573,32 @@ export default function Home() {
     }
   }, [eventTick, pendingEvents, runtimeState]);
 
-  const appRoot = documentState.rootIntent;
-  const businessRoot = useMemo(() => getBusinessRoot(documentState), [documentState]);
+  const freeContainer = getContainerSurface(
+    documentState,
+    "panel-free-layout",
+    "free-layout-container",
+  );
+  const appRoot = useMemo(
+    () =>
+      projectIntentTree(
+        documentState.rootIntent,
+        documentState.businessRootId,
+        freeContainer?.projections ?? {},
+      ),
+    [
+      documentState.businessRootId,
+      documentState.rootIntent,
+      freeContainer?.projections,
+    ],
+  );
+  const businessRoot = useMemo(
+    () =>
+      getBusinessRoot({
+        ...documentState,
+        rootIntent: appRoot,
+      }),
+    [appRoot, documentState],
+  );
   const activeAddress = useMemo(
     () =>
       navigationStack.at(-1) ??
@@ -685,11 +711,18 @@ export default function Home() {
   const scopeMinimized =
     !isBusinessScope && nodeDisplayMode(scopeNode) === "minimized";
   const activeCameraKey = scopeCameraKey(activeAddress);
+  const scopeCanvasProjection =
+    freeContainer?.projections[activeCameraKey]?.nodeLayouts[scopeNode.id];
   const scopeWorldSize = useMemo(
     () =>
       scopeMinimized
         ? MINIMIZED_NODE_SIZE
-        : scopeNode.canvasSize ?? {
+        : scopeCanvasProjection
+          ? {
+              width: scopeCanvasProjection.frame.width,
+              height: scopeCanvasProjection.frame.height,
+            }
+          : scopeNode.canvasSize ?? {
             width: Math.max(
               900,
               ...visibleNodes.map(
@@ -705,7 +738,7 @@ export default function Home() {
               ),
             ),
           },
-    [scopeMinimized, scopeNode.canvasSize, visibleNodes],
+    [scopeCanvasProjection, scopeMinimized, scopeNode.canvasSize, visibleNodes],
   );
   const scopePath = useMemo(
     () =>
@@ -739,14 +772,81 @@ export default function Home() {
     [dispatchRuntimeEvent],
   );
 
+  const storeNodeProjection = useCallback(
+    (document: IntentDocumentV3, node: IntentNode) =>
+      updateSurface(
+        document,
+        "panel-free-layout",
+        "free-layout-container",
+        (surface) => {
+          if (surface.kind !== "current-container") return surface;
+          const projection = surface.projections[activeCameraKey] ?? {
+            camera: cameraRef.current,
+            nodeLayouts: {},
+          };
+          return {
+            ...surface,
+            projections: {
+              ...surface.projections,
+              [activeCameraKey]: {
+                ...projection,
+                nodeLayouts: {
+                  ...projection.nodeLayouts,
+                  [node.id]: defaultNodeProjectionLayout(node),
+                },
+              },
+            },
+          };
+        },
+      ),
+    [activeCameraKey],
+  );
+
+  const storeScopeCanvasProjection = useCallback(
+    (
+      document: IntentDocumentV3,
+      scope: IntentNode,
+      size: { width: number; height: number },
+    ) =>
+      updateSurface(
+        document,
+        "panel-free-layout",
+        "free-layout-container",
+        (surface) => {
+          if (surface.kind !== "current-container") return surface;
+          const projection = surface.projections[activeCameraKey] ?? {
+            camera: cameraRef.current,
+            nodeLayouts: {},
+          };
+          const fallback = defaultNodeProjectionLayout(scope);
+          return {
+            ...surface,
+            projections: {
+              ...surface.projections,
+              [activeCameraKey]: {
+                ...projection,
+                nodeLayouts: {
+                  ...projection.nodeLayouts,
+                  [scope.id]: {
+                    ...fallback,
+                    frame: { x: 0, y: 0, ...size },
+                  },
+                },
+              },
+            },
+          };
+        },
+      ),
+    [activeCameraKey],
+  );
+
   const updateDocumentNodeView = useCallback(
     (id: string, updater: (node: IntentNode) => IntentNode) => {
-      commitView({
-        ...documentState,
-        rootIntent: updateNode(documentState.rootIntent, id, updater),
-      });
+      const current = findNode(appRoot, id);
+      if (!current) return;
+      commitView(storeNodeProjection(documentState, updater(current)));
     },
-    [commitView, documentState],
+    [appRoot, commitView, documentState, storeNodeProjection],
   );
 
   const updateDocumentNode = useCallback(
@@ -1337,13 +1437,9 @@ export default function Home() {
         x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / cameraRef.current.scale)),
         y: Math.max(56, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / cameraRef.current.scale)),
       };
-      setDocumentState((active) => ({
-        ...active,
-        rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
-          ...item,
-          position: latest,
-        })),
-      }));
+      setDocumentState((active) =>
+        storeNodeProjection(active, { ...node, position: latest }),
+      );
     };
     const up = () => {
       target.removeEventListener("pointermove", move);
@@ -1391,14 +1487,13 @@ export default function Home() {
         y = Math.max(56, startPosition.y + startSize.height - height);
         height = startPosition.y + startSize.height - y;
       }
-      setDocumentState((active) => ({
-        ...active,
-        rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
-          ...item,
+      setDocumentState((active) =>
+        storeNodeProjection(active, {
+          ...node,
           position: { x, y },
           size: { width, height },
-        })),
-      }));
+        }),
+      );
     };
     const up = () => {
       target.removeEventListener("pointermove", move);
@@ -1418,7 +1513,7 @@ export default function Home() {
     event: ReactPointerEvent<HTMLSpanElement>,
   ) => {
     if (layoutLocked || event.button !== 0) return;
-    const startSize = scopeNode.canvasSize ?? { width: 1200, height: 800 };
+    const startSize = scopeWorldSize;
     const startCamera = { ...cameraRef.current };
     const origin = { x: event.clientX, y: event.clientY };
     const contentMinimum = visibleNodes.reduce(
@@ -1475,13 +1570,9 @@ export default function Home() {
         );
       }
 
-      setDocumentState((active) => ({
-        ...active,
-        rootIntent: updateNode(active.rootIntent, scopeNode.id, (item) => ({
-          ...item,
-          canvasSize: { width, height },
-        })),
-      }));
+      setDocumentState((active) =>
+        storeScopeCanvasProjection(active, scopeNode, { width, height }),
+      );
       setScopeCamera({
         ...startCamera,
         x: direction.includes("w")
@@ -1521,26 +1612,63 @@ export default function Home() {
       output: [80],
     };
     let maximumBottom = 0;
-    updateDocumentNode(scopeNode.id, (scope) => ({
-      ...scope,
-      children: scope.children?.map((node) => {
-        const lane = String(node.implementation?.config?.lane ?? "interface") as keyof typeof laneColumns;
+    const layouts = Object.fromEntries(
+      (scopeNode.children ?? []).map((node) => {
+        const lane = String(
+          node.implementation?.config?.lane ?? "interface",
+        ) as keyof typeof laneColumns;
         const size = runtimeNodeRenderSize(node);
         const column = laneHeights[lane].indexOf(Math.min(...laneHeights[lane]));
         const x = laneColumns[lane][column];
         const y = laneHeights[lane][column];
         laneHeights[lane][column] += size.height + 48;
         maximumBottom = Math.max(maximumBottom, y + size.height + 80);
-        return {
-          ...node,
-          position: { x, y },
-        };
+        return [
+          node.id,
+          defaultNodeProjectionLayout({
+            ...node,
+            position: { x, y },
+          }),
+        ];
       }),
-      canvasSize: {
-        width: Math.max(scope.canvasSize?.width ?? 0, 2400),
-        height: Math.max(1500, maximumBottom),
-      },
-    }));
+    );
+    const canvasLayout = defaultNodeProjectionLayout(scopeNode);
+    commitView(
+      updateSurface(
+        documentState,
+        "panel-free-layout",
+        "free-layout-container",
+        (surface) => {
+          if (surface.kind !== "current-container") return surface;
+          const projection = surface.projections[activeCameraKey] ?? {
+            camera: cameraRef.current,
+            nodeLayouts: {},
+          };
+          return {
+            ...surface,
+            projections: {
+              ...surface.projections,
+              [activeCameraKey]: {
+                ...projection,
+                nodeLayouts: {
+                  ...projection.nodeLayouts,
+                  ...layouts,
+                  [scopeNode.id]: {
+                    ...canvasLayout,
+                    frame: {
+                      x: 0,
+                      y: 0,
+                      width: Math.max(scopeWorldSize.width, 2400),
+                      height: Math.max(1500, maximumBottom),
+                    },
+                  },
+                },
+              },
+            },
+          };
+        },
+      ),
+    );
     setTimeout(fitScope, 0);
   };
 
@@ -2162,13 +2290,9 @@ export default function Home() {
         size,
         bounds,
       );
-      setDocumentState((active) => ({
-        ...active,
-        rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
-          ...item,
-          position,
-        })),
-      }));
+      setDocumentState((active) =>
+        storeNodeProjection(active, { ...node, position }),
+      );
     };
     const up = () => {
       target.removeEventListener("pointermove", move);
@@ -2216,14 +2340,13 @@ export default function Home() {
         pointerScale,
         bounds,
       );
-      setDocumentState((active) => ({
-        ...active,
-        rootIntent: updateNode(active.rootIntent, node.id, (item) => ({
-          ...item,
+      setDocumentState((active) =>
+        storeNodeProjection(active, {
+          ...node,
           position: geometry.position,
           size: geometry.size,
-        })),
-      }));
+        }),
+      );
     };
     const up = () => {
       target.removeEventListener("pointermove", move);
@@ -3197,7 +3320,7 @@ export default function Home() {
               </>
             )}
             {!scopeMinimized && !isBusinessScope && visibleNodes.map((node) => (
-              <NodeRenderer
+              <NodeProjection
                 key={node.id}
                 node={node}
                 scale={camera.scale}

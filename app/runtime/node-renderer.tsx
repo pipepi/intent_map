@@ -23,7 +23,7 @@ export const runtimeNodeRenderSize = (node: IntentNode) => {
     : expandedSize;
 };
 
-export type NodeRendererProps = {
+export type NodeProjectionProps = {
   node: IntentNode;
   scale: number;
   selected: boolean;
@@ -54,7 +54,7 @@ const referenceContextLabels: Record<string, string> = {
   selection: "选中节点",
 };
 
-export function NodeRenderer({
+export function NodeProjection({
   node,
   scale,
   selected,
@@ -67,7 +67,7 @@ export function NodeRenderer({
   onResizeStart,
   onResizeModeToggle,
   onDisplayModeToggle,
-}: NodeRendererProps) {
+}: NodeProjectionProps) {
   const size = runtimeNodeRenderSize(node);
   const minimized = nodeDisplayMode(node) === "minimized";
   const alwaysLive = node.implementation?.config?.lod === "always-live";

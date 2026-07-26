@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PROJECTION_LOD_THRESHOLD,
   defaultNodeProjectionLayout,
+  projectIntentTree,
   projectionUsesSummary,
   scopeProjectionKey,
   surfaceProjectionNodeId,
@@ -30,6 +31,39 @@ test("uses v3 life-tree nodes as immutable projection defaults", () => {
   assert.equal(layout.displayMode, node.displayMode ?? "expanded");
   assert.equal(layout.resizeMode, node.resizeMode ?? "simple");
   assert.deepEqual(node, before, "deriving projection state must not mutate the inner tree");
+});
+
+test("projects outer-tree geometry without changing the inner tree", () => {
+  const document = createApplicationDocument(createSampleBusinessRoot());
+  const before = structuredClone(document.rootIntent);
+  const projected = projectIntentTree(
+    document.rootIntent,
+    document.businessRootId,
+    {
+      "business:business_root": {
+        camera: { scale: 0.8, x: 0, y: 0 },
+        nodeLayouts: {
+          scenario_flow: {
+            frame: { x: 700, y: 420, width: 480, height: 300 },
+            displayMode: "minimized",
+            resizeMode: "full",
+          },
+        },
+      },
+    },
+  );
+  const businessRoot = getBusinessRoot({
+    ...document,
+    rootIntent: projected,
+  });
+  const projectedFlow = businessRoot.children.find(
+    (node) => node.id === "scenario_flow",
+  );
+
+  assert.deepEqual(projectedFlow.position, { x: 700, y: 420 });
+  assert.deepEqual(projectedFlow.size, { width: 480, height: 300 });
+  assert.equal(projectedFlow.displayMode, "minimized");
+  assert.deepEqual(document.rootIntent, before);
 });
 
 test("namespaces app and business scope projections", () => {

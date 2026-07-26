@@ -36,7 +36,7 @@ test("provides one recursive shell for all node implementations", async () => {
     "utf8",
   );
 
-  assert.match(source, /export function NodeRenderer/);
+  assert.match(source, /export function NodeProjection/);
   assert.match(source, /runtime-node-titlebar/);
   assert.match(source, /runtime-minimized-titlebar/);
   assert.match(source, /projectionUsesSummary\(scale/);
