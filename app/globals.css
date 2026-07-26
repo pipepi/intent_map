@@ -948,6 +948,11 @@ code,
   background: #202a4b;
 }
 
+.workspace-panel-header > button.panel-close:hover {
+  color: #ff8aa5;
+  background: rgba(255, 109, 143, 0.14);
+}
+
 .workspace-panel-header > select {
   max-width: 64px;
   height: 21px;

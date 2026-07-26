@@ -18,7 +18,12 @@ import type {
   SurfaceInstance,
   WorkspaceState,
 } from "./model";
-import { getBusinessRoot, resolveFeatureContext } from "./model";
+import {
+  getBusinessRoot,
+  isCoreWorkspacePanel,
+  removeWorkspacePanel,
+  resolveFeatureContext,
+} from "./model";
 
 type TraceItem = {
   id: string;
@@ -852,6 +857,25 @@ export function Workspace({
                 >
                   {panel.layoutLocked ? "🔒" : "🔓"}
                 </button>
+                {!isCoreWorkspacePanel(panel.id) && (
+                  <button
+                    className="panel-close"
+                    title={`关闭 ${panel.title}`}
+                    aria-label={`关闭 ${panel.title}`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onWorkspaceChange(
+                        removeWorkspacePanel(
+                          document.workspaceState,
+                          panel.id,
+                        ),
+                      );
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </header>
               <div className="workspace-panel-body">
                 {freeLayout ? (

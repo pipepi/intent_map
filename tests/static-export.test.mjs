@@ -44,6 +44,8 @@ test("implements panel selection and both surface binding dimensions", async () 
   assert.match(workspace, /共享选择位于当前范围之外/);
   assert.match(workspace, /当前 Panel 没有 Surface/);
   assert.match(workspace, /duplicateActivePanel/);
+  assert.match(workspace, /removeWorkspacePanel/);
+  assert.match(workspace, /className="panel-close"/);
   assert.match(workspace, /addContainerSurface/);
   assert.match(workspace, /addFeatureSurface/);
   assert.match(workspace, /removeSurfaceFromPanel/);

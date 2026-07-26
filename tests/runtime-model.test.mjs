@@ -13,6 +13,7 @@ import {
   parentScopeStack,
   removeNodeFromPanelSelections,
   removeSurface,
+  removeWorkspacePanel,
   resolveFeatureContext,
   scopeCameraKey,
   serializeIntentDocument,
@@ -23,6 +24,30 @@ import {
   businessTreeDepth,
   createSampleBusinessRoot,
 } from "../app/runtime/sample-business-tree.ts";
+
+test("closes copied panels and falls back to the same view", () => {
+  const document = createApplicationDocument(createSampleBusinessRoot());
+  const source = document.workspaceState.panels[0];
+  const copiedPanel = {
+    ...structuredClone(source),
+    id: "panel_copy",
+    title: `${source.title} · 副本`,
+    zIndex: 12,
+  };
+  const workspace = {
+    activePanelId: copiedPanel.id,
+    panels: [...document.workspaceState.panels, copiedPanel],
+  };
+
+  const closed = removeWorkspacePanel(workspace, copiedPanel.id);
+  assert.equal(closed.panels.some((panel) => panel.id === copiedPanel.id), false);
+  assert.equal(closed.activePanelId, source.id);
+  assert.equal(
+    removeWorkspacePanel(closed, "panel-workbench"),
+    closed,
+    "default panels are protected",
+  );
+});
 
 test("creates the v3 root, views, panels, and dual surface types", () => {
   const document = createApplicationDocument(createSampleBusinessRoot());

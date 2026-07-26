@@ -174,6 +174,37 @@ export type WorkspaceState = {
   panels: PanelInstance[];
 };
 
+export const CORE_WORKSPACE_PANEL_IDS = [
+  "panel-workbench",
+  "panel-free-layout",
+] as const;
+
+export const isCoreWorkspacePanel = (panelId: string): boolean =>
+  CORE_WORKSPACE_PANEL_IDS.some((id) => id === panelId);
+
+export const removeWorkspacePanel = (
+  workspace: WorkspaceState,
+  panelId: string,
+): WorkspaceState => {
+  if (isCoreWorkspacePanel(panelId)) return workspace;
+  const removed = workspace.panels.find((panel) => panel.id === panelId);
+  if (!removed) return workspace;
+  const panels = workspace.panels.filter((panel) => panel.id !== panelId);
+  const fallback =
+    panels
+      .filter((panel) => panel.viewId === removed.viewId)
+      .toSorted((left, right) => right.zIndex - left.zIndex)[0] ??
+    panels.toSorted((left, right) => right.zIndex - left.zIndex)[0];
+  return {
+    ...workspace,
+    activePanelId:
+      workspace.activePanelId === panelId
+        ? fallback?.id ?? ""
+        : workspace.activePanelId,
+    panels,
+  };
+};
+
 export type IntentDocumentV3 = {
   version: 3;
   rootIntent: IntentNode;
