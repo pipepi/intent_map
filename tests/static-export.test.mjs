@@ -243,6 +243,14 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
     /business-container-mode-toggle/,
   );
   assert.match(
+    css,
+    /\.resize-mode-toggle\.business-container-mode-toggle\s*\{[^}]*opacity:\s*1[^}]*pointer-events:\s*auto/s,
+  );
+  assert.match(
+    css,
+    /\.business-container-node \.container-resize-layer \.resize-se[\s\S]*?opacity:\s*0\.76 !important/,
+  );
+  assert.match(
     workspace,
     /candidate\.dataset\.portNode === nodeId/,
   );

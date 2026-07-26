@@ -2613,9 +2613,25 @@ code,
   font-size: 9px;
 }
 
-.business-container-mode-toggle {
+.resize-mode-toggle.business-container-mode-toggle {
   right: 8px;
   bottom: 46px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.business-container-node .container-resize-layer .resize-nw,
+.business-container-node .container-resize-layer .resize-ne,
+.business-container-node .container-resize-layer .resize-se,
+.business-container-node .container-resize-layer .resize-sw {
+  opacity: 0.76 !important;
+}
+
+.business-container-node .container-resize-layer .resize-nw:hover,
+.business-container-node .container-resize-layer .resize-ne:hover,
+.business-container-node .container-resize-layer .resize-se:hover,
+.business-container-node .container-resize-layer .resize-sw:hover {
+  opacity: 1 !important;
 }
 
 .business-node {
