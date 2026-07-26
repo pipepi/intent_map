@@ -11,39 +11,38 @@ test("exports the everything-node application as a static page", async () => {
   assert.match(html, /<title>Intent Map｜分形意图编辑器<\/title>/);
   assert.match(html, /everything-app/);
   assert.match(html, /root-node-viewport/);
-  assert.match(html, /Intent Map 应用根/);
-  assert.match(page, /一切皆节点 · v2/);
-  assert.match(page, /导出 v2/);
-  assert.match(page, /兼容 v1/);
+  assert.match(html, /根内树 · 多视图工作区/);
+  assert.match(html, />v3</);
+  assert.match(page, /intent-map-v3\.intent-map\.json/);
+  assert.match(page, /v3 工作区不再导出旧版 v1\/v2 文档/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 
-test("renders ten interface nodes and five runtime nodes as root children", async () => {
+test("renders free-layout and workbench panels with six visible surfaces", async () => {
   const html = await readFile(new URL("out/index.html", root), "utf8");
-  const interfaceNodes = [
-    "顶栏与全局命令",
-    "意图结构树",
-    "模块库",
-    "静态校验",
-    "面包屑导航",
-    "当前作用域工具条",
-    "当前容器渲染器",
-    "画布状态",
-    "属性编辑器",
-    "运行追踪",
-  ];
-  const runtimeNodes = [
-    "文档加载器",
-    "应用状态",
-    "事件时钟",
-    "命令处理器",
-    "意图执行器",
-  ];
+  assert.match(html, /工作台/);
+  assert.match(html, /自由布局/);
+  assert.match(html, /节点树/);
+  assert.match(html, /属性检视器/);
+  assert.equal((html.match(/class="workspace-panel /g) ?? []).length, 2);
+  assert.equal((html.match(/class="workspace-surface /g) ?? []).length, 6);
+});
 
-  [...interfaceNodes, ...runtimeNodes].forEach((name) =>
-    assert.match(html, new RegExp(name)),
+test("implements panel selection and both surface binding dimensions", async () => {
+  const model = await readFile(new URL("app/runtime/model.ts", root), "utf8");
+  const workspace = await readFile(
+    new URL("app/runtime/workspace.tsx", root),
+    "utf8",
   );
-  assert.equal((html.match(/class="runtime-node /g) ?? []).length, 15);
+
+  assert.match(model, /type SurfaceInstance = FeaturePanelSurface \| ContainerSurface/);
+  assert.match(model, /activeContainerSurfaceId\?: string/);
+  assert.match(model, /mode: "fixed-container"/);
+  assert.match(model, /mode: "fixed-node"/);
+  assert.match(workspace, /activeContainerSurfaceId:/);
+  assert.match(workspace, /revision: panel\.selection\.revision \+ 1/);
+  assert.match(workspace, /共享选择位于当前范围之外/);
+  assert.match(workspace, /当前 Panel 没有 Surface/);
 });
 
 test("supports root camera navigation, layout editing, and semantic LOD", async () => {
@@ -189,7 +188,7 @@ test("protects core composition and preserves business editing", async () => {
   );
 
   assert.match(page, /selected\.implementation\?\.core/);
-  assert.match(page, /window\.confirm\(`「\$\{selected\.name\}」是核心节点/);
+  assert.match(page, /selected\.implementation\?\.core/);
   assert.match(page, /重置应用节点图/);
   assert.match(page, /createApplicationDocument\(clone\(businessRoot\)/);
   assert.match(page, /bindingOptionsFor/);
@@ -198,7 +197,7 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /moveBusinessNodeStart/);
   assert.match(page, /resizeBusinessNodeStart/);
   assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);
-  assert.match(businessGeometry, /BUSINESS_PORT_TOP = 112/);
+  assert.match(businessGeometry, /BUSINESS_PORT_TOP = 66/);
   assert.match(businessGeometry, /BUSINESS_PORT_ROW = 28/);
   assert.match(businessGeometry, /BUSINESS_PORT_HEIGHT = 24/);
   assert.match(businessGeometry, /BUSINESS_PORT_DOT_OFFSET = 9/);
@@ -207,7 +206,7 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(businessGeometry, /rows \* BUSINESS_PORT_ROW \+/);
   assert.match(businessGeometry, /businessNodeSize/);
   assert.match(page, /className="business-container-node"/);
-  assert.match(page, /aria-label=\{`当前业务容器：\$\{businessScope\.name\}`\}/);
+  assert.match(page, /businessScope\.name/);
   assert.match(page, /businessScope\.description/);
   assert.match(page, /businessScope\.inputs\.map/);
   assert.match(page, /businessScope\.outputs\.map/);

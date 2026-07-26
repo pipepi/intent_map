@@ -11,6 +11,8 @@ import {
   getContainerSurface,
   loadIntentDocument,
   parentScopeStack,
+  removeNodeFromPanelSelections,
+  removeSurface,
   resolveFeatureContext,
   scopeCameraKey,
   serializeIntentDocument,
@@ -157,6 +159,83 @@ test("rejects cross-panel and missing active container bindings", () => {
   assert.throws(
     () => loadIntentDocument(brokenActive),
     /活动上下文必须引用同 Panel 当前容器/,
+  );
+});
+
+test("removes an active container deterministically and preserves dangling pins", () => {
+  let document = createApplicationDocument(createSampleBusinessRoot());
+  document = updatePanel(document, "panel-workbench", (panel) => ({
+    ...panel,
+    surfaces: [
+      ...panel.surfaces,
+      {
+        ...getContainerSurface(document, "panel-free-layout"),
+        id: "workbench-container-2",
+        title: "第二上下文",
+      },
+    ],
+  }));
+  document = updateSurface(
+    document,
+    "panel-workbench",
+    "workbench-properties",
+    (surface) => ({
+      ...surface,
+      contextSource: {
+        mode: "fixed-container",
+        surfaceId: "workbench-container",
+      },
+    }),
+  );
+  document = removeSurface(
+    document,
+    "panel-workbench",
+    "workbench-container",
+  );
+
+  const panel = document.workspaceState.panels.find(
+    (candidate) => candidate.id === "panel-workbench",
+  );
+  assert.equal(panel.activeContainerSurfaceId, "workbench-container-2");
+  assert.equal(
+    panel.surfaces.find((surface) => surface.id === "workbench-properties")
+      .contextSource.surfaceId,
+    "workbench-container",
+  );
+  assert.doesNotThrow(() => loadIntentDocument(document));
+  assert.equal(
+    resolveFeatureContext(
+      document,
+      "panel-workbench",
+      "workbench-properties",
+    ).container,
+    undefined,
+  );
+});
+
+test("removes deleted nodes from every panel selection but keeps fixed subjects", () => {
+  let document = createApplicationDocument(createSampleBusinessRoot());
+  document = updateSurface(
+    document,
+    "panel-workbench",
+    "workbench-properties",
+    (surface) => ({
+      ...surface,
+      subject: { mode: "fixed-node", nodeId: "scenario_flow" },
+    }),
+  );
+  document = removeNodeFromPanelSelections(document, "scenario_flow");
+  assert.equal(
+    document.workspaceState.panels.every(
+      (panel) => !panel.selection.nodeIds.includes("scenario_flow"),
+    ),
+    true,
+  );
+  assert.equal(
+    document.workspaceState.panels[0].surfaces.find(
+      (surface) => surface.id === "workbench-properties",
+    ).subject.nodeId,
+    "scenario_flow",
   );
 });
 

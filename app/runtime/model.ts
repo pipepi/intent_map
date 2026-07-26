@@ -889,6 +889,15 @@ function assertWorkspace(
     throw new Error("workspaceState: 无效工作区");
   }
   const viewIds = new Set(views.map((view) => view.id));
+  const surfaceOwners = new Map<string, string>();
+  for (const rawPanel of value.panels) {
+    if (!isRecord(rawPanel) || !Array.isArray(rawPanel.surfaces)) continue;
+    for (const rawSurface of rawPanel.surfaces) {
+      if (isRecord(rawSurface) && typeof rawSurface.id === "string") {
+        surfaceOwners.set(rawSurface.id, String(rawPanel.id));
+      }
+    }
+  }
   const panelIds = new Set<string>();
   for (const [panelIndex, rawPanel] of value.panels.entries()) {
     const path = `workspaceState.panels[${panelIndex}]`;
@@ -908,9 +917,6 @@ function assertWorkspace(
     rawPanel.surfaces.forEach((surface, index) =>
       assertSurface(surface, `${path}.surfaces[${index}]`, root),
     );
-    const surfaceIds = new Set(
-      rawPanel.surfaces.map((surface) => (surface as SurfaceInstance).id),
-    );
     if (
       rawPanel.activeContainerSurfaceId !== undefined &&
       !rawPanel.surfaces.some(
@@ -926,7 +932,8 @@ function assertWorkspace(
       if (
         surface.kind === "feature-panel" &&
         surface.contextSource.mode === "fixed-container" &&
-        !surfaceIds.has(surface.contextSource.surfaceId)
+        surfaceOwners.has(surface.contextSource.surfaceId) &&
+        surfaceOwners.get(surface.contextSource.surfaceId) !== rawPanel.id
       ) {
         throw new Error(`${path}: 固定来源不属于当前 Panel`);
       }
@@ -1004,6 +1011,51 @@ export const updateSurface = (
       surface.id === surfaceId ? updater(surface) : surface,
     ),
   }));
+
+export const removeSurface = (
+  document: IntentDocumentV3,
+  panelId: string,
+  surfaceId: string,
+): IntentDocumentV3 =>
+  updatePanel(document, panelId, (panel) => {
+    const surfaces = panel.surfaces.filter(
+      (surface) => surface.id !== surfaceId,
+    );
+    return {
+      ...panel,
+      surfaces,
+      activeContainerSurfaceId:
+        panel.activeContainerSurfaceId === surfaceId
+          ? surfaces.find((surface) => surface.kind === "current-container")?.id
+          : panel.activeContainerSurfaceId,
+    };
+  });
+
+export const removeNodeFromPanelSelections = (
+  document: IntentDocumentV3,
+  nodeId: string,
+): IntentDocumentV3 => ({
+  ...document,
+  workspaceState: {
+    ...document.workspaceState,
+    panels: document.workspaceState.panels.map((panel) => {
+      const nodeIds = panel.selection.nodeIds.filter((id) => id !== nodeId);
+      const removedPrimary = panel.selection.primaryNodeId === nodeId;
+      return {
+        ...panel,
+        selection: {
+          nodeIds,
+          primaryNodeId: removedPrimary
+            ? nodeIds[0]
+            : panel.selection.primaryNodeId,
+          revision: removedPrimary
+            ? panel.selection.revision + 1
+            : panel.selection.revision,
+        },
+      };
+    }),
+  },
+});
 
 export const resolveFeatureContext = (
   document: IntentDocumentV3,

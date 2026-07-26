@@ -19,8 +19,10 @@ import {
   getBusinessRoot,
   loadIntentDocument,
   nodeDisplayMode,
+  removeNodeFromPanelSelections,
   scopeCameraKey,
   serializeIntentDocument,
+  updatePanel,
   updateSurface,
   type CameraState,
   type Expression,
@@ -29,6 +31,7 @@ import {
   type JsonValue,
   type PublishedModule,
   type ScopeAddress,
+  type WorkspaceState,
 } from "./runtime/model";
 import {
   MINIMIZED_NODE_SIZE,
@@ -49,6 +52,7 @@ import {
 } from "./runtime/pip";
 import { cameraForTouchGesture } from "./runtime/camera";
 import { createSampleBusinessRoot } from "./runtime/sample-business-tree";
+import { Workspace } from "./runtime/workspace";
 import {
   BUSINESS_CONTAINER_PORT_TOP,
   BUSINESS_PORT_ROW,
@@ -119,6 +123,17 @@ const uid = (prefix = "id") =>
 
 const sampleDocument = () =>
   createApplicationDocument(createSampleBusinessRoot());
+
+const initialNavigationStack = (
+  document: Pick<IntentDocumentV3, "rootIntent" | "businessRootId">,
+): ScopeAddress[] => [
+  { domain: "app", nodeId: document.rootIntent.id },
+  {
+    domain: "business",
+    nodeId: document.businessRootId,
+    viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+  },
+];
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -403,9 +418,9 @@ export default function Home() {
   const [documentState, setDocumentState] = useState<IntentDocumentV3>(() => sampleDocument());
   const [history, setHistory] = useState<IntentDocumentV3[]>([]);
   const [future, setFuture] = useState<IntentDocumentV3[]>([]);
-  const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>([
-    { domain: "app", nodeId: "application_root" },
-  ]);
+  const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>(() =>
+    initialNavigationStack(sampleDocument()),
+  );
   const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container");
   const [camera, setCamera] = useState<CameraState>({ scale: 0.5, x: 12, y: 12 });
   const [search, setSearch] = useState("");
@@ -492,8 +507,27 @@ export default function Home() {
   );
 
   const setSelectedBusinessNodeId = useCallback(
-    (nodeId: string) =>
-      dispatchRuntimeEvent("SELECT_NODE", "node-selection", { nodeId }),
+    (nodeId: string) => {
+      dispatchRuntimeEvent("SELECT_NODE", "node-selection", { nodeId });
+      setDocumentState((active) => {
+        const next = updatePanel(active, "panel-free-layout", (panel) => ({
+          ...panel,
+          activeContainerSurfaceId: "free-layout-container",
+          selection: {
+            nodeIds: [nodeId],
+            primaryNodeId: nodeId,
+            revision: panel.selection.revision + 1,
+          },
+        }));
+        return {
+          ...next,
+          workspaceState: {
+            ...next.workspaceState,
+          activePanelId: "panel-free-layout",
+          },
+        };
+      });
+    },
     [dispatchRuntimeEvent],
   );
 
@@ -540,6 +574,36 @@ export default function Home() {
   );
   const selectedBusinessNode =
     findNode(businessRoot, selectedBusinessNodeId) ?? businessScope;
+
+  useEffect(() => {
+    setDocumentState((active) =>
+      updateSurface(
+        active,
+        "panel-free-layout",
+        "free-layout-container",
+        (surface) => {
+          if (surface.kind !== "current-container") return surface;
+          const nextStack = navigationStack.map((address) => address.nodeId);
+          if (
+            surface.scopeNodeId === scopeNode.id &&
+            surface.nodeLayoutLocked === layoutLocked &&
+            surface.navigationStack.join("/") === nextStack.join("/")
+          ) {
+            return surface;
+          }
+          return {
+            ...surface,
+            scopeNodeId: scopeNode.id,
+            navigationStack: nextStack,
+            nodeLayoutLocked: layoutLocked,
+          };
+        },
+      ),
+    );
+    // The free-layout canvas persists its private container context.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+  }, [layoutLocked, navigationStack, scopeNode.id]);
+
   const appEdges = useMemo(() => aggregateEdges(deriveEdges(scopeNode)), [scopeNode]);
   const scopeBoundaryEdges = useMemo(
     () => deriveScopeBoundaryEdges(scopeNode),
@@ -1479,7 +1543,7 @@ export default function Home() {
       scopeId: loaded.businessRootId,
       selectionId: loaded.businessRootId,
     });
-    setNavigationStack([{ domain: "app", nodeId: loaded.rootIntent.id }]);
+    setNavigationStack(initialNavigationStack(loaded));
     setDirty(false);
   };
 
@@ -1672,10 +1736,10 @@ export default function Home() {
 
   const deleteSelected = () => {
     if (selectedBusinessNode.id === businessRoot.id) return;
-    commit({
+    commit(removeNodeFromPanelSelections({
       ...documentState,
       rootIntent: removeNode(documentState.rootIntent, selectedBusinessNode.id),
-    });
+    }, selectedBusinessNode.id));
     setSelectedBusinessNodeId(businessScope.id);
   };
 
@@ -1720,9 +1784,7 @@ export default function Home() {
     setHistory((items) => [...items.slice(-29), documentState]);
     setFuture([]);
     setDocumentState(reset);
-    setNavigationStack([
-      { domain: "app", nodeId: reset.rootIntent.id },
-    ]);
+    setNavigationStack(initialNavigationStack(reset));
     setSelectedAppNodeId("current_container");
     dispatchRuntimeEvent("DOCUMENT_LOADED", "application_root", {
       scopeId: reset.businessRootId,
@@ -1802,9 +1864,7 @@ export default function Home() {
     setHistory((items) => [...items, documentState]);
     setFuture([]);
     setDocumentState(next);
-    setNavigationStack([
-      { domain: "app", nodeId: next.rootIntent.id },
-    ]);
+    setNavigationStack(initialNavigationStack(next));
     dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
       scopeId: next.businessRootId,
       selectionId: next.businessRootId,
@@ -2894,7 +2954,20 @@ export default function Home() {
   return (
     <main className="everything-app">
       <input ref={fileInputRef} type="file" accept=".json,.intent-map.json,.pip" hidden onChange={importDocument} />
-      <div
+      <Workspace
+        document={documentState}
+        trace={trace}
+        onWorkspaceChange={(workspace: WorkspaceState) => {
+          setDocumentState((active) => ({
+            ...active,
+            workspaceState: workspace,
+          }));
+          setDirty(true);
+        }}
+        onNodeChange={(nodeId, patch) => {
+          updateDocumentNode(nodeId, (node) => ({ ...node, ...patch }));
+        }}
+        freeCanvas={<div
         ref={viewportRef}
         className={`root-node-viewport ${layoutLocked ? "layout-locked" : ""}`}
         onWheel={onWheel}
@@ -3139,7 +3212,8 @@ export default function Home() {
             {toast}<span>×</span>
           </button>
         )}
-      </div>
+      </div>}
+      />
     </main>
   );
 }
