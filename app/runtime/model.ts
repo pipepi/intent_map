@@ -50,6 +50,13 @@ export type CameraState = {
   y: number;
 };
 
+export type NormalizedFrame = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type NodeDisplayMode = "expanded" | "minimized";
 
 export type IntentNode = {
@@ -96,7 +103,87 @@ export type IntentDocumentV2 = {
   };
 };
 
-export type IntentDocument = IntentDocumentV1 | IntentDocumentV2;
+export type SurfaceContextSource =
+  | { mode: "follow-active-container" }
+  | { mode: "fixed-container"; surfaceId: string };
+
+export type SurfaceSubject =
+  | { mode: "follow-panel-selection" }
+  | { mode: "fixed-node"; nodeId: string };
+
+export type FeaturePanelSurface = {
+  kind: "feature-panel";
+  id: string;
+  featureNodeId: string;
+  title: string;
+  frame: NormalizedFrame;
+  zIndex: number;
+  contextSource: SurfaceContextSource;
+  subject: SurfaceSubject;
+  localState: Record<string, JsonValue>;
+};
+
+export type ContainerSurface = {
+  kind: "current-container";
+  id: string;
+  title: string;
+  frame: NormalizedFrame;
+  zIndex: number;
+  scopeNodeId: string;
+  navigationStack: string[];
+  camera: CameraState;
+  nodeLayoutLocked: boolean;
+  localState: {
+    cameras?: Record<string, CameraState>;
+    [key: string]: JsonValue | Record<string, CameraState> | undefined;
+  };
+};
+
+export type SurfaceInstance = FeaturePanelSurface | ContainerSurface;
+
+export type SurfaceTemplate = SurfaceInstance;
+
+export type ViewDefinition = {
+  id: string;
+  name: string;
+  kind: "free-layout" | "workbench";
+  layoutLocked: boolean;
+  surfaceTemplates: SurfaceTemplate[];
+};
+
+export type PanelSelection = {
+  nodeIds: string[];
+  primaryNodeId?: string;
+  revision: number;
+};
+
+export type PanelInstance = {
+  id: string;
+  title: string;
+  viewId: string;
+  frame: NormalizedFrame;
+  zIndex: number;
+  layoutLocked: boolean;
+  activeContainerSurfaceId?: string;
+  selection: PanelSelection;
+  surfaces: SurfaceInstance[];
+};
+
+export type WorkspaceState = {
+  activePanelId: string;
+  panels: PanelInstance[];
+};
+
+export type IntentDocumentV3 = {
+  version: 3;
+  rootIntent: IntentNode;
+  businessRootId: string;
+  publishedModules: PublishedModule[];
+  views: ViewDefinition[];
+  workspaceState: WorkspaceState;
+};
+
+export type IntentDocument = IntentDocumentV3;
 
 export const ACTIVE_BUSINESS_SCOPE_REF_ID = "active_business_scope_ref";
 
@@ -494,10 +581,154 @@ export const nodeDisplayMode = (
   node: Pick<IntentNode, "id" | "implementation" | "displayMode">,
 ): NodeDisplayMode => node.displayMode ?? defaultNodeDisplayMode(node);
 
+const defaultContainerSurface = (
+  id: string,
+  title: string,
+  frame: NormalizedFrame,
+  businessRootId: string,
+): ContainerSurface => ({
+  kind: "current-container",
+  id,
+  title,
+  frame,
+  zIndex: 1,
+  scopeNodeId: businessRootId,
+  navigationStack: [businessRootId],
+  camera: { scale: 0.55, x: 12, y: 12 },
+  nodeLayoutLocked: false,
+  localState: {
+    cameras: {
+      [`business:${businessRootId}`]: { scale: 0.55, x: 12, y: 12 },
+    },
+  },
+});
+
+const defaultFeatureSurface = (
+  id: string,
+  title: string,
+  featureNodeId: string,
+  frame: NormalizedFrame,
+): FeaturePanelSurface => ({
+  kind: "feature-panel",
+  id,
+  title,
+  featureNodeId,
+  frame,
+  zIndex: 2,
+  contextSource: { mode: "follow-active-container" },
+  subject: { mode: "follow-panel-selection" },
+  localState: {},
+});
+
+export const createDefaultViews = (
+  businessRootId: string,
+): ViewDefinition[] => {
+  const freeContainer = defaultContainerSurface(
+    "free-layout-container",
+    "自由布局",
+    { x: 0, y: 0, width: 1, height: 1 },
+    businessRootId,
+  );
+  const workbenchContainer = defaultContainerSurface(
+    "workbench-container",
+    "当前容器",
+    { x: 0.245, y: 0.055, width: 0.5, height: 0.62 },
+    businessRootId,
+  );
+  return [
+    {
+      id: "view-free-layout",
+      name: "自由布局",
+      kind: "free-layout",
+      layoutLocked: false,
+      surfaceTemplates: [freeContainer],
+    },
+    {
+      id: "view-workbench",
+      name: "工作台",
+      kind: "workbench",
+      layoutLocked: true,
+      surfaceTemplates: [
+        workbenchContainer,
+        defaultFeatureSurface(
+          "workbench-tree",
+          "节点树",
+          "intent_tree",
+          { x: 0.01, y: 0.055, width: 0.225, height: 0.62 },
+        ),
+        defaultFeatureSurface(
+          "workbench-properties",
+          "属性检视器",
+          "properties",
+          { x: 0.755, y: 0.055, width: 0.235, height: 0.62 },
+        ),
+        defaultFeatureSurface(
+          "workbench-validation",
+          "验证",
+          "validation",
+          { x: 0.01, y: 0.695, width: 0.48, height: 0.295 },
+        ),
+        defaultFeatureSurface(
+          "workbench-trace",
+          "运行轨迹",
+          "run_trace",
+          { x: 0.5, y: 0.695, width: 0.49, height: 0.295 },
+        ),
+      ],
+    },
+  ];
+};
+
+const cloneSurface = <T extends SurfaceInstance>(surface: T): T =>
+  cloneWithoutEdges(surface);
+
+export const createDefaultWorkspaceState = (
+  views: ViewDefinition[],
+  businessRootId: string,
+): WorkspaceState => {
+  const freeView = views.find((view) => view.id === "view-free-layout")!;
+  const workbenchView = views.find((view) => view.id === "view-workbench")!;
+  return {
+    activePanelId: "panel-workbench",
+    panels: [
+      {
+        id: "panel-workbench",
+        title: "工作台",
+        viewId: workbenchView.id,
+        frame: { x: 0.01, y: 0.02, width: 0.49, height: 0.96 },
+        zIndex: 2,
+        layoutLocked: true,
+        activeContainerSurfaceId: "workbench-container",
+        selection: {
+          nodeIds: ["scenario_flow"],
+          primaryNodeId: "scenario_flow",
+          revision: 0,
+        },
+        surfaces: workbenchView.surfaceTemplates.map(cloneSurface),
+      },
+      {
+        id: "panel-free-layout",
+        title: "自由布局",
+        viewId: freeView.id,
+        frame: { x: 0.51, y: 0.02, width: 0.48, height: 0.96 },
+        zIndex: 1,
+        layoutLocked: false,
+        activeContainerSurfaceId: "free-layout-container",
+        selection: {
+          nodeIds: ["scenario_flow"],
+          primaryNodeId: "scenario_flow",
+          revision: 0,
+        },
+        surfaces: freeView.surfaceTemplates.map(cloneSurface),
+      },
+    ],
+  };
+};
+
 export const createApplicationDocument = (
   businessRoot: IntentNode,
   publishedModules: PublishedModule[] = [],
-): IntentDocumentV2 => {
+): IntentDocumentV3 => {
   const safeBusinessRoot = cloneWithoutEdges(businessRoot);
   const children = appNodeDefinitions().map((definition) => {
     const node: IntentNode = {
@@ -534,8 +765,9 @@ export const createApplicationDocument = (
       : node;
   });
 
+  const views = createDefaultViews(safeBusinessRoot.id);
   return {
-    version: 2,
+    version: 3,
     rootIntent: {
       id: "application_root",
       name: "Intent Map 应用根",
@@ -562,12 +794,8 @@ export const createApplicationDocument = (
     },
     businessRootId: safeBusinessRoot.id,
     publishedModules: cloneWithoutEdges(publishedModules),
-    viewState: {
-      layoutLocked: false,
-      cameras: {
-        "app:application_root": { scale: 1, x: 0, y: 0 },
-      },
-    },
+    views,
+    workspaceState: createDefaultWorkspaceState(views, safeBusinessRoot.id),
   };
 };
 
@@ -596,69 +824,217 @@ const assertNodeShape: (
   }
 };
 
-export const loadIntentDocument = (input: unknown): IntentDocumentV2 => {
-  if (!isRecord(input)) throw new Error("文档必须是 JSON 对象");
-  if (input.version === 1) {
-    assertNodeShape(input.rootIntent, "rootIntent");
-    const modules = Array.isArray(input.publishedModules)
-      ? (input.publishedModules as PublishedModule[])
-      : [];
-    return createApplicationDocument(input.rootIntent, modules);
+const assertFrame = (value: unknown, path: string) => {
+  if (
+    !isRecord(value) ||
+    !["x", "y", "width", "height"].every(
+      (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
+    ) ||
+    (value.width as number) <= 0 ||
+    (value.height as number) <= 0
+  ) {
+    throw new Error(`${path}: 无效矩形视口`);
   }
-  if (input.version !== 2) throw new Error(`不支持的文档版本：${String(input.version)}`);
-  assertNodeShape(input.rootIntent, "rootIntent");
-  if (typeof input.businessRootId !== "string")
-    throw new Error("businessRootId 缺失");
-  if (!findNode(input.rootIntent, input.businessRootId))
-    throw new Error(`业务根节点不存在：${input.businessRootId}`);
-  const cloned = cloneWithoutEdges(input) as unknown as IntentDocumentV2;
-  cloned.publishedModules ??= [];
-  cloned.viewState ??= { layoutLocked: false, cameras: {} };
-  cloned.viewState.cameras ??= {};
-  const scopeToolbar = findNode(cloned.rootIntent, "scope_toolbar");
-  if (scopeToolbar?.implementation?.key === "scope-toolbar") {
-    scopeToolbar.implementation.config = {
-      ...scopeToolbar.implementation.config,
-      lod: "always-live",
-    };
+};
+
+function assertSurface(
+  value: unknown,
+  path: string,
+  root: IntentNode,
+): asserts value is SurfaceInstance {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.title !== "string"
+  ) {
+    throw new Error(`${path}: 无效 Surface`);
   }
-  const currentContainer = findNode(cloned.rootIntent, "current_container");
-  if (currentContainer?.implementation?.key === "current-container") {
-    const wired = wireCurrentContainerReference(currentContainer);
-    Object.assign(currentContainer, wired);
+  assertFrame(value.frame, `${path}.frame`);
+  if (value.kind === "current-container") {
+    if (
+      typeof value.scopeNodeId !== "string" ||
+      !findNode(root, value.scopeNodeId) ||
+      !Array.isArray(value.navigationStack) ||
+      !isRecord(value.camera)
+    ) {
+      throw new Error(`${path}: 无效当前容器 Surface`);
+    }
+    return;
   }
-  const businessRoot = findNode(cloned.rootIntent, cloned.businessRootId);
-  const businessIds = new Set<string>();
-  const collectBusinessIds = (node?: IntentNode) => {
-    if (!node) return;
-    businessIds.add(node.id);
-    node.children?.forEach(collectBusinessIds);
-  };
-  collectBusinessIds(businessRoot);
-  cloned.viewState.cameras = Object.fromEntries(
-    Object.entries(cloned.viewState.cameras).map(([key, value]) => {
-      if (key.startsWith("app:") || key.startsWith("business:")) {
-        return [key, value];
+  if (value.kind === "feature-panel") {
+    const feature = findNode(root, String(value.featureNodeId));
+    if (
+      !feature ||
+      feature.kind !== "renderer" ||
+      !isRecord(value.contextSource) ||
+      !isRecord(value.subject)
+    ) {
+      throw new Error(`${path}: 无效功能面板 Surface`);
+    }
+    return;
+  }
+  throw new Error(`${path}: 不支持的 Surface 类型`);
+}
+
+function assertWorkspace(
+  value: unknown,
+  views: ViewDefinition[],
+  root: IntentNode,
+): asserts value is WorkspaceState {
+  if (
+    !isRecord(value) ||
+    typeof value.activePanelId !== "string" ||
+    !Array.isArray(value.panels)
+  ) {
+    throw new Error("workspaceState: 无效工作区");
+  }
+  const viewIds = new Set(views.map((view) => view.id));
+  const panelIds = new Set<string>();
+  for (const [panelIndex, rawPanel] of value.panels.entries()) {
+    const path = `workspaceState.panels[${panelIndex}]`;
+    if (
+      !isRecord(rawPanel) ||
+      typeof rawPanel.id !== "string" ||
+      typeof rawPanel.viewId !== "string" ||
+      !viewIds.has(rawPanel.viewId) ||
+      !Array.isArray(rawPanel.surfaces) ||
+      !isRecord(rawPanel.selection)
+    ) {
+      throw new Error(`${path}: 无效 Panel`);
+    }
+    if (panelIds.has(rawPanel.id)) throw new Error(`${path}: Panel ID 重复`);
+    panelIds.add(rawPanel.id);
+    assertFrame(rawPanel.frame, `${path}.frame`);
+    rawPanel.surfaces.forEach((surface, index) =>
+      assertSurface(surface, `${path}.surfaces[${index}]`, root),
+    );
+    const surfaceIds = new Set(
+      rawPanel.surfaces.map((surface) => (surface as SurfaceInstance).id),
+    );
+    if (
+      rawPanel.activeContainerSurfaceId !== undefined &&
+      !rawPanel.surfaces.some(
+        (surface) =>
+          (surface as SurfaceInstance).id ===
+            rawPanel.activeContainerSurfaceId &&
+          (surface as SurfaceInstance).kind === "current-container",
+      )
+    ) {
+      throw new Error(`${path}: 活动上下文必须引用同 Panel 当前容器`);
+    }
+    for (const surface of rawPanel.surfaces as FeaturePanelSurface[]) {
+      if (
+        surface.kind === "feature-panel" &&
+        surface.contextSource.mode === "fixed-container" &&
+        !surfaceIds.has(surface.contextSource.surfaceId)
+      ) {
+        throw new Error(`${path}: 固定来源不属于当前 Panel`);
       }
-      return [
-        `${businessIds.has(key) ? "business" : "app"}:${key}`,
-        value,
-      ];
-    }),
-  );
+    }
+  }
+  if (value.panels.length && !panelIds.has(value.activePanelId)) {
+    throw new Error("workspaceState.activePanelId: Panel 不存在");
+  }
+}
+
+export const loadIntentDocument = (input: unknown): IntentDocumentV3 => {
+  if (!isRecord(input)) throw new Error("文档必须是 JSON 对象");
+  if (input.version !== 3) {
+    throw new Error(
+      `不支持的文档版本：${String(input.version)}；请导入 v3 工作区文档`,
+    );
+  }
+  assertNodeShape(input.rootIntent, "rootIntent");
+  if (
+    typeof input.businessRootId !== "string" ||
+    !findNode(input.rootIntent, input.businessRootId)
+  ) {
+    throw new Error(`业务根节点不存在：${String(input.businessRootId)}`);
+  }
+  if (!Array.isArray(input.views) || input.views.length === 0) {
+    throw new Error("views: 至少需要一个 View 定义");
+  }
+  const views = input.views as ViewDefinition[];
+  assertWorkspace(input.workspaceState, views, input.rootIntent);
+  const cloned = cloneWithoutEdges(input) as unknown as IntentDocumentV3;
+  cloned.publishedModules ??= [];
   return cloned;
 };
 
-export const exportCompatibleV1 = (
-  document: IntentDocumentV2,
-): IntentDocumentV1 => {
-  const businessRoot = findNode(document.rootIntent, document.businessRootId);
-  if (!businessRoot)
-    throw new Error(`业务根节点不存在：${document.businessRootId}`);
+export const getPanel = (
+  document: IntentDocumentV3,
+  panelId: string,
+): PanelInstance | undefined =>
+  document.workspaceState.panels.find((panel) => panel.id === panelId);
+
+export const getContainerSurface = (
+  document: IntentDocumentV3,
+  panelId: string,
+  surfaceId?: string,
+): ContainerSurface | undefined => {
+  const panel = getPanel(document, panelId);
+  const targetId = surfaceId ?? panel?.activeContainerSurfaceId;
+  const surface = panel?.surfaces.find((candidate) => candidate.id === targetId);
+  return surface?.kind === "current-container" ? surface : undefined;
+};
+
+export const updatePanel = (
+  document: IntentDocumentV3,
+  panelId: string,
+  updater: (panel: PanelInstance) => PanelInstance,
+): IntentDocumentV3 => ({
+  ...document,
+  workspaceState: {
+    ...document.workspaceState,
+    panels: document.workspaceState.panels.map((panel) =>
+      panel.id === panelId ? updater(panel) : panel,
+    ),
+  },
+});
+
+export const updateSurface = (
+  document: IntentDocumentV3,
+  panelId: string,
+  surfaceId: string,
+  updater: (surface: SurfaceInstance) => SurfaceInstance,
+): IntentDocumentV3 =>
+  updatePanel(document, panelId, (panel) => ({
+    ...panel,
+    surfaces: panel.surfaces.map((surface) =>
+      surface.id === surfaceId ? updater(surface) : surface,
+    ),
+  }));
+
+export const resolveFeatureContext = (
+  document: IntentDocumentV3,
+  panelId: string,
+  surfaceId: string,
+): {
+  panel?: PanelInstance;
+  feature?: FeaturePanelSurface;
+  container?: ContainerSurface;
+  subject?: IntentNode;
+} => {
+  const panel = getPanel(document, panelId);
+  const candidate = panel?.surfaces.find((surface) => surface.id === surfaceId);
+  const feature =
+    candidate?.kind === "feature-panel" ? candidate : undefined;
+  const sourceId =
+    feature?.contextSource.mode === "fixed-container"
+      ? feature.contextSource.surfaceId
+      : panel?.activeContainerSurfaceId;
+  const source = panel?.surfaces.find((surface) => surface.id === sourceId);
+  const container =
+    source?.kind === "current-container" ? source : undefined;
+  const subjectId =
+    feature?.subject.mode === "fixed-node"
+      ? feature.subject.nodeId
+      : panel?.selection.primaryNodeId;
   return {
-    version: 1,
-    rootIntent: cloneWithoutEdges(businessRoot),
-    publishedModules: cloneWithoutEdges(document.publishedModules),
+    panel,
+    feature,
+    container,
+    subject: subjectId ? findNode(document.rootIntent, subjectId) : undefined,
   };
 };
 
@@ -678,7 +1054,7 @@ const sortForExport = (value: unknown): unknown => {
 export const serializeIntentDocument = (document: IntentDocument): string =>
   JSON.stringify(sortForExport(document), null, 2);
 
-export const getBusinessRoot = (document: IntentDocumentV2): IntentNode => {
+export const getBusinessRoot = (document: IntentDocumentV3): IntentNode => {
   const root = findNode(document.rootIntent, document.businessRootId);
   if (!root) throw new Error(`业务根节点不存在：${document.businessRootId}`);
   return root;

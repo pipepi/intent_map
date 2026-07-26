@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-import type { IntentDocumentV2, IntentNode, JsonValue } from "./model";
+import type { IntentDocumentV3, IntentNode, JsonValue } from "./model";
 
 export type RuntimeCommand = {
   type: string;
@@ -12,7 +12,7 @@ export type RuntimeCommand = {
 
 export type RuntimeRendererProps = {
   node: IntentNode;
-  document: IntentDocumentV2;
+  document: IntentDocumentV3;
   scale: number;
   active: boolean;
   selected: boolean;
@@ -36,7 +36,7 @@ const summaryRenderer =
 
 const builtInRenderers: Record<string, RuntimeRenderer> = {
   "application-root": summaryRenderer("ROOT", "全屏节点运行时"),
-  "intent-document-loader": summaryRenderer("LOADER", "v1 / v2 文档加载与迁移"),
+  "intent-document-loader": summaryRenderer("LOADER", "v3 工作区文档校验"),
   "application-state": summaryRenderer("STATE", "作用域、选择与布局快照"),
   "event-clock": summaryRenderer("EVENT", "离散事务批次"),
   "command-processor": summaryRenderer("ACTION", "确定性命令归约"),

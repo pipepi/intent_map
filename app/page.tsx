@@ -15,15 +15,16 @@ import {
 import {
   ACTIVE_BUSINESS_SCOPE_REF_ID,
   createApplicationDocument,
-  exportCompatibleV1,
+  getContainerSurface,
   getBusinessRoot,
   loadIntentDocument,
   nodeDisplayMode,
   scopeCameraKey,
   serializeIntentDocument,
+  updateSurface,
   type CameraState,
   type Expression,
-  type IntentDocumentV2,
+  type IntentDocumentV3,
   type IntentNode,
   type JsonValue,
   type PublishedModule,
@@ -377,7 +378,7 @@ const executeBusinessNode = async (
 };
 
 const downloadJson = (name: string, value: unknown) => {
-  const blob = new Blob([serializeIntentDocument(value as IntentDocumentV2)], {
+  const blob = new Blob([serializeIntentDocument(value as IntentDocumentV3)], {
     type: "application/json",
   });
   const url = URL.createObjectURL(blob);
@@ -399,9 +400,9 @@ const downloadBytes = (name: string, bytes: Uint8Array, type: string) => {
 };
 
 export default function Home() {
-  const [documentState, setDocumentState] = useState<IntentDocumentV2>(() => sampleDocument());
-  const [history, setHistory] = useState<IntentDocumentV2[]>([]);
-  const [future, setFuture] = useState<IntentDocumentV2[]>([]);
+  const [documentState, setDocumentState] = useState<IntentDocumentV3>(() => sampleDocument());
+  const [history, setHistory] = useState<IntentDocumentV3[]>([]);
+  const [future, setFuture] = useState<IntentDocumentV3[]>([]);
   const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>([
     { domain: "app", nodeId: "application_root" },
   ]);
@@ -445,7 +446,7 @@ export default function Home() {
     redo: () => void;
     enterNode: (node: IntentNode) => void;
     deleteAppNode: () => void;
-    documentState: IntentDocumentV2;
+    documentState: IntentDocumentV3;
     visibleNodes: IntentNode[];
     isBusinessScope: boolean;
     scopeNode: IntentNode;
@@ -632,7 +633,7 @@ export default function Home() {
   );
 
   const commit = useCallback(
-    (next: IntentDocumentV2) => {
+    (next: IntentDocumentV3) => {
       setHistory((items) => [...items.slice(-29), documentState]);
       setFuture([]);
       setDocumentState(next);
@@ -643,7 +644,7 @@ export default function Home() {
   );
 
   const commitView = useCallback(
-    (next: IntentDocumentV2) => {
+    (next: IntentDocumentV3) => {
       setDocumentState(next);
       setDirty(true);
       dispatchRuntimeEvent("DOCUMENT_CHANGED", "document-store");
@@ -699,16 +700,27 @@ export default function Home() {
       cameraRef.current = next;
       setCamera(next);
       if (persist) {
-        setDocumentState((active) => ({
-          ...active,
-          viewState: {
-            ...active.viewState,
-            cameras: {
-              ...active.viewState.cameras,
-              [activeCameraKey]: next,
-            },
-          },
-        }));
+        setDocumentState((active) =>
+          updateSurface(
+            active,
+            "panel-free-layout",
+            "free-layout-container",
+            (surface) =>
+              surface.kind === "current-container"
+                ? {
+                    ...surface,
+                    camera: next,
+                    localState: {
+                      ...surface.localState,
+                      cameras: {
+                        ...(surface.localState.cameras ?? {}),
+                        [activeCameraKey]: next,
+                      },
+                    },
+                  }
+                : surface,
+          ),
+        );
       }
     },
     [activeCameraKey],
@@ -811,7 +823,11 @@ export default function Home() {
   );
 
   useEffect(() => {
-    const saved = documentState.viewState.cameras[activeCameraKey];
+    const saved = getContainerSurface(
+      documentState,
+      "panel-free-layout",
+      "free-layout-container",
+    )?.localState.cameras?.[activeCameraKey];
     const frame = window.requestAnimationFrame(() => {
       if (fitOnNextScopeRef.current) {
         fitOnNextScopeRef.current = false;
@@ -1456,7 +1472,7 @@ export default function Home() {
     setDocumentState(next);
   };
 
-  const applyLoadedDocument = (loaded: IntentDocumentV2) => {
+  const applyLoadedDocument = (loaded: IntentDocumentV3) => {
     setHistory((items) => [...items, documentState]);
     setDocumentState(loaded);
     dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
@@ -1803,12 +1819,9 @@ export default function Home() {
         if (command.type === "NEW_DOCUMENT") newDocument();
         if (command.type === "IMPORT_REQUEST") fileInputRef.current?.click();
         if (command.type === "EXPORT_V2")
-          downloadJson("intent-map-v2.intent-map.json", documentState);
+          downloadJson("intent-map-v3.intent-map.json", documentState);
         if (command.type === "EXPORT_V1")
-          downloadJson(
-            "intent-map-v1-compatible.intent-map.json",
-            exportCompatibleV1(documentState),
-          );
+          setToast("v3 工作区不再导出旧版 v1/v2 文档");
         if (command.type === "UNDO") undo();
         if (command.type === "REDO") redo();
         if (command.type === "AUTO_LAYOUT") autoLayout();
