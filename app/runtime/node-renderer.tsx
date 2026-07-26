@@ -203,7 +203,7 @@ export function NodeRenderer({
               <div className="runtime-lod-summary">
                 <span>{node.description}</span>
                 {node.implementation?.visual && (
-                  <small>放大至 75% 以上查看交互面板</small>
+                  <small>放大至 55% 以上查看交互面板</small>
                 )}
                 <small>
                   {node.inputs.length} 输入 · {node.outputs.length} 输出
