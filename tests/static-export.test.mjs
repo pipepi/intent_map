@@ -153,6 +153,24 @@ test("enables WebView2 pinch gestures in the Tauri seed host", async () => {
   );
 });
 
+test("builds distributable PIP assets from a clean and coherent static export", async () => {
+  const cleanBuild = await readFile(
+    new URL("scripts/build-static.mjs", root),
+    "utf8",
+  );
+  const pipBuild = await readFile(
+    new URL("scripts/build-pip.mjs", root),
+    "utf8",
+  );
+
+  assert.match(cleanBuild, /rm\(path\.join\(root, "\.next"\)/);
+  assert.match(cleanBuild, /next", "dist", "bin", "next"/);
+  assert.match(pipBuild, /v3 workspace HTML is paired with stale CSS/);
+  assert.match(pipBuild, /\.workspace-v3/);
+  assert.match(pipBuild, /\.workspace-panel/);
+  assert.match(pipBuild, /\.workspace-surface/);
+});
+
 test("derives and aggregates root pipes without persisting edges", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
   const model = await readFile(new URL("app/runtime/model.ts", root), "utf8");

@@ -73,6 +73,35 @@ if (!assetsInfo.isDirectory()) {
   throw new Error(`PIP asset source is not a directory: ${assetsDirectory}`);
 }
 const assets = await collectAssets(assetsDirectory);
+const assetMap = new Map(assets.map((asset) => [asset.path, asset]));
+const indexAsset = assetMap.get("index.html");
+if (!indexAsset) {
+  throw new Error("PIP static assets must include index.html");
+}
+const indexHtml = new TextDecoder().decode(indexAsset.bytes);
+const stylesheetPaths = [...indexHtml.matchAll(
+  /<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["'][^>]*>/gi,
+)].map((match) => match[1].split(/[?#]/, 1)[0].replace(/^\/+/, ""));
+if (!stylesheetPaths.length) {
+  throw new Error("PIP index.html does not reference a stylesheet");
+}
+const stylesheetText = stylesheetPaths.map((stylesheetPath) => {
+  const stylesheet = assetMap.get(stylesheetPath);
+  if (!stylesheet) {
+    throw new Error(`PIP stylesheet is missing from static assets: ${stylesheetPath}`);
+  }
+  return new TextDecoder().decode(stylesheet.bytes);
+}).join("\n");
+if (
+  indexHtml.includes("workspace-v3") &&
+  (!stylesheetText.includes(".workspace-v3") ||
+    !stylesheetText.includes(".workspace-panel") ||
+    !stylesheetText.includes(".workspace-surface"))
+) {
+  throw new Error(
+    "PIP static export is inconsistent: v3 workspace HTML is paired with stale CSS",
+  );
+}
 const createdAt = new Date(Number(process.env.SOURCE_DATE_EPOCH ?? "0") * 1000).toISOString();
 const bytes = await encodePip({
   manifest: {

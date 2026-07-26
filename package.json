@@ -13,7 +13,7 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:pip": "node --test tests/pip-format.test.mjs && cargo test --manifest-path pip-core/Cargo.toml && cargo test --manifest-path pip-seed/Cargo.toml && cargo check --manifest-path pip-seed-tauri/Cargo.toml",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "pip:build": "npm run build && node scripts/build-pip.mjs",
+    "pip:build": "node scripts/build-static.mjs && node scripts/build-pip.mjs",
     "pip:verify": "node scripts/verify-pip.mjs dist/pip/intent-map.pip",
     "pip:host": "cargo run --manifest-path pip-seed/Cargo.toml -- --pip dist/pip/intent-map.pip",
     "pip:desktop": "cargo run --manifest-path pip-seed-tauri/Cargo.toml -- --pip dist/pip/intent-map.pip",
