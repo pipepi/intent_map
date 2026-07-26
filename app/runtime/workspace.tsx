@@ -127,13 +127,6 @@ const updateSurface = (
     ),
   }));
 
-const featureLabel: Record<string, string> = {
-  intent_tree: "节点树",
-  properties: "属性检视器",
-  validation: "验证",
-  run_trace: "运行轨迹",
-};
-
 export function Workspace({
   document,
   freeCanvas,
@@ -796,9 +789,22 @@ export function Workspace({
       !findNode(scope, panel.selection.primaryNodeId);
     return (
       <div className="surface-container-content">
-        <nav>
+        <nav
+          onPointerDown={(event) =>
+            beginDrag(
+              {
+                kind: "surface",
+                panelId: panel.id,
+                surfaceId: surface.id,
+              },
+              surface.frame,
+              event,
+            )
+          }
+        >
           <button
             disabled={surface.navigationStack.length <= 1}
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={() => {
               const parent = surface.navigationStack.at(-2);
               if (parent) navigateContainer(panel.id, surface, parent.nodeId);
@@ -812,6 +818,7 @@ export function Workspace({
             %
           </span>
           <button
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={() =>
               onWorkspaceChange(
                 updateSurface(
@@ -843,6 +850,7 @@ export function Workspace({
             −
           </button>
           <button
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={() =>
               onWorkspaceChange(
                 updateSurface(
@@ -872,6 +880,17 @@ export function Workspace({
             }
           >
             +
+          </button>
+          <button
+            className="surface-close"
+            title={`关闭 ${surface.title}`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              removeSurfaceFromPanel(panel, surface.id);
+            }}
+          >
+            ×
           </button>
         </nav>
         {outsideSelection && (
@@ -1092,70 +1111,70 @@ export function Workspace({
         }}
       >
         <NodeProjection
-        node={projectedNode}
-        scale={surface.viewport.camera.scale}
-        selected={panel.selection.primaryNodeId === featureNode.id}
-        active={false}
-        layoutLocked={panel.layoutLocked}
-        embedded
-        showResizeHandles={false}
-        content={renderNodeContent(featureNode, {
-          panelId: panel.id,
-          surfaceId: surface.id,
-        })}
-        actions={
-          <>
-            {renderFeatureHeaderActions(panel, surface)}
-            <button
-              className="surface-close"
-              title={`关闭 ${surface.title}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                removeSurfaceFromPanel(panel, surface.id);
-              }}
-            >
-              ×
-            </button>
-          </>
-        }
-        onSelect={() => selectNode(panel.id, featureNode.id)}
-        onEnter={() => undefined}
-        onMoveStart={(_node, event) =>
-          beginDrag(
-            {
-              kind: "surface",
-              panelId: panel.id,
-              surfaceId: surface.id,
-            },
-            surface.frame,
-            event,
-          )
-        }
-        onResizeStart={() => undefined}
-        onResizeModeToggle={() => undefined}
-        onDisplayModeToggle={() =>
-          onWorkspaceChange(
-            updateSurface(
-              document.workspaceState,
-              panel.id,
-              surface.id,
-              (candidate) =>
-                candidate.kind === "feature-panel"
-                  ? {
-                      ...candidate,
-                      localState: {
-                        ...candidate.localState,
-                        displayMode:
-                          displayMode === "expanded"
-                            ? "minimized"
-                            : "expanded",
-                      },
-                    }
-                  : candidate,
-            ),
-          )
-        }
+          node={projectedNode}
+          scale={surface.viewport.camera.scale}
+          selected={panel.selection.primaryNodeId === featureNode.id}
+          active={false}
+          layoutLocked={panel.layoutLocked}
+          embedded
+          showResizeHandles={false}
+          content={renderNodeContent(featureNode, {
+            panelId: panel.id,
+            surfaceId: surface.id,
+          })}
+          actions={
+            <>
+              {renderFeatureHeaderActions(panel, surface)}
+              <button
+                className="surface-close"
+                title={`关闭 ${surface.title}`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  removeSurfaceFromPanel(panel, surface.id);
+                }}
+              >
+                ×
+              </button>
+            </>
+          }
+          onSelect={() => selectNode(panel.id, featureNode.id)}
+          onEnter={() => undefined}
+          onMoveStart={(_node, event) =>
+            beginDrag(
+              {
+                kind: "surface",
+                panelId: panel.id,
+                surfaceId: surface.id,
+              },
+              surface.frame,
+              event,
+            )
+          }
+          onResizeStart={() => undefined}
+          onResizeModeToggle={() => undefined}
+          onDisplayModeToggle={() =>
+            onWorkspaceChange(
+              updateSurface(
+                document.workspaceState,
+                panel.id,
+                surface.id,
+                (candidate) =>
+                  candidate.kind === "feature-panel"
+                    ? {
+                        ...candidate,
+                        localState: {
+                          ...candidate.localState,
+                          displayMode:
+                            displayMode === "expanded"
+                              ? "minimized"
+                              : "expanded",
+                        },
+                      }
+                    : candidate,
+              ),
+            )
+          }
         />
       </div>
     );
@@ -1355,45 +1374,6 @@ export function Workspace({
                         zIndex: surface.zIndex,
                       }}
                     >
-                      <header
-                        className="workspace-surface-header"
-                        onPointerDown={(event) =>
-                          beginDrag(
-                            {
-                              kind: "surface",
-                              panelId: panel.id,
-                              surfaceId: surface.id,
-                            },
-                            surface.frame,
-                            event,
-                          )
-                        }
-                      >
-                        <strong>
-                          {surface.kind === "feature-panel"
-                            ? featureLabel[surface.featureNodeId] ??
-                              surface.title
-                            : surface.title}
-                        </strong>
-                        <small>
-                          {surface.kind === "current-container"
-                            ? "可下探容器"
-                            : "功能面板"}
-                        </small>
-                        {surface.kind === "feature-panel" &&
-                          renderFeatureHeaderActions(panel, surface)}
-                        <button
-                          className="surface-close"
-                          title={`关闭 ${surface.title}`}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            removeSurfaceFromPanel(panel, surface.id);
-                          }}
-                        >
-                          ×
-                        </button>
-                      </header>
                       <div className="workspace-surface-body">
                         {surface.kind === "current-container"
                           ? renderContainer(panel, surface)

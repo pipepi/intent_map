@@ -4,9 +4,59 @@ use pip_core::Package;
 use std::borrow::Cow;
 use std::env;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::http::{Method, Request, Response, StatusCode, header};
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+#[derive(Debug, PartialEq)]
+enum OneShotCommand {
+    Verify(Option<PathBuf>),
+    Extract(PathBuf),
+}
+
+fn parse_one_shot_command(args: &[String]) -> Result<Option<OneShotCommand>, String> {
+    match args.first().map(String::as_str) {
+        Some("--verify") => {
+            if args.len() > 2 {
+                return Err("--verify accepts at most one PIP path".into());
+            }
+            Ok(Some(OneShotCommand::Verify(args.get(1).map(PathBuf::from))))
+        }
+        Some("--extract") => {
+            if args.len() != 2 {
+                return Err("--extract requires exactly one destination path".into());
+            }
+            Ok(Some(OneShotCommand::Extract(PathBuf::from(&args[1]))))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn embedded_payload() -> Result<Vec<u8>, String> {
+    let executable =
+        env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
+    pip_core::envelope::extract_from_file(&executable)
+}
+
+fn run_one_shot(command: OneShotCommand) -> Result<(), String> {
+    match command {
+        OneShotCommand::Verify(path) => {
+            let bytes = match path {
+                Some(path) => {
+                    fs::read(&path).map_err(|error| format!("cannot read PIP: {error}"))?
+                }
+                None => embedded_payload()?,
+            };
+            Package::parse(bytes)?;
+        }
+        OneShotCommand::Extract(destination) => {
+            fs::write(&destination, embedded_payload()?)
+                .map_err(|error| format!("cannot write extracted PIP: {error}"))?;
+        }
+    }
+    Ok(())
+}
 
 fn load_payload() -> Result<Vec<u8>, String> {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -14,9 +64,7 @@ fn load_payload() -> Result<Vec<u8>, String> {
         let path = args.get(index + 1).ok_or("--pip requires a path")?;
         return fs::read(path).map_err(|error| format!("cannot read PIP: {error}"));
     }
-    let executable =
-        env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
-    pip_core::envelope::extract_from_file(&executable)
+    embedded_payload()
 }
 
 fn package_response(package: &Package, request: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
@@ -160,6 +208,21 @@ fn show_fatal(message: &str) {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().skip(1).collect();
+    match parse_one_shot_command(&args) {
+        Ok(Some(command)) => {
+            if let Err(error) = run_one_shot(command) {
+                show_fatal(&error);
+                std::process::exit(1);
+            }
+            return;
+        }
+        Err(error) => {
+            show_fatal(&error);
+            std::process::exit(1);
+        }
+        Ok(None) => {}
+    }
     if let Err(error) = run() {
         show_fatal(&error);
         std::process::exit(1);
@@ -168,8 +231,9 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::package_response;
+    use super::{OneShotCommand, package_response, parse_one_shot_command};
     use pip_core::Package;
+    use std::path::PathBuf;
     use tauri::http::{Method, Request, StatusCode};
 
     fn fixture() -> Package {
@@ -207,6 +271,27 @@ mod tests {
         assert_eq!(
             package_response(&package, &request(Method::GET, "/../secret")).status(),
             StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn routes_verify_and_extract_before_starting_tauri() {
+        assert_eq!(
+            parse_one_shot_command(&["--verify".into()]).unwrap(),
+            Some(OneShotCommand::Verify(None))
+        );
+        assert_eq!(
+            parse_one_shot_command(&["--verify".into(), "test.pip".into()]).unwrap(),
+            Some(OneShotCommand::Verify(Some(PathBuf::from("test.pip"))))
+        );
+        assert_eq!(
+            parse_one_shot_command(&["--extract".into(), "out.pip".into()]).unwrap(),
+            Some(OneShotCommand::Extract(PathBuf::from("out.pip")))
+        );
+        assert!(parse_one_shot_command(&["--extract".into()]).is_err());
+        assert_eq!(
+            parse_one_shot_command(&["--pip".into(), "test.pip".into()]).unwrap(),
+            None
         );
     }
 }

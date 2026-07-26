@@ -1095,11 +1095,11 @@ code,
   scrollbar-width: thin;
 }
 
-.surface-feature-panel > .workspace-surface-header {
-  display: none;
+.surface-feature-panel {
+  grid-template-rows: minmax(0, 1fr);
 }
 
-.surface-feature-panel {
+.surface-current-container {
   grid-template-rows: minmax(0, 1fr);
 }
 
@@ -1185,7 +1185,7 @@ code,
 
 .surface-container-content > nav {
   display: grid;
-  grid-template-columns: 25px minmax(0, 1fr) auto 24px 24px;
+  grid-template-columns: 25px minmax(0, 1fr) auto 24px 24px 24px;
   align-items: center;
   gap: 3px;
   padding: 0 5px;
