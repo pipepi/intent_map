@@ -56,20 +56,18 @@ import {
   PROJECTION_LOD_THRESHOLD,
   defaultNodeProjectionLayout,
   projectIntentTree,
-  projectionUsesSummary,
 } from "./runtime/projection";
 import { createSampleBusinessRoot } from "./runtime/sample-business-tree";
 import { Workspace } from "./runtime/workspace";
 import {
-  BUSINESS_CONTAINER_PORT_TOP,
   BUSINESS_PORT_ROW,
   BUSINESS_PORT_TOP,
-  businessEdgeGeometry,
   businessNodeSize,
   clampBusinessNodePosition,
   deriveBusinessVisualEdges,
   resizeBusinessNodeGeometry,
 } from "./runtime/business-canvas";
+import { BusinessGraphProjection } from "./runtime/business-graph-projection";
 import {
   createRuntimeEvent,
   processEventBatch,
@@ -1894,7 +1892,10 @@ export default function Home() {
     setSelectedBusinessNodeId(linked.id);
   };
 
-  const addBusinessChild = () => {
+  const addBusinessChild = (
+    targetScopeId = businessScope.id,
+    selectInFreePanel = true,
+  ) => {
     const node: IntentNode = {
       id: uid("intent"),
       name: "新子意图",
@@ -1908,11 +1909,11 @@ export default function Home() {
       resizeMode: "simple",
       displayMode: "minimized",
     };
-    updateDocumentNode(businessScope.id, (scope) => ({
+    updateDocumentNode(targetScopeId, (scope) => ({
       ...scope,
       children: [...(scope.children ?? []), node],
     }));
-    setSelectedBusinessNodeId(node.id);
+    if (selectInFreePanel) setSelectedBusinessNodeId(node.id);
   };
 
   const addRuntimeChild = () => {
@@ -2451,248 +2452,32 @@ export default function Home() {
   };
 
   const renderBusinessScopeLayer = () => {
-    const size = scopeWorldSize;
     return (
-      <>
-          <section
-            className="business-container-node"
-            aria-label={`当前业务容器：${businessScope.name}`}
-          >
-            <header className="business-container-header">
-              <span>{businessScope.kind.toUpperCase()}</span>
-              <div>
-                <strong>{businessScope.name}</strong>
-                <small>{businessScope.description}</small>
-              </div>
-              <i aria-hidden="true" />
-            </header>
-            <div className="business-container-interfaces">
-              <div className="business-container-inputs">
-                {businessScope.inputs.map((port, index) => (
-                  <span
-                    key={port.id}
-                    style={{ top: BUSINESS_CONTAINER_PORT_TOP + index * BUSINESS_PORT_ROW }}
-                  >
-                    <i />{port.name}
-                  </span>
-                ))}
-              </div>
-              <div className="business-container-outputs">
-                {businessScope.outputs.map((port, index) => (
-                  <span
-                    key={port.id}
-                    style={{ top: BUSINESS_CONTAINER_PORT_TOP + index * BUSINESS_PORT_ROW }}
-                  >
-                    {port.name}<i />
-                  </span>
-                ))}
-              </div>
-            </div>
-            <footer>
-              <span>{businessScope.inputs.length} in</span>
-              <span>{businessScope.children?.length ?? 0} children</span>
-              <span>{businessScope.outputs.length} out</span>
-            </footer>
-          </section>
-          <svg className="business-edges" viewBox={`0 0 ${size.width} ${size.height}`}>
-            <defs>
-              <marker id="business-arrow-input" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" />
-              </marker>
-              <marker id="business-arrow-compute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" />
-              </marker>
-              <marker id="business-arrow-output" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" />
-              </marker>
-            </defs>
-            {pendingPipe && (
-              <line
-                className="pending-pipe"
-                x1={pendingPipe.from.x}
-                y1={pendingPipe.from.y}
-                x2={pendingPipe.to.x}
-                y2={pendingPipe.to.y}
-              />
-            )}
-            {businessVisualEdges.map((edge) => {
-              const geometry = businessEdgeGeometry(
-                businessScope,
-                edge,
-                size,
-              );
-              if (!geometry) return null;
-              const { sx, sy, tx, ty } = geometry;
-              const bend = Math.max(45, Math.abs(tx - sx) * 0.42);
-              const edgeClass =
-                edge.targetKind === "container-output"
-                  ? "edge-output"
-                  : edge.sourceKind === "environment"
-                    ? "edge-input"
-                    : "edge-compute";
-              return (
-                <path
-                  key={edge.id}
-                  className={`business-edge ${edgeClass} channel-${edge.channel} ${selectedBusinessNodeId ? (edge.sourceId === selectedBusinessNodeId || edge.targetId === selectedBusinessNodeId ? "edge-connected" : "edge-dim") : ""}`}
-                  data-source-port={edge.sourcePortId}
-                  data-target-port={edge.targetPortId}
-                  d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`}
-                  markerEnd={`url(#business-arrow-${edgeClass.slice(5)})`}
-                />
-              );
-            })}
-          </svg>
-          {(businessScope.children ?? []).map((node) => {
-            const size = businessNodeSize(node);
-            const resizeMode = nodeResizeMode(node);
-            const visibleDirections = resizeDirectionsFor(resizeMode);
-            const selected = selectedBusinessNodeId === node.id;
-            const minimized = nodeDisplayMode(node) === "minimized";
-            const lodSummary =
-              projectionUsesSummary(camera.scale) && !minimized;
-            return (
-              <Fragment key={node.id}>
-                <article
-                  role="button"
-                  tabIndex={0}
-                  className={`business-node ${minimized ? "minimized" : "expanded"} ${lodSummary ? "lod-summary" : ""} ${selected ? "selected" : ""}`}
-                  style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
-                  onClick={() => setSelectedBusinessNodeId(node.id)}
-                  onDoubleClick={(event) => {
-                    event.stopPropagation();
-                    if (minimized) toggleBusinessDisplayMode(node);
-                    // The handler dereferences navigation state only after input.
-                    // eslint-disable-next-line react-hooks/refs
-                    else enterNode(node);
-                  }}
-                  onPointerDown={(event) => {
-                    // Pointer geometry reads the live camera only after input.
-                    // eslint-disable-next-line react-hooks/refs
-                    moveBusinessNodeStart(node, 1, event);
-                  }}
-                  data-display-mode={minimized ? "minimized" : "expanded"}
-                  title={minimized ? "双击展开节点" : undefined}
-                >
-                  {minimized ? (
-                    <strong>{node.name}</strong>
-                  ) : lodSummary ? (
-                    <>
-                      <span>{node.kind.toUpperCase()}</span>
-                      <strong>{node.name}</strong>
-                      <small>
-                        {node.inputs.length} 输入 · {node.outputs.length} 输出
-                      </small>
-                    </>
-                  ) : (
-                    <>
-                      <span>{node.kind.toUpperCase()}</span>
-                      <strong>{node.name}</strong>
-                      <button
-                        className="node-display-toggle business-display-toggle"
-                        aria-label={`最小化「${node.name}」`}
-                        title="只显示节点名称"
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onDoubleClick={(event) => event.stopPropagation()}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleBusinessDisplayMode(node);
-                        }}
-                      >
-                        −
-                      </button>
-                      <div
-                        className="business-node-ports"
-                        style={{ top: BUSINESS_PORT_TOP }}
-                      >
-                        {node.inputs.map((port, index) => (
-                          <i
-                            className={`input pipe-target ${port.binding ? "bound" : ""}`}
-                            data-port-kind="input"
-                            data-port-node={node.id}
-                            data-port-id={port.id}
-                            title={port.binding ? "双击断开此管道" : "从输出端口拖线到此连接"}
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onDoubleClick={(event) => {
-                              event.stopPropagation();
-                              if (port.binding) {
-                                updateInputBinding(node.id, port.id, "");
-                                setToast(`已断开「${node.name} · ${port.name}」的管道`);
-                              }
-                            }}
-                            style={{ top: index * BUSINESS_PORT_ROW }}
-                            key={port.id}
-                          >
-                            <span>{port.name}</span>
-                          </i>
-                        ))}
-                        {node.outputs.map((port, index) => (
-                          <i
-                            className="output pipe-source"
-                            data-port-kind="output"
-                            data-port-node={node.id}
-                            data-port-id={port.id}
-                            title="拖拽到输入端口创建管道"
-                            onPointerDown={(event) => startPipeDrag(node, port, event)}
-                            style={{ top: index * BUSINESS_PORT_ROW }}
-                            key={port.id}
-                          >
-                            <span>{port.name}</span>
-                          </i>
-                        ))}
-                      </div>
-                      <small style={{ top: BUSINESS_PORT_TOP + Math.max(node.inputs.length, node.outputs.length) * BUSINESS_PORT_ROW + 8 }}>{node.description}</small>
-                      {!layoutLocked &&
-                        visibleDirections.map((direction) => (
-                          <span
-                            className={`resize-handle resize-${direction}`}
-                            key={direction}
-                            onClick={(event) => event.stopPropagation()}
-                            onDoubleClick={(event) => event.stopPropagation()}
-                            onPointerDown={(event) => {
-                              // Resize geometry reads the live camera after input.
-                              // eslint-disable-next-line react-hooks/refs
-                              resizeBusinessNodeStart(
-                                node,
-                                direction,
-                                1,
-                                event,
-                              );
-                            }}
-                          />
-                        ))}
-                      {!layoutLocked && (
-                        <button
-                          className={`resize-mode-toggle business-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
-                          aria-label={
-                            resizeMode === "simple"
-                              ? `将「${node.name}」切换为四边四角缩放`
-                              : `将「${node.name}」切换为右边、下边和右下角缩放`
-                          }
-                          title={
-                            resizeMode === "simple"
-                              ? "当前：右边、下边、右下角 · 点击切换为八向"
-                              : "当前：四边四角 · 点击切换为三向"
-                          }
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onDoubleClick={(event) => event.stopPropagation()}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleBusinessResizeMode(node);
-                          }}
-                        >
-                          {resizeMode === "simple" ? "┘" : "⤢"}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </article>
-              </Fragment>
-            );
-          })}
-          {!businessScope.children?.length && (
-            <button className="business-empty" onClick={addBusinessChild}>＋ 添加子意图</button>
-          )}
-      </>
+      <BusinessGraphProjection
+        projectionId="free-layout-container"
+        scope={businessScope}
+        worldSize={scopeWorldSize}
+        scale={camera.scale}
+        selectedNodeId={selectedBusinessNodeId}
+        layoutLocked={layoutLocked}
+        pendingPipe={pendingPipe}
+        onSelect={(node) => setSelectedBusinessNodeId(node.id)}
+        onEnter={enterNode}
+        onMoveStart={(node, event) =>
+          moveBusinessNodeStart(node, 1, event)
+        }
+        onResizeStart={(node, direction, event) =>
+          resizeBusinessNodeStart(node, direction, 1, event)
+        }
+        onResizeModeToggle={toggleBusinessResizeMode}
+        onDisplayModeToggle={toggleBusinessDisplayMode}
+        onDisconnectInput={(node, port) => {
+          updateInputBinding(node.id, port.id, "");
+          setToast(`已断开「${node.name} · ${port.name}」的管道`);
+        }}
+        onStartPipe={startPipeDrag}
+        onAddChild={addBusinessChild}
+      />
     );
   };
 
@@ -3209,6 +2994,10 @@ export default function Home() {
       <Workspace
         document={documentState}
         renderNodeContent={renderNodeContent}
+        onUpdateInputBinding={updateInputBinding}
+        onAddBusinessChild={(scopeId) =>
+          addBusinessChild(scopeId, false)
+        }
         onWorkspaceChange={(workspace: WorkspaceState) => {
           setDocumentState((active) => ({
             ...active,

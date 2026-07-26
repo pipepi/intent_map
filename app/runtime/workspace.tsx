@@ -2,9 +2,11 @@
 
 import {
   useRef,
+  useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 
 import type {
@@ -18,10 +20,24 @@ import type {
   WorkspaceState,
 } from "./model";
 import { NodeProjection } from "./node-renderer";
+import { BusinessGraphProjection } from "./business-graph-projection";
+import {
+  BUSINESS_PORT_ROW,
+  BUSINESS_PORT_TOP,
+  businessNodeSize,
+  clampBusinessNodePosition,
+  resizeBusinessNodeGeometry,
+} from "./business-canvas";
+import {
+  defaultNodeProjectionLayout,
+  projectIntentTree,
+} from "./projection";
+import { cameraForTouchGesture } from "./camera";
 import {
   businessScopeAddress,
   getBusinessRoot,
   isCoreWorkspacePanel,
+  nodeDisplayMode,
   removeWorkspacePanel,
   scopeCameraKey,
 } from "./model";
@@ -36,6 +52,12 @@ type WorkspaceProps = {
     node: IntentNode,
     context: { panelId: string; surfaceId: string },
   ) => ReactNode;
+  onUpdateInputBinding: (
+    nodeId: string,
+    portId: string,
+    value: string,
+  ) => void;
+  onAddBusinessChild: (scopeId: string) => void;
 };
 
 type DragTarget =
@@ -118,8 +140,30 @@ export function Workspace({
   onUpdateView,
   onSaveViewAs,
   renderNodeContent,
+  onUpdateInputBinding,
+  onAddBusinessChild,
 }: WorkspaceProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const containerTouchPointersRef = useRef(
+    new Map<string, Map<number, { x: number; y: number }>>(),
+  );
+  const containerTouchGesturesRef = useRef(
+    new Map<
+      string,
+      {
+        startCamera: { scale: number; x: number; y: number };
+        startCenter: { x: number; y: number };
+        startDistance?: number;
+      }
+    >(),
+  );
+  const [pendingContainerPipe, setPendingContainerPipe] = useState<{
+    surfaceId: string;
+    sourceNodeId: string;
+    sourcePortId: string;
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+  } | null>(null);
   const businessRoot = getBusinessRoot(document);
   const workspaceUid = (prefix: string) =>
     `${prefix}_${Date.now().toString(36)}_${Math.random()
@@ -454,16 +498,298 @@ export function Workspace({
     panel: PanelInstance,
     surface: ContainerSurface,
   ) => {
-    const scope = findNode(businessRoot, surface.scope.nodeId);
+    const projectedRoot = projectIntentTree(
+      document.rootIntent,
+      document.businessRootId,
+      surface.projections,
+    );
+    const projectedBusinessRoot = getBusinessRoot({
+      ...document,
+      rootIntent: projectedRoot,
+    });
+    const scope = findNode(projectedBusinessRoot, surface.scope.nodeId);
     const projectionKey = scopeCameraKey(surface.scope);
     const camera = surface.projections[projectionKey]?.camera ?? {
       scale: 0.55,
       x: 12,
       y: 12,
     };
+    const updateCamera = (nextCamera: typeof camera) =>
+      onWorkspaceChange(
+        updateSurface(
+          document.workspaceState,
+          panel.id,
+          surface.id,
+          (candidate) => {
+            if (candidate.kind !== "current-container") return candidate;
+            return {
+              ...candidate,
+              projections: {
+                ...candidate.projections,
+                [projectionKey]: {
+                  camera: nextCamera,
+                  nodeLayouts:
+                    candidate.projections[projectionKey]?.nodeLayouts ?? {},
+                },
+              },
+            };
+          },
+        ),
+      );
+    const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (!event.ctrlKey) {
+        updateCamera({
+          ...camera,
+          x: camera.x - event.deltaX,
+          y: camera.y - event.deltaY,
+        });
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      const pointer = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+      const scale = Math.max(
+        0.5,
+        Math.min(2, camera.scale * Math.exp(-event.deltaY * 0.002)),
+      );
+      const worldX = (pointer.x - camera.x) / camera.scale;
+      const worldY = (pointer.y - camera.y) / camera.scale;
+      updateCamera({
+        scale,
+        x: pointer.x - worldX * scale,
+        y: pointer.y - worldY * scale,
+      });
+    };
+    const handleTouchPointer = (
+      phase: "down" | "move" | "up",
+      event: ReactPointerEvent<HTMLDivElement>,
+    ) => {
+      if (event.pointerType !== "touch") return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const point = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+      const points =
+        containerTouchPointersRef.current.get(surface.id) ?? new Map();
+      containerTouchPointersRef.current.set(surface.id, points);
+      if (phase === "up") {
+        points.delete(event.pointerId);
+        containerTouchGesturesRef.current.delete(surface.id);
+        return;
+      }
+      event.currentTarget.setPointerCapture(event.pointerId);
+      points.set(event.pointerId, point);
+      const values = [...points.values()];
+      const center =
+        values.length > 1
+          ? {
+              x: (values[0].x + values[1].x) / 2,
+              y: (values[0].y + values[1].y) / 2,
+            }
+          : values[0];
+      const distance =
+        values.length > 1
+          ? Math.hypot(
+              values[1].x - values[0].x,
+              values[1].y - values[0].y,
+            )
+          : undefined;
+      const gesture = containerTouchGesturesRef.current.get(surface.id);
+      if (phase === "down" || !gesture) {
+        containerTouchGesturesRef.current.set(surface.id, {
+          startCamera: camera,
+          startCenter: center,
+          startDistance: distance,
+        });
+        return;
+      }
+      updateCamera(
+        cameraForTouchGesture(
+          gesture.startCamera,
+          gesture.startCenter,
+          center,
+          gesture.startDistance,
+          distance,
+          0.5,
+          2,
+        ),
+      );
+    };
     if (!scope) {
       return <div className="surface-empty">当前容器节点已不存在</div>;
     }
+    const worldSize = scope.canvasSize ?? { width: 1400, height: 850 };
+    const storeLayout = (node: IntentNode) =>
+      onWorkspaceChange(
+        updateSurface(
+          document.workspaceState,
+          panel.id,
+          surface.id,
+          (candidate) => {
+            if (candidate.kind !== "current-container") return candidate;
+            const projection = candidate.projections[projectionKey] ?? {
+              camera,
+              nodeLayouts: {},
+            };
+            return {
+              ...candidate,
+              projections: {
+                ...candidate.projections,
+                [projectionKey]: {
+                  ...projection,
+                  nodeLayouts: {
+                    ...projection.nodeLayouts,
+                    [node.id]: defaultNodeProjectionLayout(node),
+                  },
+                },
+              },
+            };
+          },
+        ),
+      );
+    const moveNode = (
+      node: IntentNode,
+      event: ReactPointerEvent<HTMLElement>,
+    ) => {
+      if (event.pointerType === "touch") return;
+      event.stopPropagation();
+      if (
+        surface.nodeLayoutLocked ||
+        event.button !== 0
+      ) {
+        return;
+      }
+      const origin = { x: event.clientX, y: event.clientY };
+      const start = { ...node.position };
+      const size = businessNodeSize(node);
+      const target = event.currentTarget;
+      target.setPointerCapture(event.pointerId);
+      const move = (moveEvent: PointerEvent) => {
+        const position = clampBusinessNodePosition(
+          start,
+          {
+            x: moveEvent.clientX - origin.x,
+            y: moveEvent.clientY - origin.y,
+          },
+          camera.scale,
+          size,
+          worldSize,
+        );
+        storeLayout({ ...node, position });
+      };
+      const finish = () => {
+        target.removeEventListener("pointermove", move);
+        target.removeEventListener("pointerup", finish);
+        target.removeEventListener("pointercancel", finish);
+      };
+      target.addEventListener("pointermove", move);
+      target.addEventListener("pointerup", finish);
+      target.addEventListener("pointercancel", finish);
+    };
+    const resizeNode = (
+      node: IntentNode,
+      direction: Parameters<typeof resizeBusinessNodeGeometry>[1],
+      event: ReactPointerEvent<HTMLSpanElement>,
+    ) => {
+      event.stopPropagation();
+      if (surface.nodeLayoutLocked || event.button !== 0) return;
+      const origin = { x: event.clientX, y: event.clientY };
+      const target = event.currentTarget;
+      target.setPointerCapture(event.pointerId);
+      const move = (moveEvent: PointerEvent) => {
+        const geometry = resizeBusinessNodeGeometry(
+          node,
+          direction,
+          {
+            x: moveEvent.clientX - origin.x,
+            y: moveEvent.clientY - origin.y,
+          },
+          camera.scale,
+          worldSize,
+        );
+        storeLayout({
+          ...node,
+          position: geometry.position,
+          size: geometry.size,
+        });
+      };
+      const finish = () => {
+        target.removeEventListener("pointermove", move);
+        target.removeEventListener("pointerup", finish);
+        target.removeEventListener("pointercancel", finish);
+      };
+      target.addEventListener("pointermove", move);
+      target.addEventListener("pointerup", finish);
+      target.addEventListener("pointercancel", finish);
+    };
+    const startPipe = (
+      node: IntentNode,
+      port: IntentNode["outputs"][number],
+      event: ReactPointerEvent<HTMLElement>,
+    ) => {
+      event.stopPropagation();
+      if (event.button !== 0) return;
+      const viewport = event.currentTarget.closest<HTMLElement>(
+        ".surface-business-viewport",
+      );
+      if (!viewport) return;
+      const rect = viewport.getBoundingClientRect();
+      const toWorld = (clientX: number, clientY: number) => ({
+        x: (clientX - rect.left - camera.x) / camera.scale,
+        y: (clientY - rect.top - camera.y) / camera.scale,
+      });
+      const size = businessNodeSize(node);
+      const outputIndex = Math.max(
+        0,
+        node.outputs.findIndex((output) => output.id === port.id),
+      );
+      const pending = {
+        surfaceId: surface.id,
+        sourceNodeId: node.id,
+        sourcePortId: port.id,
+        from: {
+          x: node.position.x + size.width,
+          y:
+            node.position.y +
+            BUSINESS_PORT_TOP +
+            outputIndex * BUSINESS_PORT_ROW +
+            BUSINESS_PORT_ROW / 2,
+        },
+        to: toWorld(event.clientX, event.clientY),
+      };
+      setPendingContainerPipe(pending);
+      const move = (moveEvent: PointerEvent) =>
+        setPendingContainerPipe((active) =>
+          active?.surfaceId === surface.id
+            ? {
+                ...active,
+                to: toWorld(moveEvent.clientX, moveEvent.clientY),
+              }
+            : active,
+        );
+      const finish = (upEvent: PointerEvent) => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", finish);
+        setPendingContainerPipe(null);
+        const target = window.document
+          .elementFromPoint(upEvent.clientX, upEvent.clientY)
+          ?.closest<HTMLElement>("[data-port-kind='input']");
+        const targetNodeId = target?.dataset.portNode;
+        const targetPortId = target?.dataset.portId;
+        if (!targetNodeId || !targetPortId || targetNodeId === node.id) return;
+        onUpdateInputBinding(
+          targetNodeId,
+          targetPortId,
+          `ref:${node.id}:${port.id}`,
+        );
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", finish);
+    };
     const outsideSelection =
       panel.selection.primaryNodeId &&
       !findNode(scope, panel.selection.primaryNodeId);
@@ -553,30 +879,67 @@ export function Workspace({
           </p>
         )}
         <div
-          className="surface-container-grid"
-          style={{ "--surface-scale": camera.scale } as CSSProperties}
+          className="surface-business-viewport"
+          onWheel={handleWheel}
+          onPointerDown={(event) => handleTouchPointer("down", event)}
+          onPointerMove={(event) => handleTouchPointer("move", event)}
+          onPointerUp={(event) => handleTouchPointer("up", event)}
+          onPointerCancel={(event) => handleTouchPointer("up", event)}
         >
-          {(scope.children ?? []).map((node) => (
-            <button
-              key={node.id}
-              className={
-                panel.selection.primaryNodeId === node.id ? "selected" : ""
+          <div
+            className="business-preview-world"
+            style={{
+              width: worldSize.width,
+              height: worldSize.height,
+              transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
+              transformOrigin: "0 0",
+            }}
+          >
+            <BusinessGraphProjection
+              projectionId={surface.id}
+              scope={scope}
+              worldSize={worldSize}
+              scale={camera.scale}
+              selectedNodeId={panel.selection.primaryNodeId}
+              layoutLocked={surface.nodeLayoutLocked}
+              pendingPipe={
+                pendingContainerPipe?.surfaceId === surface.id
+                  ? pendingContainerPipe
+                  : null
               }
-              onClick={() => selectNode(panel.id, node.id, surface.id)}
-              onDoubleClick={() => {
+              onSelect={(node) =>
+                selectNode(panel.id, node.id, surface.id)
+              }
+              onEnter={(node) => {
                 if (node.children?.length) {
                   navigateContainer(panel.id, surface, node.id);
                 }
               }}
-            >
-              <span>{node.kind}</span>
-              <strong>{node.name}</strong>
-              <small>{node.children?.length ?? 0} children</small>
-            </button>
-          ))}
-          {!scope.children?.length && (
-            <div className="surface-empty">当前节点没有直属业务子节点</div>
-          )}
+              onMoveStart={moveNode}
+              onResizeStart={resizeNode}
+              onResizeModeToggle={(node) =>
+                storeLayout({
+                  ...node,
+                  resizeMode:
+                    node.resizeMode === "full" ? "simple" : "full",
+                })
+              }
+              onDisplayModeToggle={(node) =>
+                storeLayout({
+                  ...node,
+                  displayMode:
+                    nodeDisplayMode(node) === "expanded"
+                      ? "minimized"
+                      : "expanded",
+                })
+              }
+              onDisconnectInput={(node, port) =>
+                onUpdateInputBinding(node.id, port.id, "")
+              }
+              onStartPipe={startPipe}
+              onAddChild={() => onAddBusinessChild(scope.id)}
+            />
+          </div>
         </div>
       </div>
     );

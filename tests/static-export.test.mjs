@@ -56,6 +56,14 @@ test("implements panel selection and both surface binding dimensions", async () 
 
 test("supports root camera navigation, layout editing, and semantic LOD", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const workspace = await readFile(
+    new URL("app/runtime/workspace.tsx", root),
+    "utf8",
+  );
+  const businessProjection = await readFile(
+    new URL("app/runtime/business-graph-projection.tsx", root),
+    "utf8",
+  );
   const shell = await readFile(
     new URL("app/runtime/node-renderer.tsx", root),
     "utf8",
@@ -97,14 +105,21 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(shell, /resize-handle resize-\$\{direction\}/);
   assert.match(shell, /resize-mode-toggle runtime-mode-toggle/);
   assert.match(page, /resizeDirectionsFor\(nodeResizeMode\(scopeNode\)\)/);
-  assert.match(page, /business-mode-toggle/);
+  assert.match(businessProjection, /business-mode-toggle/);
+  assert.match(page, /<BusinessGraphProjection/);
+  assert.match(workspace, /<BusinessGraphProjection/);
+  assert.doesNotMatch(workspace, /surface-container-grid/);
+  assert.match(businessProjection, /deriveBusinessVisualEdges\(scope\)/);
+  assert.match(businessProjection, /projectionUsesSummary\(scale\)/);
+  assert.match(businessProjection, /data-port-kind="input"/);
+  assert.match(businessProjection, /data-port-kind="output"/);
   assert.doesNotMatch(
-    page,
+    businessProjection,
     /className=\{`resize-mode-toggle business-mode-toggle[\s\S]*?left:\s*node\.position\.x/,
   );
   assert.match(
-    page,
-    /className=\{`resize-mode-toggle business-mode-toggle[\s\S]*?onDoubleClick=\{\(event\) => event\.stopPropagation\(\)\}[\s\S]*?event\.stopPropagation\(\);[\s\S]*?toggleBusinessResizeMode\(node\)/,
+    businessProjection,
+    /className=\{`resize-mode-toggle business-mode-toggle[\s\S]*?onDoubleClick=\{\(event\) => event\.stopPropagation\(\)\}[\s\S]*?event\.stopPropagation\(\);[\s\S]*?onResizeModeToggle\(node\)/,
   );
   assert.match(page, /container-mode-toggle/);
   assert.match(page, /toggleBusinessResizeMode/);
@@ -209,6 +224,10 @@ test("protects core composition and preserves business editing", async () => {
     new URL("app/runtime/business-canvas.ts", root),
     "utf8",
   );
+  const businessProjection = await readFile(
+    new URL("app/runtime/business-graph-projection.tsx", root),
+    "utf8",
+  );
   const shell = await readFile(
     new URL("app/runtime/node-renderer.tsx", root),
     "utf8",
@@ -232,16 +251,16 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(businessGeometry, /businessNodeMinimumHeight/);
   assert.match(businessGeometry, /rows \* BUSINESS_PORT_ROW \+/);
   assert.match(businessGeometry, /businessNodeSize/);
-  assert.match(page, /className="business-container-node"/);
-  assert.match(page, /businessScope\.name/);
-  assert.match(page, /businessScope\.description/);
-  assert.match(page, /businessScope\.inputs\.map/);
-  assert.match(page, /businessScope\.outputs\.map/);
-  assert.match(page, /businessScope\.children\?\.length/);
+  assert.match(businessProjection, /className="business-container-node"/);
+  assert.match(businessProjection, /scope\.name/);
+  assert.match(businessProjection, /scope\.description/);
+  assert.match(businessProjection, /scope\.inputs\.map/);
+  assert.match(businessProjection, /scope\.outputs\.map/);
+  assert.match(businessProjection, /scope\.children\?\.length/);
   assert.match(businessGeometry, /Math\.max\(size\.height, businessNodeMinimumHeight\(node\)\)/);
   assert.match(businessGeometry, /const minimumHeight = businessNodeMinimumHeight\(node\)/);
-  assert.match(page, /style=\{\{ top: BUSINESS_PORT_TOP \}\}/);
-  assert.match(page, /businessEdgeGeometry/);
+  assert.match(businessProjection, /style=\{\{ top: BUSINESS_PORT_TOP \}\}/);
+  assert.match(businessProjection, /businessEdgeGeometry/);
   assert.match(page, /deriveBusinessVisualEdges/);
   assert.match(businessGeometry, /BUSINESS_PORT_TOP \+\s*BUSINESS_PORT_HEIGHT \/ 2/);
   assert.match(businessGeometry, /sourceSize!\.width \+\s*\(sourceMinimized \? 0 : BUSINESS_PORT_DOT_OFFSET\)/);
@@ -304,9 +323,13 @@ test("keeps node movement and automatic lanes inside the active root", async () 
 });
 
 test("keeps scope changes visible and separates the reference from business content", async () => {
-  const [page, css] = await Promise.all([
+  const [page, css, businessProjection] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(
+      new URL("app/runtime/business-graph-projection.tsx", root),
+      "utf8",
+    ),
   ]);
 
   assert.match(page, /cameraKeepsScopeVisible/);
@@ -324,7 +347,7 @@ test("keeps scope changes visible and separates the reference from business cont
   assert.doesNotMatch(page, /className="root-legend"/);
   assert.doesNotMatch(css, /\.root-legend/);
   assert.match(page, /scopeNode\.implementation\?\.key !== "current-container"/);
-  assert.match(page, /projectionUsesSummary\(camera\.scale\)/);
+  assert.match(businessProjection, /projectionUsesSummary\(scale\)/);
   assert.match(css, /\.root-boundary\.scope-arrival/);
   assert.match(css, /\.business-node\.lod-summary/);
   assert.match(css, /\.business-node\s*\{[\s\S]*z-index:\s*2;/);
