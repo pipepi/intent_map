@@ -90,7 +90,26 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run dev`: start local development
 - `npm run build`: verify the vinext build output
 - `npm test`: build the starter and verify its rendered loading skeleton
+- `npm run pip:build`: build the static application and deterministic `.pip`
+- `npm run pip:exe`: build the windowed Tauri `intent-map.pip.exe`
+- `npm run pip:cli`: build the diagnostic `pip-seed-cli.exe`
+- `npm run pip:verify`: verify the generated `.pip`
+- `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
 - `npm run db:generate`: generate Drizzle migrations after schema changes
+
+## PIP Desktop Seed
+
+`dist/pip/intent-map.pip.exe` is a Windows GUI application. Double-clicking it
+opens the embedded Intent Map in a native Tauri/WebView2 window without a
+console window, external browser, loopback port, or Node.js runtime.
+
+The package format and executable overlay are implemented by `pip-core`.
+`pip-seed-cli.exe` remains a separate recovery tool:
+
+```powershell
+.\dist\pip\pip-seed-cli.exe --verify .\dist\pip\intent-map.pip
+.\dist\pip\pip-seed-cli.exe --extract .\dist\pip\intent-map.pip.exe .\recovered.pip
+```
 
 ## Learn More
 

@@ -13,7 +13,7 @@ fn embedded_payload() -> Result<Vec<u8>, String> {
 
 fn usage() {
     eprintln!(
-        "Usage:\n  pip-seed-cli.exe\n  pip-seed-cli.exe --no-open\n  pip-seed-cli.exe --verify [file.pip]\n  pip-seed-cli.exe --extract <file.pip>\n  pip-seed-cli.exe --pip <file.pip> [--no-open]"
+        "Usage:\n  pip-seed-cli.exe\n  pip-seed-cli.exe --no-open\n  pip-seed-cli.exe --verify [file.pip]\n  pip-seed-cli.exe --extract <destination.pip>\n  pip-seed-cli.exe --extract <seed.exe> <destination.pip>\n  pip-seed-cli.exe --pip <file.pip> [--no-open]"
     );
 }
 
@@ -34,8 +34,16 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
     if args.first().map(String::as_str) == Some("--extract") {
-        let destination = args.get(1).ok_or("--extract requires a destination path")?;
-        fs::write(destination, embedded_payload()?)
+        let first_path = args.get(1).ok_or("--extract requires a destination path")?;
+        let (payload, destination) = if let Some(destination) = args.get(2) {
+            (
+                pip_core::envelope::extract_from_file(Path::new(first_path))?,
+                destination,
+            )
+        } else {
+            (embedded_payload()?, first_path)
+        };
+        fs::write(destination, payload)
             .map_err(|error| format!("cannot write extracted PIP: {error}"))?;
         println!("{}", Path::new(destination).display());
         return Ok(());

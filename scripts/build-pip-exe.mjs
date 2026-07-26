@@ -9,17 +9,17 @@ const outputPath = path.resolve(root, "dist/pip/intent-map.pip.exe");
 
 const cargo = spawnSync(
   "cargo",
-  ["build", "--release", "--manifest-path", path.join(root, "pip-seed", "Cargo.toml")],
+  ["build", "--release", "--manifest-path", path.join(root, "pip-seed-tauri", "Cargo.toml")],
   { cwd: root, stdio: "inherit" },
 );
 if (cargo.status !== 0) process.exit(cargo.status ?? 1);
 
 const seedPath = path.join(
   root,
-  "pip-seed",
+  "pip-seed-tauri",
   "target",
   "release",
-  process.platform === "win32" ? "pip-seed.exe" : "pip-seed",
+  process.platform === "win32" ? "pip-seed-tauri.exe" : "pip-seed-tauri",
 );
 const [seed, pip] = await Promise.all([readFile(seedPath), readFile(pipPath)]);
 const footer = Buffer.alloc(64);

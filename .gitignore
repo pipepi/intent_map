@@ -41,6 +41,7 @@ tsconfig.tsbuildinfo
 /dist/
 /pip-seed/target/
 /pip-core/target/
+/pip-core/Cargo.lock
 /pip-seed-tauri/target/
 /pip-seed-tauri/gen/
 /.wrangler/

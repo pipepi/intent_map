@@ -161,3 +161,48 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::package_response;
+    use pip_core::Package;
+    use tauri::http::{Method, Request, StatusCode};
+
+    fn fixture() -> Package {
+        Package::parse(include_bytes!("../../tests/fixtures/minimal-valid.pip").to_vec())
+            .expect("shared PIP fixture must be valid")
+    }
+
+    fn request(method: Method, path: &str) -> Request<Vec<u8>> {
+        Request::builder()
+            .method(method)
+            .uri(format!("pip://localhost{path}"))
+            .body(Vec::new())
+            .unwrap()
+    }
+
+    #[test]
+    fn serves_assets_and_package_from_memory() {
+        let package = fixture();
+        let index = package_response(&package, &request(Method::GET, "/index.html"));
+        assert_eq!(index.status(), StatusCode::OK);
+        assert_eq!(index.body().as_ref(), b"<h1>PIP</h1>");
+
+        let payload = package_response(&package, &request(Method::GET, "/__pip/package"));
+        assert_eq!(payload.status(), StatusCode::OK);
+        assert_eq!(payload.body().as_ref(), package.bytes());
+    }
+
+    #[test]
+    fn rejects_writes_and_path_traversal() {
+        let package = fixture();
+        assert_eq!(
+            package_response(&package, &request(Method::POST, "/index.html")).status(),
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_eq!(
+            package_response(&package, &request(Method::GET, "/../secret")).status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
