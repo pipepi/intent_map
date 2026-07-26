@@ -11,7 +11,12 @@
     "build:sites": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/static-export.test.mjs",
+    "test:pip": "node --test tests/pip-format.test.mjs && cargo test --manifest-path pip-seed/Cargo.toml",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "pip:build": "npm run build && node scripts/build-pip.mjs",
+    "pip:verify": "node scripts/verify-pip.mjs dist/pip/intent-map.pip",
+    "pip:host": "cargo run --manifest-path pip-seed/Cargo.toml -- --pip dist/pip/intent-map.pip",
+    "pip:exe": "npm run pip:build && node scripts/build-pip-exe.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

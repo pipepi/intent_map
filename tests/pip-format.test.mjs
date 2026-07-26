@@ -56,4 +56,8 @@ test("PIP v1 rejects corruption, truncation, and overlapping sections", async ()
   const view = new DataView(overlapping.buffer);
   view.setBigUint64(16 + 48, view.getBigUint64(16, true), true);
   await assert.rejects(() => decodePip(overlapping), /overlap/);
+
+  const oversized = bytes.slice();
+  new DataView(oversized.buffer).setBigUint64(24, BigInt(64 * 1024 * 1024 + 1), true);
+  await assert.rejects(() => decodePip(oversized), /size limit/);
 });
