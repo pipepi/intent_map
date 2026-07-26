@@ -2669,11 +2669,20 @@ export default function Home() {
                 contextualBusinessScope.id,
               selectedNodeId:
                 surfaceContext.panel.selection.primaryNodeId,
-              onSelect: (target: IntentNode) =>
-                selectPanelBusinessNode(
-                  contextAddress.panelId,
-                  target.id,
-                ),
+              onSelect: (target: IntentNode) => {
+                if (surfaceContext.container) {
+                  navigatePanelBusinessNode(
+                    contextAddress.panelId,
+                    surfaceContext.container.id,
+                    target,
+                  );
+                } else {
+                  selectPanelBusinessNode(
+                    contextAddress.panelId,
+                    target.id,
+                  );
+                }
+              },
               onNavigate: (target: IntentNode) => {
                 if (surfaceContext.container) {
                   navigatePanelBusinessNode(

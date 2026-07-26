@@ -239,7 +239,7 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   );
   assert.match(
     page,
-    /selectPanelBusinessNode\(\s*contextAddress\.panelId,\s*target\.id/,
+    /onSelect:\s*\(target:\s*IntentNode\)\s*=>\s*\{[\s\S]*?navigatePanelBusinessNode\(\s*contextAddress\.panelId,\s*surfaceContext\.container\.id,\s*target/s,
   );
   assert.match(page, /navigatePanelBusinessNode/);
   assert.match(workspace, /onContainerMoveStart=\{moveContainer\}/);
