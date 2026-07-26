@@ -46,6 +46,7 @@ import {
   encodePip,
   runPipLoader,
 } from "./runtime/pip";
+import { cameraForTouchGesture } from "./runtime/camera";
 import {
   BUSINESS_CONTAINER_PORT_TOP,
   BUSINESS_PORT_ROW,
@@ -567,6 +568,7 @@ export default function Home() {
   const touchGestureRef = useRef<{
     startCamera: CameraState;
     startCenter: { x: number; y: number };
+    startDistance?: number;
   } | null>(null);
   const businessScopeId = runtimeState.scopeId;
   const selectedBusinessNodeId = runtimeState.selectionId;
@@ -1210,16 +1212,32 @@ export default function Home() {
       const target = event.currentTarget;
       const points = touchPointersRef.current;
       points.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      const center = () => {
+      const measureTouch = () => {
         const active = [...points.values()];
-        return {
+        const rect = target.getBoundingClientRect();
+        const clientCenter = {
           x: active.reduce((sum, point) => sum + point.x, 0) / active.length,
           y: active.reduce((sum, point) => sum + point.y, 0) / active.length,
         };
+        return {
+          center: {
+            x: clientCenter.x - rect.left,
+            y: clientCenter.y - rect.top,
+          },
+          distance:
+            active.length > 1
+              ? Math.hypot(
+                  active[0].x - active[1].x,
+                  active[0].y - active[1].y,
+                )
+              : undefined,
+        };
       };
+      const startTouch = measureTouch();
       touchGestureRef.current = {
         startCamera: { ...cameraRef.current },
-        startCenter: center(),
+        startCenter: startTouch.center,
+        startDistance: startTouch.distance,
       };
       target.setPointerCapture(event.pointerId);
       const move = (moveEvent: PointerEvent) => {
@@ -1230,18 +1248,18 @@ export default function Home() {
         });
         const gesture = touchGestureRef.current;
         if (!gesture || points.size === 0) return;
-        const currentCenter = center();
-        setScopeCamera({
-          ...gesture.startCamera,
-          x:
-            gesture.startCamera.x +
-            currentCenter.x -
-            gesture.startCenter.x,
-          y:
-            gesture.startCamera.y +
-            currentCenter.y -
-            gesture.startCenter.y,
-        });
+        const currentTouch = measureTouch();
+        setScopeCamera(
+          cameraForTouchGesture(
+            gesture.startCamera,
+            gesture.startCenter,
+            currentTouch.center,
+            gesture.startDistance,
+            currentTouch.distance,
+            MIN_SCALE,
+            MAX_SCALE,
+          ),
+        );
       };
       const finish = (finishEvent: PointerEvent) => {
         if (finishEvent.pointerId !== event.pointerId) return;
@@ -1250,9 +1268,11 @@ export default function Home() {
         target.removeEventListener("pointerup", finish);
         target.removeEventListener("pointercancel", finish);
         if (points.size > 0) {
+          const nextTouch = measureTouch();
           touchGestureRef.current = {
             startCamera: { ...cameraRef.current },
-            startCenter: center(),
+            startCenter: nextTouch.center,
+            startDistance: nextTouch.distance,
           };
         } else {
           touchGestureRef.current = null;
@@ -2757,7 +2777,7 @@ export default function Home() {
           <span><i className="data" />数据管道</span>
           <span><i className="event" />事件管道</span>
           <span>{deriveBusinessVisualEdges(businessScope).length} 条业务引用</span>
-          <span>双指平移 · Ctrl+滚轮 50%–200% · 拖端口连线 · 双击输入端口断开</span>
+          <span>双指平移/缩放 · Ctrl+滚轮 50%–200% · 拖端口连线 · 双击输入端口断开</span>
         </div>
       );
     }

@@ -68,7 +68,9 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /y: old\.y - event\.deltaY \* deltaUnit/);
   assert.match(page, /event\.pointerType === "touch"/);
   assert.match(page, /touchPointersRef/);
-  assert.match(page, /currentCenter\.x -\s*gesture\.startCenter\.x/);
+  assert.match(page, /cameraForTouchGesture/);
+  assert.match(page, /Math\.hypot/);
+  assert.match(page, /gesture\.startDistance/);
   assert.match(page, /target\.addEventListener\("pointercancel", finish\)/);
   assert.match(page, /layoutLocked/);
   assert.match(page, /runtime-add-child/);
