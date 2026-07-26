@@ -34,6 +34,7 @@ export const BUSINESS_NODE_LEFT_MARGIN = 195;
 export const BUSINESS_NODE_RIGHT_MARGIN = 100;
 export const BUSINESS_NODE_TOP_MARGIN = 120;
 export const BUSINESS_NODE_BOTTOM_MARGIN = 60;
+export const BUSINESS_SEMANTIC_ZOOM_ENTER_SCALE = 1.6;
 
 export type BusinessVisualEdge = {
   id: string;
@@ -97,6 +98,43 @@ export const businessNodeSize = (node: BusinessIntentNode) => {
     height: Math.max(size.height, businessNodeMinimumHeight(node)),
   };
 };
+
+export const nearestBusinessChild = (
+  children: BusinessIntentNode[],
+  point: { x: number; y: number },
+) =>
+  children.reduce<
+    { node: BusinessIntentNode; distance: number; centerDistance: number } | undefined
+  >((nearest, node) => {
+    const size = businessNodeSize(node);
+    const right = node.position.x + size.width;
+    const bottom = node.position.y + size.height;
+    const dx =
+      point.x < node.position.x
+        ? node.position.x - point.x
+        : point.x > right
+          ? point.x - right
+          : 0;
+    const dy =
+      point.y < node.position.y
+        ? node.position.y - point.y
+        : point.y > bottom
+          ? point.y - bottom
+          : 0;
+    const distance = dx * dx + dy * dy;
+    const centerDistance =
+      (point.x - (node.position.x + size.width / 2)) ** 2 +
+      (point.y - (node.position.y + size.height / 2)) ** 2;
+    if (
+      !nearest ||
+      distance < nearest.distance ||
+      (distance === nearest.distance &&
+        centerDistance < nearest.centerDistance)
+    ) {
+      return { node, distance, centerDistance };
+    }
+    return nearest;
+  }, undefined)?.node;
 
 export const clampBusinessNodePosition = (
   start: { x: number; y: number },

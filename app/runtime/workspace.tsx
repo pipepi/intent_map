@@ -26,8 +26,10 @@ import { BusinessGraphProjection } from "./business-graph-projection";
 import {
   BUSINESS_PORT_ROW,
   BUSINESS_PORT_TOP,
+  BUSINESS_SEMANTIC_ZOOM_ENTER_SCALE,
   businessNodeSize,
   clampBusinessNodePosition,
+  nearestBusinessChild,
   resizeBusinessNodeGeometry,
 } from "./business-canvas";
 import {
@@ -739,6 +741,19 @@ export function Workspace({
       );
       const worldX = (pointer.x - camera.x) / camera.scale;
       const worldY = (pointer.y - camera.y) / camera.scale;
+      if (
+        event.deltaY < 0 &&
+        scale >= BUSINESS_SEMANTIC_ZOOM_ENTER_SCALE
+      ) {
+        const nearestChild = nearestBusinessChild(scope?.children ?? [], {
+          x: worldX,
+          y: worldY,
+        });
+        if (nearestChild) {
+          navigateContainer(panel.id, surface, nearestChild.id);
+          return;
+        }
+      }
       updateCamera({
         scale,
         x: pointer.x - worldX * scale,
@@ -816,6 +831,26 @@ export function Workspace({
       { width: 1400, height: 850 };
     const containerResizeMode =
       storedResizeModes?.[projectionKey] === "full" ? "full" : "simple";
+    const portsExpanded = surface.localState.portsExpanded === true;
+    const togglePortsExpanded = () =>
+      onWorkspaceChange(
+        updateSurface(
+          document.workspaceState,
+          panel.id,
+          surface.id,
+          (candidate) =>
+            candidate.kind === "current-container"
+              ? {
+                  ...candidate,
+                  localState: {
+                    ...candidate.localState,
+                    portsExpanded:
+                      candidate.localState.portsExpanded !== true,
+                  },
+                }
+              : candidate,
+        ),
+      );
     const moveContainer = (event: ReactPointerEvent<HTMLElement>) => {
       if (surface.nodeLayoutLocked || event.button !== 0) return;
       event.preventDefault();
@@ -1214,6 +1249,18 @@ export function Workspace({
             +
           </button>
           <button
+            className={portsExpanded ? "active" : ""}
+            title={
+              portsExpanded
+                ? "收起输入输出项区域"
+                : "展开输入输出项区域"
+            }
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={togglePortsExpanded}
+          >
+            ↕
+          </button>
+          <button
             className="surface-close"
             title={`关闭 ${surface.title}`}
             onPointerDown={(event) => event.stopPropagation()}
@@ -1228,15 +1275,23 @@ export function Workspace({
         <div className="surface-container-context">
           {currentContainerNode && (
             <div
-              className="surface-container-ports"
+              className={`surface-container-ports ${
+                portsExpanded ? "expanded" : "collapsed"
+              }`}
               style={{
-                height:
-                  Math.max(
-                    currentContainerNode.inputs.length,
-                    currentContainerNode.outputs.length,
-                  ) *
-                    26 +
-                  16,
+                height: portsExpanded
+                  ? Math.max(
+                      currentContainerNode.inputs.length,
+                      currentContainerNode.outputs.length,
+                    ) *
+                      26 +
+                    16
+                  : Math.max(
+                      currentContainerNode.inputs.length,
+                      currentContainerNode.outputs.length,
+                    ) *
+                      8 +
+                    8,
               }}
             >
               {currentContainerNode.inputs.map((input, index) => (
@@ -1245,7 +1300,9 @@ export function Workspace({
                   data-port-kind="input"
                   data-port-node={currentContainerNode.id}
                   data-port-id={input.id}
-                  style={{ top: 8 + index * 26 }}
+                  style={{
+                    top: portsExpanded ? 8 + index * 26 : 4 + index * 8,
+                  }}
                   key={input.id}
                   title={input.name}
                 >
@@ -1259,7 +1316,9 @@ export function Workspace({
                   data-port-kind="output"
                   data-port-node={currentContainerNode.id}
                   data-port-id={output.id}
-                  style={{ top: 8 + index * 26 }}
+                  style={{
+                    top: portsExpanded ? 8 + index * 26 : 4 + index * 8,
+                  }}
                   key={output.id}
                   title={output.name}
                 >
@@ -1277,6 +1336,8 @@ export function Workspace({
         </div>
         <div
           className="surface-business-viewport"
+          aria-label={`${scope.name} 容器画布`}
+          title="Ctrl+滚轮或双指缩放；持续放大可下探到指针最近的子节点"
           onWheel={handleWheel}
           onPointerDown={(event) => handleTouchPointer("down", event)}
           onPointerMove={(event) => handleTouchPointer("move", event)}

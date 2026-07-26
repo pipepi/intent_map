@@ -10,6 +10,7 @@ import {
   businessNodeSize,
   clampBusinessNodePosition,
   deriveBusinessVisualEdges,
+  nearestBusinessChild,
   resizeBusinessNodeGeometry,
 } from "../app/runtime/business-canvas.ts";
 
@@ -174,4 +175,16 @@ test("resizes from north-west while preserving the opposite edges", () => {
     geometry.position.y + geometry.size.height,
     source.position.y + originalSize.height,
   );
+});
+
+test("chooses the nearest child to the semantic zoom anchor", () => {
+  assert.equal(
+    nearestBusinessChild(scope.children, { x: 700, y: 350 }).id,
+    "target",
+  );
+  assert.equal(
+    nearestBusinessChild(scope.children, { x: 210, y: 160 }).id,
+    "source",
+  );
+  assert.equal(nearestBusinessChild([], { x: 0, y: 0 }), undefined);
 });

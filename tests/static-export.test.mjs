@@ -18,14 +18,14 @@ test("exports the everything-node application as a static page", async () => {
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 
-test("renders free-layout and workbench panels with six visible surfaces", async () => {
+test("renders free-layout and a three-surface workbench", async () => {
   const html = await readFile(new URL("out/index.html", root), "utf8");
   assert.match(html, /工作台/);
   assert.match(html, /自由布局/);
   assert.match(html, /节点树/);
   assert.match(html, /属性检视器/);
   assert.equal((html.match(/class="workspace-panel /g) ?? []).length, 2);
-  assert.equal((html.match(/class="workspace-surface /g) ?? []).length, 6);
+  assert.equal((html.match(/class="workspace-surface /g) ?? []).length, 4);
 });
 
 test("implements panel selection and both surface binding dimensions", async () => {
@@ -230,8 +230,18 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
     /querySelectorAll<HTMLElement>\("\[data-port-kind\]"\)[\s\S]*?querySelector<HTMLElement>\("i"\)[\s\S]*?getBoundingClientRect\(\)/,
   );
   assert.match(workspace, /data-surface-id=\{surface\.id\}/);
-  assert.match(workspace, /className="surface-container-ports"/);
   assert.match(workspace, /currentContainerNode\.inputs\.map/);
+  assert.match(workspace, /surface-container-ports \$\{/);
+  assert.match(workspace, /portsExpanded \? "expanded" : "collapsed"/);
+  assert.match(
+    workspace,
+    /scale >= BUSINESS_SEMANTIC_ZOOM_ENTER_SCALE/,
+  );
+  assert.match(workspace, /nearestBusinessChild\(scope\?\.children \?\? \[\]/);
+  assert.match(
+    workspace,
+    /navigateContainer\(panel\.id, surface, nearestChild\.id\)/,
+  );
   assert.match(workspace, /className="workspace-panel-switcher"/);
   assert.match(workspace, /const \[focusedPanelId,\s*setFocusedPanelId\]/);
   assert.match(workspace, /effectivePanelId === panel\.id/);

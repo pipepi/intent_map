@@ -74,6 +74,7 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
     height: 1,
   });
   assert.equal(workbench.activeContainerSurfaceId, "workbench-container");
+  assert.equal(workbench.surfaces.length, 3);
   assert.equal(
     workbench.surfaces.filter((surface) => surface.kind === "current-container")
       .length,
@@ -83,8 +84,12 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
     workbench.surfaces
       .filter((surface) => surface.kind === "feature-panel")
       .map((surface) => surface.featureNodeId),
-    ["intent_tree", "properties", "validation", "run_trace"],
+    ["intent_tree", "properties"],
   );
+  const container = workbench.surfaces.find(
+    (surface) => surface.kind === "current-container",
+  );
+  assert.equal(container.localState.portsExpanded, false);
 });
 
 test("keeps the root functional graph and current-container reference", () => {

@@ -10,9 +10,13 @@ import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts
 test("resolves duplicate projected nodes to the nearest legal source", () => {
   const document = createApplicationDocument(createSampleBusinessRoot());
   const panel = structuredClone(document.workspaceState.panels[0]);
-  const validation = panel.surfaces.find(
-    (surface) => surface.featureNodeId === "validation",
+  const validation = structuredClone(
+    panel.surfaces.find(
+      (surface) => surface.featureNodeId === "properties",
+    ),
   );
+  validation.id = "validation-far";
+  validation.featureNodeId = "validation";
   validation.frame = { x: 0.05, y: 0.1, width: 0.2, height: 0.2 };
   panel.surfaces.push({
     ...structuredClone(validation),
@@ -39,7 +43,15 @@ test("resolves duplicate projected nodes to the nearest legal source", () => {
 
 test("uses deterministic panel boundary stubs for unopened endpoints", () => {
   const document = createApplicationDocument(createSampleBusinessRoot());
-  const panel = document.workspaceState.panels[0];
+  const panel = structuredClone(document.workspaceState.panels[0]);
+  const validation = structuredClone(
+    panel.surfaces.find(
+      (surface) => surface.featureNodeId === "properties",
+    ),
+  );
+  validation.id = "validation-source";
+  validation.featureNodeId = "validation";
+  panel.surfaces.push(validation);
   const edges = derivePanelPipelineEdges(document.rootIntent, panel);
 
   const missingSource = edges.find(

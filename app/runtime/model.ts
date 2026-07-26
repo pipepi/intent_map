@@ -663,7 +663,9 @@ const defaultContainerSurface = (
     },
   },
   nodeLayoutLocked: false,
-  localState: {},
+  localState: {
+    portsExpanded: false,
+  },
 });
 
 const defaultFeatureSurface = (
@@ -699,7 +701,7 @@ export const createDefaultViews = (
   const workbenchContainer = defaultContainerSurface(
     "workbench-container",
     "当前容器",
-    { x: 0.245, y: 0.055, width: 0.5, height: 0.62 },
+    { x: 0.245, y: 0.02, width: 0.5, height: 0.96 },
     businessRootId,
   );
   return [
@@ -721,25 +723,13 @@ export const createDefaultViews = (
           "workbench-tree",
           "节点树",
           "intent_tree",
-          { x: 0.01, y: 0.055, width: 0.225, height: 0.62 },
+          { x: 0.01, y: 0.02, width: 0.225, height: 0.96 },
         ),
         defaultFeatureSurface(
           "workbench-properties",
           "属性检视器",
           "properties",
-          { x: 0.755, y: 0.055, width: 0.235, height: 0.62 },
-        ),
-        defaultFeatureSurface(
-          "workbench-validation",
-          "验证",
-          "validation",
-          { x: 0.01, y: 0.695, width: 0.48, height: 0.295 },
-        ),
-        defaultFeatureSurface(
-          "workbench-trace",
-          "运行轨迹",
-          "run_trace",
-          { x: 0.5, y: 0.695, width: 0.49, height: 0.295 },
+          { x: 0.755, y: 0.02, width: 0.235, height: 0.96 },
         ),
       ],
     },

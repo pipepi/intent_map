@@ -88,7 +88,7 @@ test("PIP preserves the v3 multi-panel workspace and four-level tree", async () 
     loaded.workspaceState.panels[0].surfaces.filter(
       (surface) => surface.kind === "feature-panel",
     ).length,
-    4,
+    2,
   );
   assert.equal(
     loaded.rootIntent.children
