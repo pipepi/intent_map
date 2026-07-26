@@ -1582,7 +1582,7 @@ code,
 .runtime-node-titlebar {
   min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 0 10px;
@@ -1622,6 +1622,7 @@ code,
 }
 
 .node-display-toggle {
+  grid-column: 6;
   width: 22px;
   height: 22px;
   display: grid;
@@ -1667,6 +1668,7 @@ code,
 }
 
 .runtime-node-titlebar > i {
+  grid-column: 4;
   color: #31d6a5;
   font-size: 8px;
   font-style: normal;
@@ -1777,6 +1779,14 @@ code,
 
 .runtime-port-output > i {
   right: -10px;
+}
+
+.embedded-node-projection .runtime-port-input {
+  left: 12px;
+}
+
+.embedded-node-projection .runtime-port-output {
+  right: 12px;
 }
 
 .runtime-port.channel-event {

@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -127,6 +129,172 @@ const updateSurface = (
     ),
   }));
 
+type MeasuredPipelinePoint = { x: number; y: number };
+
+const sameMeasuredPoints = (
+  left: Record<string, MeasuredPipelinePoint>,
+  right: Record<string, MeasuredPipelinePoint>,
+) =>
+  Object.keys(left).length === Object.keys(right).length &&
+  Object.entries(left).every(
+    ([key, point]) =>
+      right[key]?.x === point.x && right[key]?.y === point.y,
+  );
+
+function PanelPipelineOverlay({
+  root,
+  panel,
+}: {
+  root: IntentNode;
+  panel: PanelInstance;
+}) {
+  const overlayRef = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState({ width: 1000, height: 1000 });
+  const [measuredPoints, setMeasuredPoints] = useState<
+    Record<string, MeasuredPipelinePoint>
+  >({});
+  const edges = useMemo(
+    () => derivePanelPipelineEdges(root, panel),
+    [root, panel],
+  );
+
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    const body = overlay?.parentElement;
+    if (!overlay || !body) return;
+
+    const measure = () => {
+      const bodyRect = body.getBoundingClientRect();
+      const nextSize = {
+        width: Math.max(1, bodyRect.width),
+        height: Math.max(1, bodyRect.height),
+      };
+      const nextPoints: Record<string, MeasuredPipelinePoint> = {};
+      const surfaces = Array.from(
+        body.querySelectorAll<HTMLElement>("[data-surface-id]"),
+      );
+      const findPortCenter = (
+        surfaceId: string | undefined,
+        kind: "input" | "output",
+        portId: string,
+      ) => {
+        if (!surfaceId) return;
+        const surface = surfaces.find(
+          (candidate) => candidate.dataset.surfaceId === surfaceId,
+        );
+        const port = Array.from(
+          surface?.querySelectorAll<HTMLElement>("[data-port-kind]") ?? [],
+        ).find(
+          (candidate) =>
+            candidate.dataset.portKind === kind &&
+            candidate.dataset.portId === portId,
+        );
+        const dot = port?.querySelector<HTMLElement>("i");
+        if (!dot) return;
+        const rect = dot.getBoundingClientRect();
+        return {
+          x: rect.left + rect.width / 2 - bodyRect.left,
+          y: rect.top + rect.height / 2 - bodyRect.top,
+        };
+      };
+
+      for (const edge of edges) {
+        const source = findPortCenter(
+          edge.sourceSurfaceId,
+          "output",
+          edge.sourcePortId,
+        );
+        const target = findPortCenter(
+          edge.targetSurfaceId,
+          "input",
+          edge.targetPortId,
+        );
+        if (source) nextPoints[`${edge.id}:source`] = source;
+        if (target) nextPoints[`${edge.id}:target`] = target;
+      }
+      setSize((current) =>
+        current.width === nextSize.width && current.height === nextSize.height
+          ? current
+          : nextSize,
+      );
+      setMeasuredPoints((current) =>
+        sameMeasuredPoints(current, nextPoints) ? current : nextPoints,
+      );
+    };
+
+    const frame = requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    body
+      .querySelectorAll<HTMLElement>("[data-surface-id]")
+      .forEach((surface) => observer.observe(surface));
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [edges]);
+
+  if (!edges.length) return null;
+  return (
+    <svg
+      ref={overlayRef}
+      className="panel-pipeline-overlay"
+      viewBox={`0 0 ${size.width} ${size.height}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {edges.map((edge) => {
+        const source = measuredPoints[`${edge.id}:source`] ?? {
+          x: edge.source.x * size.width,
+          y: edge.source.y * size.height,
+        };
+        const target = measuredPoints[`${edge.id}:target`] ?? {
+          x: edge.target.x * size.width,
+          y: edge.target.y * size.height,
+        };
+        const bend = Math.max(55, Math.abs(target.x - source.x) * 0.42);
+        const highlighted =
+          panel.selection.primaryNodeId === edge.sourceNodeId ||
+          panel.selection.primaryNodeId === edge.targetNodeId ||
+          panel.activeContainerSurfaceId === edge.sourceSurfaceId ||
+          panel.activeContainerSurfaceId === edge.targetSurfaceId;
+        return (
+          <g
+            key={edge.id}
+            className={`panel-pipeline channel-${edge.channel} ${
+              highlighted ? "highlighted" : ""
+            }`}
+            data-source-surface={edge.sourceSurfaceId ?? ""}
+            data-target-surface={edge.targetSurfaceId ?? ""}
+          >
+            <path
+              d={`M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`}
+            />
+            {edge.source.boundary && (
+              <circle
+                className="pipeline-boundary-stub"
+                cx={source.x}
+                cy={source.y}
+                r="7"
+              />
+            )}
+            {edge.target.boundary && (
+              <circle
+                className="pipeline-boundary-stub"
+                cx={target.x}
+                cy={target.y}
+                r="7"
+              />
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function Workspace({
   document,
   freeCanvas,
@@ -157,6 +325,10 @@ export function Workspace({
     sourcePortId: string;
     from: { x: number; y: number };
     to: { x: number; y: number };
+  } | null>(null);
+  const [focusedSurface, setFocusedSurface] = useState<{
+    panelId: string;
+    surfaceId: string;
   } | null>(null);
   const businessRoot = getBusinessRoot(document);
   const workspaceUid = (prefix: string) =>
@@ -1180,52 +1352,6 @@ export function Workspace({
     );
   };
 
-  const renderPanelPipelines = (panel: PanelInstance) => {
-    const edges = derivePanelPipelineEdges(document.rootIntent, panel);
-    if (!edges.length) return null;
-    return (
-      <svg
-        className="panel-pipeline-overlay"
-        viewBox="0 0 1000 1000"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        {edges.map((edge) => {
-          const sx = edge.source.x * 1000;
-          const sy = edge.source.y * 1000;
-          const tx = edge.target.x * 1000;
-          const ty = edge.target.y * 1000;
-          const bend = Math.max(55, Math.abs(tx - sx) * 0.42);
-          const highlighted =
-            panel.selection.primaryNodeId === edge.sourceNodeId ||
-            panel.selection.primaryNodeId === edge.targetNodeId ||
-            panel.activeContainerSurfaceId === edge.sourceSurfaceId ||
-            panel.activeContainerSurfaceId === edge.targetSurfaceId;
-          return (
-            <g
-              key={edge.id}
-              className={`panel-pipeline channel-${edge.channel} ${
-                highlighted ? "highlighted" : ""
-              }`}
-              data-source-surface={edge.sourceSurfaceId ?? ""}
-              data-target-surface={edge.targetSurfaceId ?? ""}
-            >
-              <path
-                d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`}
-              />
-              {edge.source.boundary && (
-                <circle className="pipeline-boundary-stub" cx={sx} cy={sy} r="7" />
-              )}
-              {edge.target.boundary && (
-                <circle className="pipeline-boundary-stub" cx={tx} cy={ty} r="7" />
-              )}
-            </g>
-          );
-        })}
-      </svg>
-    );
-  };
-
   return (
     <div className="workspace-v3">
       <header className="workspace-v3-bar">
@@ -1355,7 +1481,12 @@ export function Workspace({
                 )}
               </header>
               <div className="workspace-panel-body">
-                {!freeLayout && renderPanelPipelines(panel)}
+                {!freeLayout && (
+                  <PanelPipelineOverlay
+                    root={document.rootIntent}
+                    panel={panel}
+                  />
+                )}
                 {freeLayout ? (
                   <article className="workspace-surface free-layout-surface">
                     <header className="workspace-surface-header">
@@ -1369,10 +1500,24 @@ export function Workspace({
                     <article
                       className={`workspace-surface surface-${surface.kind}`}
                       key={surface.id}
+                      data-surface-id={surface.id}
                       style={{
                         ...frameStyle(surface.frame),
-                        zIndex: surface.zIndex,
+                        zIndex:
+                          focusedSurface?.panelId === panel.id &&
+                          focusedSurface.surfaceId === surface.id
+                            ? Math.max(
+                                0,
+                                ...panel.surfaces.map((item) => item.zIndex),
+                              ) + 1
+                            : surface.zIndex,
                       }}
+                      onPointerDownCapture={() =>
+                        setFocusedSurface({
+                          panelId: panel.id,
+                          surfaceId: surface.id,
+                        })
+                      }
                     >
                       <div className="workspace-surface-body">
                         {surface.kind === "current-container"

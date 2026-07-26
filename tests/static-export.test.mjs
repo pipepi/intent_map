@@ -208,6 +208,34 @@ test("derives and aggregates root pipes without persisting edges", async () => {
   assert.match(model, /\.filter\(\(\[key\]\) => key !== "edges"\)/);
 });
 
+test("keeps workbench controls, pipe anchors, and surface focus visually aligned", async () => {
+  const workspace = await readFile(
+    new URL("app/runtime/workspace.tsx", root),
+    "utf8",
+  );
+  const css = await readFile(new URL("app/globals.css", root), "utf8");
+
+  assert.match(
+    css,
+    /\.runtime-node-titlebar\s*\{[^}]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) auto auto auto auto/s,
+  );
+  assert.match(css, /\.node-display-toggle\s*\{[^}]*grid-column:\s*6/s);
+  assert.match(
+    workspace,
+    /querySelectorAll<HTMLElement>\("\[data-port-kind\]"\)[\s\S]*?querySelector<HTMLElement>\("i"\)[\s\S]*?getBoundingClientRect\(\)/,
+  );
+  assert.match(workspace, /data-surface-id=\{surface\.id\}/);
+  assert.match(workspace, /focusedSurface\.surfaceId === surface\.id/);
+  assert.match(
+    workspace,
+    /Math\.max\(\s*0,\s*\.\.\.panel\.surfaces\.map\(\(item\) => item\.zIndex\),\s*\) \+ 1/s,
+  );
+  assert.match(
+    css,
+    /\.embedded-node-projection \.runtime-port-input\s*\{[^}]*left:\s*12px/s,
+  );
+});
+
 test("routes interface commands through the state node and event clock", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
 
