@@ -18,7 +18,7 @@ pub fn random_token() -> Result<String, String> {
     if status < 0 {
         return Err(format!("BCryptGenRandom failed: {status}"));
     }
-    Ok(crate::sha256::hex(&bytes))
+    Ok(pip_core::sha256_hex(&bytes))
 }
 
 #[cfg(not(windows))]

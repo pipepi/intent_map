@@ -1,12 +1,14 @@
 [package]
-name = "pip-seed"
+name = "pip-seed-cli"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+
+[dependencies]
+pip-core = { path = "../pip-core" }
 
 [profile.release]
 strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
-

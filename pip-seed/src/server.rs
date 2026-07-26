@@ -1,4 +1,4 @@
-use crate::pip::Package;
+use pip_core::Package;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;

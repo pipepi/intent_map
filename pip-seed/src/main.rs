@@ -1,8 +1,5 @@
-mod envelope;
-mod pip;
 mod platform;
 mod server;
-mod sha256;
 
 use std::env;
 use std::fs;
@@ -11,12 +8,12 @@ use std::path::{Path, PathBuf};
 fn embedded_payload() -> Result<Vec<u8>, String> {
     let executable =
         env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
-    envelope::extract_from_file(&executable)
+    pip_core::envelope::extract_from_file(&executable)
 }
 
 fn usage() {
     eprintln!(
-        "Usage:\n  pip-seed.exe\n  pip-seed.exe --no-open\n  pip-seed.exe --verify [file.pip]\n  pip-seed.exe --extract <file.pip>\n  pip-seed.exe --pip <file.pip> [--no-open]"
+        "Usage:\n  pip-seed-cli.exe\n  pip-seed-cli.exe --no-open\n  pip-seed-cli.exe --verify [file.pip]\n  pip-seed-cli.exe --extract <file.pip>\n  pip-seed-cli.exe --pip <file.pip> [--no-open]"
     );
 }
 
@@ -28,7 +25,7 @@ fn run() -> Result<(), String> {
         } else {
             embedded_payload()?
         };
-        let package = pip::Package::parse(bytes)?;
+        let package = pip_core::Package::parse(bytes)?;
         println!(
             "valid PIP: {} bytes, {} assets",
             package.bytes().len(),
@@ -57,7 +54,7 @@ fn run() -> Result<(), String> {
         usage();
         return Ok(());
     }
-    let package = pip::Package::parse(bytes)?;
+    let package = pip_core::Package::parse(bytes)?;
     let token = platform::random_token()?;
     server::serve(
         package,
