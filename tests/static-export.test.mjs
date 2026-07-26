@@ -232,6 +232,14 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   assert.match(workspace, /data-surface-id=\{surface\.id\}/);
   assert.match(workspace, /className="surface-container-ports"/);
   assert.match(workspace, /currentContainerNode\.inputs\.map/);
+  assert.match(
+    workspace,
+    /renderFeatureProjection[\s\S]*?onSelect=\{\(\) => undefined\}/,
+  );
+  assert.doesNotMatch(
+    workspace,
+    /renderFeatureProjection[\s\S]*?onSelect=\{\(\) => selectNode\(panel\.id,\s*featureNode\.id\)\}/,
+  );
   assert.match(page, /const selectPanelBusinessNode/);
   assert.match(
     page,

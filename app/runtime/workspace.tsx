@@ -1511,7 +1511,7 @@ export function Workspace({
               </button>
             </>
           }
-          onSelect={() => selectNode(panel.id, featureNode.id)}
+          onSelect={() => undefined}
           onEnter={() => undefined}
           onMoveStart={(_node, event) =>
             beginDrag(
