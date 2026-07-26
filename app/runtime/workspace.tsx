@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -36,7 +37,10 @@ import {
   defaultNodeProjectionLayout,
   projectIntentTree,
 } from "./projection";
-import { cameraForTouchGesture } from "./camera";
+import {
+  cameraForTouchGesture,
+  scaleForWheelGesture,
+} from "./camera";
 import { derivePanelPipelineEdges } from "./panel-pipelines";
 import {
   businessScopeAddress,
@@ -344,6 +348,26 @@ export function Workspace({
   )
     ? focusedPanelId
     : document.workspaceState.activePanelId;
+  useEffect(() => {
+    const preventPageZoomInsideCanvas = (event: WheelEvent) => {
+      const target = event.target;
+      if (
+        event.ctrlKey &&
+        target instanceof Element &&
+        target.closest(".surface-business-viewport, .root-node-viewport")
+      ) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("wheel", preventPageZoomInsideCanvas, {
+      capture: true,
+      passive: false,
+    });
+    return () =>
+      window.removeEventListener("wheel", preventPageZoomInsideCanvas, {
+        capture: true,
+      });
+  }, []);
   const businessRoot = getBusinessRoot(document);
   const currentContainerNode = findNode(
     document.rootIntent,
@@ -735,9 +759,11 @@ export function Workspace({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       };
-      const scale = Math.max(
+      const scale = scaleForWheelGesture(
+        camera.scale,
+        event.deltaY,
         0.5,
-        Math.min(2, camera.scale * Math.exp(-event.deltaY * 0.002)),
+        2,
       );
       const worldX = (pointer.x - camera.x) / camera.scale;
       const worldY = (pointer.y - camera.y) / camera.scale;

@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cameraForTouchGesture } from "../app/runtime/camera.ts";
+import {
+  cameraForTouchGesture,
+  scaleForWheelGesture,
+} from "../app/runtime/camera.ts";
+
+test("turns small precision-touchpad deltas into visible camera zoom", () => {
+  assert.ok(scaleForWheelGesture(1, -1, 0.5, 2) > 1.04);
+  assert.ok(scaleForWheelGesture(1, 1, 0.5, 2) < 0.97);
+  assert.equal(scaleForWheelGesture(2, -120, 0.5, 2), 2);
+  assert.equal(scaleForWheelGesture(0.5, 120, 0.5, 2), 0.5);
+});
 
 test("single-touch movement pans without changing scale", () => {
   assert.deepEqual(

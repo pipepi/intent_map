@@ -51,7 +51,10 @@ import {
   encodePip,
   runPipLoader,
 } from "./runtime/pip";
-import { cameraForTouchGesture } from "./runtime/camera";
+import {
+  cameraForTouchGesture,
+  scaleForWheelGesture,
+} from "./runtime/camera";
 import {
   PROJECTION_LOD_THRESHOLD,
   defaultNodeProjectionLayout,
@@ -1310,7 +1313,12 @@ export default function Home() {
       return;
     }
     const direction = event.deltaY < 0 ? 1 : -1;
-    const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, old.scale * Math.exp(-event.deltaY * 0.002)));
+    const nextScale = scaleForWheelGesture(
+      old.scale,
+      event.deltaY,
+      MIN_SCALE,
+      MAX_SCALE,
+    );
     if (direction > 0 && nextScale >= MAX_SCALE) {
       const target = nearestNode(event.clientX, event.clientY);
       if (target) {

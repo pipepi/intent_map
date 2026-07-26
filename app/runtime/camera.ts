@@ -2,6 +2,24 @@ import type { CameraState } from "./model";
 
 type Point = { x: number; y: number };
 
+export const scaleForWheelGesture = (
+  currentScale: number,
+  deltaY: number,
+  minScale: number,
+  maxScale: number,
+) => {
+  if (deltaY === 0) return currentScale;
+  const direction = deltaY < 0 ? 1 : -1;
+  const logarithmicStep = Math.min(
+    0.2,
+    Math.max(0.04, Math.abs(deltaY) * 0.002),
+  );
+  return Math.max(
+    minScale,
+    Math.min(maxScale, currentScale * Math.exp(direction * logarithmicStep)),
+  );
+};
+
 export const cameraForTouchGesture = (
   startCamera: CameraState,
   startCenter: Point,

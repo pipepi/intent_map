@@ -166,10 +166,10 @@ fn run() -> Result<(), String> {
                 .title("Intent Map")
                 .inner_size(1440.0, 900.0)
                 .min_inner_size(960.0, 640.0)
-                // On Windows, Wry maps this flag to both WebView2 zoom controls
-                // and IsPinchZoomEnabled. Keep it enabled so touch and precision
-                // touchpad pinch gestures reach the embedded application.
-                .zoom_hotkeys_enabled(true)
+                // Keep the WebView itself at 100%. Touchscreen pointers and
+                // precision-touchpad Ctrl+wheel gestures are interpreted by
+                // the focused canvas so only its camera changes.
+                .zoom_hotkeys_enabled(false)
                 .build()?;
             Ok(())
         })

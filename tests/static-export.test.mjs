@@ -85,6 +85,10 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /event\.pointerType === "touch"/);
   assert.match(page, /touchPointersRef/);
   assert.match(page, /cameraForTouchGesture/);
+  assert.match(page, /scaleForWheelGesture/);
+  assert.match(workspace, /scaleForWheelGesture/);
+  assert.match(workspace, /preventPageZoomInsideCanvas/);
+  assert.match(workspace, /passive: false/);
   assert.match(page, /Math\.hypot/);
   assert.match(page, /gesture\.startDistance/);
   assert.match(page, /onPointerDownCapture/);
@@ -161,7 +165,7 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(css, /\.node-display-toggle/);
 });
 
-test("enables WebView2 pinch gestures in the Tauri seed host", async () => {
+test("routes pinch gestures to canvas cameras instead of WebView zoom", async () => {
   const host = await readFile(
     new URL("pip-seed-tauri/src/main.rs", root),
     "utf8",
@@ -169,7 +173,7 @@ test("enables WebView2 pinch gestures in the Tauri seed host", async () => {
 
   assert.match(
     host,
-    /WebviewWindowBuilder::new[\s\S]*?\.zoom_hotkeys_enabled\(true\)[\s\S]*?\.build\(\)\?/,
+    /WebviewWindowBuilder::new[\s\S]*?\.zoom_hotkeys_enabled\(false\)[\s\S]*?\.build\(\)\?/,
   );
 });
 
