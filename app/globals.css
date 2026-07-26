@@ -1060,6 +1060,43 @@ code,
   scrollbar-width: thin;
 }
 
+.surface-feature-panel > .workspace-surface-header {
+  display: none;
+}
+
+.surface-feature-panel {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.surface-feature-panel > .workspace-surface-body {
+  overflow: hidden;
+}
+
+.embedded-node-projection {
+  position: absolute;
+  border: 0;
+  border-radius: inherit;
+}
+
+.feature-node-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  transform-origin: 0 0;
+}
+
+.node-projection-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.node-projection-actions button {
+  min-width: 24px;
+  height: 24px;
+}
+
 .workspace-frame-resize {
   z-index: 20;
   position: absolute;
@@ -1092,121 +1129,6 @@ code,
 
 .free-layout-surface .workspace-surface-body {
   overflow: hidden;
-}
-
-.surface-tree {
-  padding: 5px 0 10px;
-}
-
-.surface-tree-row {
-  width: 100%;
-  min-height: 25px;
-  display: grid;
-  grid-template-columns: 13px minmax(0, 1fr);
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  border-left: 2px solid transparent;
-  color: #a8b1cf;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font-size: 9px;
-}
-
-.surface-tree-row span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.surface-tree-row i {
-  color: #6576a5;
-  font-style: normal;
-  font-size: 7px;
-}
-
-.surface-tree-row:hover {
-  background: rgba(57, 167, 255, 0.08);
-}
-
-.surface-tree-row.selected {
-  border-left-color: #55b0ff;
-  color: #fff;
-  background: rgba(57, 167, 255, 0.14);
-}
-
-.surface-properties {
-  display: grid;
-  gap: 8px;
-  padding: 9px;
-}
-
-.surface-properties label {
-  display: grid;
-  gap: 4px;
-  color: #7f8bae;
-  font-size: 8px;
-}
-
-.surface-properties input,
-.surface-properties textarea {
-  width: 100%;
-  min-width: 0;
-  padding: 6px;
-  border: 1px solid #2b365d;
-  border-radius: 4px;
-  color: #e8edff;
-  background: #090e20;
-  font-size: 9px;
-}
-
-.surface-properties textarea {
-  min-height: 60px;
-  resize: vertical;
-}
-
-.surface-properties dl {
-  margin: 2px 0 0;
-  color: #7f8bae;
-  font-size: 8px;
-}
-
-.surface-properties dl div {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 4px;
-}
-
-.surface-properties dt,
-.surface-properties dd {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.surface-list {
-  padding: 8px;
-  color: #9ca8c9;
-  font-size: 9px;
-}
-
-.surface-list p {
-  margin: 0 0 6px;
-  padding: 6px;
-  border: 1px solid #242f50;
-  border-radius: 4px;
-  background: rgba(17, 24, 50, 0.75);
-}
-
-.surface-list p.ok {
-  color: #45d8a9;
-}
-
-.surface-list b {
-  color: #58b4ff;
-  font-size: 8px;
 }
 
 .surface-empty,

@@ -30,6 +30,9 @@ export type NodeProjectionProps = {
   active: boolean;
   layoutLocked: boolean;
   content: ReactNode;
+  actions?: ReactNode;
+  embedded?: boolean;
+  showResizeHandles?: boolean;
   onSelect: (nodeId: string) => void;
   onEnter: (node: IntentNode) => void;
   onMoveStart: (
@@ -61,6 +64,9 @@ export function NodeProjection({
   active,
   layoutLocked,
   content,
+  actions,
+  embedded = false,
+  showResizeHandles = true,
   onSelect,
   onEnter,
   onMoveStart,
@@ -83,6 +89,7 @@ export function NodeProjection({
     <article
       className={[
         "runtime-node",
+        embedded ? "embedded-node-projection" : "",
         `runtime-kind-${node.kind}`,
         selected ? "selected" : "",
         active ? "active" : "",
@@ -92,10 +99,10 @@ export function NodeProjection({
         .filter(Boolean)
         .join(" ")}
       style={{
-        left: node.position.x,
-        top: node.position.y,
-        width: size.width,
-        height: size.height,
+        left: embedded ? 0 : node.position.x,
+        top: embedded ? 0 : node.position.y,
+        width: embedded ? "100%" : size.width,
+        height: embedded ? "100%" : size.height,
         gridTemplateRows: rows > 0 ? "38px auto minmax(0, 1fr)" : undefined,
       }}
       data-node-id={node.id}
@@ -142,6 +149,9 @@ export function NodeProjection({
                 : node.implementation?.key ?? "intent"}
             </small>
             {node.implementation?.core && <i title="核心节点">◆</i>}
+            {actions && (
+              <span className="node-projection-actions">{actions}</span>
+            )}
             <button
               className="node-display-toggle"
               aria-label={`最小化「${node.name}」`}
@@ -215,7 +225,8 @@ export function NodeProjection({
             )}
           </div>
 
-          {!layoutLocked &&
+          {showResizeHandles &&
+            !layoutLocked &&
             visibleDirections.map((direction) => (
               <span
                 className={`resize-handle resize-${direction}`}
@@ -227,7 +238,7 @@ export function NodeProjection({
               />
             ))}
 
-          {!layoutLocked && (
+          {showResizeHandles && !layoutLocked && (
             <button
               className={`resize-mode-toggle runtime-mode-toggle ${resizeMode} ${selected ? "selected" : ""}`}
               aria-label={

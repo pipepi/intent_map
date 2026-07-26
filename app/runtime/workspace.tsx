@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Fragment,
   useRef,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
@@ -18,32 +17,25 @@ import type {
   SurfaceInstance,
   WorkspaceState,
 } from "./model";
+import { NodeProjection } from "./node-renderer";
 import {
   businessScopeAddress,
   getBusinessRoot,
   isCoreWorkspacePanel,
   removeWorkspacePanel,
-  resolveFeatureContext,
   scopeCameraKey,
 } from "./model";
-
-type TraceItem = {
-  id: string;
-  path: string;
-  status: string;
-};
 
 type WorkspaceProps = {
   document: IntentDocumentV3;
   freeCanvas: ReactNode;
-  trace: TraceItem[];
   onWorkspaceChange: (workspace: WorkspaceState) => void;
-  onNodeChange: (
-    nodeId: string,
-    patch: Pick<IntentNode, "name" | "description">,
-  ) => void;
   onUpdateView: (panelId: string) => void;
   onSaveViewAs: (panelId: string) => void;
+  renderNodeContent: (
+    node: IntentNode,
+    context: { panelId: string; surfaceId: string },
+  ) => ReactNode;
 };
 
 type DragTarget =
@@ -122,11 +114,10 @@ const featureLabel: Record<string, string> = {
 export function Workspace({
   document,
   freeCanvas,
-  trace,
   onWorkspaceChange,
-  onNodeChange,
   onUpdateView,
   onSaveViewAs,
+  renderNodeContent,
 }: WorkspaceProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const businessRoot = getBusinessRoot(document);
@@ -459,126 +450,6 @@ export function Workspace({
     );
   };
 
-  const renderTree = (
-    panel: PanelInstance,
-    node: IntentNode,
-    depth = 0,
-  ): ReactNode => (
-    <Fragment key={node.id}>
-      <button
-        className={`surface-tree-row ${
-          panel.selection.primaryNodeId === node.id ? "selected" : ""
-        }`}
-        style={{ paddingLeft: 10 + depth * 13 }}
-        onClick={() => selectNode(panel.id, node.id)}
-      >
-        <i>{node.children?.length ? "◆" : "·"}</i>
-        <span>{node.name}</span>
-      </button>
-      {node.children?.map((child) => renderTree(panel, child, depth + 1))}
-    </Fragment>
-  );
-
-  const featureBody = (
-    panel: PanelInstance,
-    surface: FeaturePanelSurface,
-  ) => {
-    const context = resolveFeatureContext(document, panel.id, surface.id);
-    const containerScope = context.container
-      ? findNode(businessRoot, context.container.scope.nodeId)
-      : undefined;
-
-    if (surface.featureNodeId === "intent_tree") {
-      return (
-        <div className="surface-tree">
-          {renderTree(panel, document.rootIntent)}
-        </div>
-      );
-    }
-    if (surface.featureNodeId === "properties") {
-      if (!context.subject) {
-        return <div className="surface-empty">未选择节点</div>;
-      }
-      return (
-        <div className="surface-properties">
-          <label>
-            名称
-            <input
-              value={context.subject.name}
-              onChange={(event) =>
-                onNodeChange(context.subject!.id, {
-                  name: event.target.value,
-                  description: context.subject!.description,
-                })
-              }
-            />
-          </label>
-          <label>
-            描述
-            <textarea
-              value={context.subject.description}
-              onChange={(event) =>
-                onNodeChange(context.subject!.id, {
-                  name: context.subject!.name,
-                  description: event.target.value,
-                })
-              }
-            />
-          </label>
-          <dl>
-            <div>
-              <dt>节点</dt>
-              <dd>{context.subject.id}</dd>
-            </div>
-            <div>
-              <dt>来源</dt>
-              <dd>{context.container?.title ?? "未连接"}</dd>
-            </div>
-          </dl>
-        </div>
-      );
-    }
-    if (surface.featureNodeId === "validation") {
-      if (!context.container || !containerScope) {
-        return <div className="surface-empty">未连接上下文</div>;
-      }
-      const issues = (containerScope.children ?? []).flatMap((child) =>
-        child.inputs
-          .filter((input) => !input.binding)
-          .map((input) => `${child.name}：输入“${input.name}”未绑定`),
-      );
-      return (
-        <div className="surface-list">
-          {issues.length ? (
-            issues.map((issue) => <p key={issue}>△ {issue}</p>)
-          ) : (
-            <p className="ok">✓ 当前容器通过静态检查</p>
-          )}
-        </div>
-      );
-    }
-    if (surface.featureNodeId === "run_trace") {
-      return (
-        <div className="surface-list">
-          {trace.length ? (
-            trace.slice(-12).map((item) => (
-              <p key={`${item.id}:${item.path}`}>
-                <b>{item.status}</b> {item.path}
-              </p>
-            ))
-          ) : (
-            <div className="surface-empty">尚未运行业务意图</div>
-          )}
-        </div>
-      );
-    }
-    return (
-      <div className="surface-empty">
-        功能节点 {surface.featureNodeId} 暂无工作台渲染器
-      </div>
-    );
-  };
-
   const renderContainer = (
     panel: PanelInstance,
     surface: ContainerSurface,
@@ -717,8 +588,57 @@ export function Workspace({
   ) => {
     const isFixedSource = surface.contextSource.mode === "fixed-container";
     const isFixedNode = surface.subject.mode === "fixed-node";
+    const setScale = (scale: number, fitMode: "auto" | "manual" = "manual") =>
+      onWorkspaceChange(
+        updateSurface(
+          document.workspaceState,
+          panel.id,
+          surface.id,
+          (candidate) =>
+            candidate.kind === "feature-panel"
+              ? {
+                  ...candidate,
+                  viewport: {
+                    ...candidate.viewport,
+                    fitMode,
+                    camera: {
+                      ...candidate.viewport.camera,
+                      scale: Math.max(0.5, Math.min(2, scale)),
+                    },
+                  },
+                }
+              : candidate,
+        ),
+      );
     return (
       <span className="surface-header-actions">
+        <button
+          title="缩小 Surface 内容"
+          onClick={(event) => {
+            event.stopPropagation();
+            setScale(surface.viewport.camera.scale - 0.1);
+          }}
+        >
+          −
+        </button>
+        <button
+          title="适应 Surface"
+          onClick={(event) => {
+            event.stopPropagation();
+            setScale(1, "auto");
+          }}
+        >
+          {Math.round(surface.viewport.camera.scale * 100)}%
+        </button>
+        <button
+          title="放大 Surface 内容"
+          onClick={(event) => {
+            event.stopPropagation();
+            setScale(surface.viewport.camera.scale + 0.1);
+          }}
+        >
+          +
+        </button>
         <button
           className={isFixedSource ? "active" : ""}
           title={isFixedSource ? "解除固定上下文来源" : "固定当前容器来源"}
@@ -777,6 +697,103 @@ export function Workspace({
           ◎
         </button>
       </span>
+    );
+  };
+
+  const renderFeatureProjection = (
+    panel: PanelInstance,
+    surface: FeaturePanelSurface,
+  ) => {
+    const featureNode = findNode(document.rootIntent, surface.featureNodeId);
+    if (!featureNode) {
+      return (
+        <div className="surface-empty">
+          功能节点 {surface.featureNodeId} 已失效
+        </div>
+      );
+    }
+    const displayMode =
+      surface.localState.displayMode === "minimized"
+        ? "minimized"
+        : "expanded";
+    const projectedNode: IntentNode = { ...featureNode, displayMode };
+    const scale = surface.viewport.camera.scale;
+    return (
+      <div
+        className="feature-node-viewport"
+        style={{
+          width: `${100 / scale}%`,
+          height: `${100 / scale}%`,
+          transform: `translate(${surface.viewport.camera.x}px, ${surface.viewport.camera.y}px) scale(${scale})`,
+        }}
+      >
+        <NodeProjection
+        node={projectedNode}
+        scale={surface.viewport.camera.scale}
+        selected={panel.selection.primaryNodeId === featureNode.id}
+        active={false}
+        layoutLocked={panel.layoutLocked}
+        embedded
+        showResizeHandles={false}
+        content={renderNodeContent(featureNode, {
+          panelId: panel.id,
+          surfaceId: surface.id,
+        })}
+        actions={
+          <>
+            {renderFeatureHeaderActions(panel, surface)}
+            <button
+              className="surface-close"
+              title={`关闭 ${surface.title}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                removeSurfaceFromPanel(panel, surface.id);
+              }}
+            >
+              ×
+            </button>
+          </>
+        }
+        onSelect={() => selectNode(panel.id, featureNode.id)}
+        onEnter={() => undefined}
+        onMoveStart={(_node, event) =>
+          beginDrag(
+            {
+              kind: "surface",
+              panelId: panel.id,
+              surfaceId: surface.id,
+            },
+            surface.frame,
+            event,
+          )
+        }
+        onResizeStart={() => undefined}
+        onResizeModeToggle={() => undefined}
+        onDisplayModeToggle={() =>
+          onWorkspaceChange(
+            updateSurface(
+              document.workspaceState,
+              panel.id,
+              surface.id,
+              (candidate) =>
+                candidate.kind === "feature-panel"
+                  ? {
+                      ...candidate,
+                      localState: {
+                        ...candidate.localState,
+                        displayMode:
+                          displayMode === "expanded"
+                            ? "minimized"
+                            : "expanded",
+                      },
+                    }
+                  : candidate,
+            ),
+          )
+        }
+        />
+      </div>
     );
   };
 
@@ -969,7 +986,7 @@ export function Workspace({
                       <div className="workspace-surface-body">
                         {surface.kind === "current-container"
                           ? renderContainer(panel, surface)
-                          : featureBody(panel, surface)}
+                          : renderFeatureProjection(panel, surface)}
                       </div>
                       {!panel.layoutLocked && (
                         <span

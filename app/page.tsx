@@ -20,6 +20,7 @@ import {
   loadIntentDocument,
   nodeDisplayMode,
   removeNodeFromPanelSelections,
+  resolveFeatureContext,
   scopeCameraKey,
   serializeIntentDocument,
   updatePanel,
@@ -291,6 +292,75 @@ const detectCycle = (scope: IntentNode): string[] | null => {
     if (found) return found;
   }
   return null;
+};
+
+const collectValidationIssues = (scope: IntentNode) => {
+  const issues: Array<{
+    level: "error" | "warning" | "info";
+    text: string;
+  }> = [];
+  const cycle = detectCycle(scope);
+  if (cycle) {
+    issues.push({
+      level: "error",
+      text: `循环依赖：${cycle.join(" → ")}`,
+    });
+  }
+  const children = scope.children ?? [];
+  const consumedEnvironment = new Set<string>();
+  const consumedOutputs = new Set<string>();
+  for (const child of children) {
+    for (const input of child.inputs) {
+      if (!input.binding) {
+        issues.push({
+          level: "warning",
+          text: `「${child.name}」输入「${input.name}」未绑定`,
+        });
+      }
+      for (const reference of collectRefs(input.binding)) {
+        if (reference.env) consumedEnvironment.add(reference.portId);
+        if (reference.nodeId) {
+          consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
+        }
+      }
+    }
+  }
+  for (const output of scope.outputs) {
+    if (!output.mapping) {
+      issues.push({
+        level: "warning",
+        text: `容器输出「${output.name}」未映射`,
+      });
+    }
+    for (const reference of collectRefs(output.mapping)) {
+      if (reference.env) consumedEnvironment.add(reference.portId);
+      if (reference.nodeId) {
+        consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
+      }
+    }
+  }
+  for (const port of scope.inputs) {
+    if (!consumedEnvironment.has(port.id)) {
+      issues.push({
+        level: "info",
+        text: `环境输入「${port.name}」未被任何节点消费`,
+      });
+    }
+  }
+  for (const child of children) {
+    if (
+      child.outputs.length > 0 &&
+      child.outputs.every(
+        (output) => !consumedOutputs.has(`${child.id}:${output.id}`),
+      )
+    ) {
+      issues.push({
+        level: "info",
+        text: `「${child.name}」的输出未被消费`,
+      });
+    }
+  }
+  return issues;
 };
 
 const evaluateExpression = (
@@ -2626,7 +2696,41 @@ export default function Home() {
     );
   };
 
-  const renderNodeContent = (node: IntentNode) => {
+  const renderNodeContent = (
+    node: IntentNode,
+    contextAddress?: { panelId: string; surfaceId: string },
+  ) => {
+    const surfaceContext = contextAddress
+      ? resolveFeatureContext(
+          documentState,
+          contextAddress.panelId,
+          contextAddress.surfaceId,
+        )
+      : undefined;
+    const contextualRoot = surfaceContext?.container
+      ? projectIntentTree(
+          documentState.rootIntent,
+          documentState.businessRootId,
+          surfaceContext.container.projections,
+        )
+      : appRoot;
+    const contextualBusinessRoot = getBusinessRoot({
+      ...documentState,
+      rootIntent: contextualRoot,
+    });
+    const contextualBusinessScope = surfaceContext?.container
+      ? findNode(
+          contextualBusinessRoot,
+          surfaceContext.container.scope.nodeId,
+        ) ?? contextualBusinessRoot
+      : businessScope;
+    const contextualSubject = surfaceContext?.subject
+      ? findNode(contextualRoot, surfaceContext.subject.id) ??
+        surfaceContext.subject
+      : selectedBusinessNode;
+    const contextualValidationIssues = contextAddress
+      ? collectValidationIssues(contextualBusinessScope)
+      : validationIssues;
     const key = node.implementation?.key;
     if (key === "intent-document-loader") {
       return (
@@ -2711,7 +2815,7 @@ export default function Home() {
       return (
         <div className="tree-surface">
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索意图或端口" />
-          <div>{renderTree(businessRoot)}</div>
+          <div>{renderTree(contextualBusinessRoot)}</div>
         </div>
       );
     }
@@ -2729,16 +2833,16 @@ export default function Home() {
     }
     if (key === "validation") {
       return (
-        <div className={`validation-surface ${businessCycle ? "error" : "ok"}`}>
-          <i>{validationIssues.some((issue) => issue.level === "error") ? "!" : validationIssues.length ? "△" : "✓"}</i>
-          <span><strong>{validationIssues.length ? `${validationIssues.filter((issue) => issue.level === "error").length} 错误 · ${validationIssues.filter((issue) => issue.level === "warning").length} 警告 · ${validationIssues.filter((issue) => issue.level === "info").length} 提示` : "作用域有效"}</strong><small>{validationIssues.length ? "端口、依赖与消费关系检查" : "端口、可见性与数据 DAG 校验通过"}</small></span>
-          {validationIssues.length > 0 && (
+        <div className={`validation-surface ${detectCycle(contextualBusinessScope) ? "error" : "ok"}`}>
+          <i>{contextualValidationIssues.some((issue) => issue.level === "error") ? "!" : contextualValidationIssues.length ? "△" : "✓"}</i>
+          <span><strong>{contextualValidationIssues.length ? `${contextualValidationIssues.filter((issue) => issue.level === "error").length} 错误 · ${contextualValidationIssues.filter((issue) => issue.level === "warning").length} 警告 · ${contextualValidationIssues.filter((issue) => issue.level === "info").length} 提示` : "作用域有效"}</strong><small>{contextualValidationIssues.length ? "端口、依赖与消费关系检查" : "端口、可见性与数据 DAG 校验通过"}</small></span>
+          {contextualValidationIssues.length > 0 && (
             <ul className="validation-issue-list">
-              {validationIssues.slice(0, 8).map((issue, index) => (
+              {contextualValidationIssues.slice(0, 8).map((issue, index) => (
                 <li key={index} className={`issue-${issue.level}`}>{issue.text}</li>
               ))}
-              {validationIssues.length > 8 && (
-                <li className="issue-info">… 其余 {validationIssues.length - 8} 项</li>
+              {contextualValidationIssues.length > 8 && (
+                <li className="issue-info">… 其余 {contextualValidationIssues.length - 8} 项</li>
               )}
             </ul>
           )}
@@ -2917,31 +3021,31 @@ export default function Home() {
     if (key === "properties") {
       return (
         <div className="properties-surface">
-          <div className="property-heading"><span>{selectedBusinessNode.kind === "operator" ? "ƒ" : "◇"}</span><div><small>{selectedBusinessNode.kind}</small><strong>{selectedBusinessNode.name}</strong></div></div>
-          <label>名称<input value={selectedBusinessNode.name} onChange={(event) => updateDocumentNode(selectedBusinessNode.id, (item) => ({ ...item, name: event.target.value }))} /></label>
-          <label>描述<textarea rows={3} value={selectedBusinessNode.description} onChange={(event) => updateDocumentNode(selectedBusinessNode.id, (item) => ({ ...item, description: event.target.value }))} /></label>
-          {selectedBusinessNode.kind === "operator" && <label>内置算子<select value={selectedBusinessNode.operator ?? "identity"} onChange={(event) => updateDocumentNode(selectedBusinessNode.id, (item) => ({ ...item, operator: event.target.value }))}><option value="identity">identity</option><option value="object">object</option><option value="array">array</option><option value="concat">concat</option></select></label>}
-          <div className="property-ports"><strong>输入</strong>{selectedBusinessNode.inputs.map((port) => {
+          <div className="property-heading"><span>{contextualSubject.kind === "operator" ? "ƒ" : "◇"}</span><div><small>{contextualSubject.kind}</small><strong>{contextualSubject.name}</strong></div></div>
+          <label>名称<input value={contextualSubject.name} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, name: event.target.value }))} /></label>
+          <label>描述<textarea rows={3} value={contextualSubject.description} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, description: event.target.value }))} /></label>
+          {contextualSubject.kind === "operator" && <label>内置算子<select value={contextualSubject.operator ?? "identity"} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, operator: event.target.value }))}><option value="identity">identity</option><option value="object">object</option><option value="array">array</option><option value="concat">concat</option></select></label>}
+          <div className="property-ports"><strong>输入</strong>{contextualSubject.inputs.map((port) => {
             const reference = collectRefs(port.binding)[0];
             const value = reference?.env
               ? `env:${reference.portId}`
               : reference?.nodeId
                 ? `ref:${reference.nodeId}:${reference.portId}`
                 : "";
-            return <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateInputBinding(selectedBusinessNode.id, port.id, event.target.value)}><option value="">未绑定</option>{bindingOptionsFor(selectedBusinessNode.id).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>;
+            return <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateInputBinding(contextualSubject.id, port.id, event.target.value)}><option value="">未绑定</option>{bindingOptionsFor(contextualSubject.id).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>;
           })}</div>
-          <div className="property-ports outputs"><strong>输出</strong>{selectedBusinessNode.outputs.map((port) => {
+          <div className="property-ports outputs"><strong>输出</strong>{contextualSubject.outputs.map((port) => {
             const reference = collectRefs(port.mapping)[0];
             const value = reference?.env
               ? `env:${reference.portId}`
               : reference?.nodeId
                 ? `ref:${reference.nodeId}:${reference.portId}`
                 : "";
-            return selectedBusinessNode.kind === "composite"
-              ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputMapping(selectedBusinessNode.id, port.id, event.target.value)}><option value="">未映射</option>{outputMappingOptionsFor(selectedBusinessNode).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
+            return contextualSubject.kind === "composite"
+              ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputMapping(contextualSubject.id, port.id, event.target.value)}><option value="">未映射</option>{outputMappingOptionsFor(contextualSubject).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
               : <span key={port.id}><i />{port.name}<small>{port.type}</small></span>;
           })}</div>
-          <div className="property-actions"><button onClick={() => dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={selectedBusinessNode.id === businessRoot.id}>创建副本</button><button className="danger" onClick={() => dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={selectedBusinessNode.id === businessRoot.id}>删除</button></div>
+          <div className="property-actions"><button onClick={() => dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button className="danger" onClick={() => dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
         </div>
       );
     }
@@ -3104,16 +3208,13 @@ export default function Home() {
       <input ref={fileInputRef} type="file" accept=".json,.intent-map.json,.pip" hidden onChange={importDocument} />
       <Workspace
         document={documentState}
-        trace={trace}
+        renderNodeContent={renderNodeContent}
         onWorkspaceChange={(workspace: WorkspaceState) => {
           setDocumentState((active) => ({
             ...active,
             workspaceState: workspace,
           }));
           setDirty(true);
-        }}
-        onNodeChange={(nodeId, patch) => {
-          updateDocumentNode(nodeId, (node) => ({ ...node, ...patch }));
         }}
         onUpdateView={(panelId) => {
           setDocumentState((active) => {
