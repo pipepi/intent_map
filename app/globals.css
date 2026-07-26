@@ -854,6 +854,29 @@ code,
   font-size: 9px;
 }
 
+.workspace-panel-switcher {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.workspace-v3-bar .workspace-panel-switcher button {
+  max-width: 112px;
+  overflow: hidden;
+  padding: 4px 8px;
+  border-color: #2b365b;
+  background: #0f162d;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-v3-bar .workspace-panel-switcher button.active {
+  border-color: #4aa9ff;
+  color: #fff;
+  background: #1b2948;
+}
+
 .workspace-v3-bar small {
   margin-left: auto;
 }

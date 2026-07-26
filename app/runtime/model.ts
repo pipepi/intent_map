@@ -762,7 +762,7 @@ export const createDefaultWorkspaceState = (
         id: "panel-workbench",
         title: "工作台",
         viewId: workbenchView.id,
-        frame: { x: 0.01, y: 0.02, width: 0.49, height: 0.96 },
+        frame: { x: 0, y: 0, width: 1, height: 1 },
         zIndex: 2,
         layoutLocked: true,
         activeContainerSurfaceId: "workbench-container",

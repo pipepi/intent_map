@@ -334,6 +334,14 @@ export function Workspace({
     panelId: string;
     surfaceId: string;
   } | null>(null);
+  const [focusedPanelId, setFocusedPanelId] = useState<string | null>(
+    null,
+  );
+  const effectivePanelId = document.workspaceState.panels.some(
+    (panel) => panel.id === focusedPanelId,
+  )
+    ? focusedPanelId
+    : document.workspaceState.activePanelId;
   const businessRoot = getBusinessRoot(document);
   const currentContainerNode = findNode(
     document.rootIntent,
@@ -346,7 +354,7 @@ export function Workspace({
 
   const duplicateActivePanel = () => {
     const source = document.workspaceState.panels.find(
-      (panel) => panel.id === document.workspaceState.activePanelId,
+      (panel) => panel.id === effectivePanelId,
     );
     if (!source) return;
     const suffix = workspaceUid("copy");
@@ -1559,6 +1567,23 @@ export function Workspace({
         <strong>Intent Map</strong>
         <span>根内树 · 多视图工作区</span>
         <i>v3</i>
+        <nav className="workspace-panel-switcher" aria-label="Panel 切换">
+          {document.workspaceState.panels.map((panel) => (
+            <button
+              className={effectivePanelId === panel.id ? "active" : ""}
+              key={panel.id}
+              onClick={() => {
+                setFocusedPanelId(panel.id);
+                onWorkspaceChange({
+                  ...document.workspaceState,
+                  activePanelId: panel.id,
+                });
+              }}
+            >
+              {panel.title}
+            </button>
+          ))}
+        </nav>
         <small>Panel 独立上下文 · Surface 同步选择</small>
         <button onClick={duplicateActivePanel}>复制当前 Panel</button>
       </header>
@@ -1569,12 +1594,24 @@ export function Workspace({
           return (
             <section
               className={`workspace-panel ${
-                document.workspaceState.activePanelId === panel.id
+                effectivePanelId === panel.id
                   ? "active"
                   : ""
               }`}
               key={panel.id}
-              style={{ ...frameStyle(panel.frame), zIndex: panel.zIndex }}
+              style={{
+                ...frameStyle(panel.frame),
+                zIndex:
+                  effectivePanelId === panel.id
+                    ? Math.max(
+                        0,
+                        ...document.workspaceState.panels.map(
+                          (item) => item.zIndex,
+                        ),
+                      ) + 1
+                    : panel.zIndex,
+              }}
+              onPointerDownCapture={() => setFocusedPanelId(panel.id)}
               onPointerDown={() =>
                 onWorkspaceChange({
                   ...document.workspaceState,

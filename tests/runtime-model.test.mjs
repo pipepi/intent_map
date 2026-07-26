@@ -67,6 +67,12 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
 
   const workbench = document.workspaceState.panels[0];
   assert.equal(workbench.layoutLocked, true);
+  assert.deepEqual(workbench.frame, {
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+  });
   assert.equal(workbench.activeContainerSurfaceId, "workbench-container");
   assert.equal(
     workbench.surfaces.filter((surface) => surface.kind === "current-container")
