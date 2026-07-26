@@ -138,6 +138,18 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(css, /\.node-display-toggle/);
 });
 
+test("enables WebView2 pinch gestures in the Tauri seed host", async () => {
+  const host = await readFile(
+    new URL("pip-seed-tauri/src/main.rs", root),
+    "utf8",
+  );
+
+  assert.match(
+    host,
+    /WebviewWindowBuilder::new[\s\S]*?\.zoom_hotkeys_enabled\(true\)[\s\S]*?\.build\(\)\?/,
+  );
+});
+
 test("derives and aggregates root pipes without persisting edges", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
   const model = await readFile(new URL("app/runtime/model.ts", root), "utf8");
