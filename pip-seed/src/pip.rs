@@ -1,0 +1,185 @@
+use crate::sha256;
+use std::collections::HashSet;
+use std::ops::Range;
+
+const PIP_MAGIC: &[u8; 8] = b"PIP\0SEED";
+const PIP_VERSION: u32 = 1;
+const SECTION_COUNT: usize = 4;
+const SECTION_ENTRY_SIZE: usize = 48;
+const HEADER_SIZE: usize = 16 + SECTION_COUNT * SECTION_ENTRY_SIZE;
+const MAX_SECTION_SIZE: usize = 64 * 1024 * 1024;
+const MAX_PACKAGE_SIZE: usize = 128 * 1024 * 1024;
+
+#[derive(Clone, Debug)]
+pub struct Asset {
+    pub path: String,
+    pub mime: String,
+    pub range: Range<usize>,
+}
+
+#[derive(Clone)]
+pub struct Package {
+    bytes: Vec<u8>,
+    sections: [Range<usize>; SECTION_COUNT],
+    assets: Vec<Asset>,
+}
+
+fn u16_at(bytes: &[u8], offset: usize) -> Result<u16, String> {
+    let value = bytes.get(offset..offset + 2).ok_or("truncated u16")?;
+    Ok(u16::from_le_bytes(
+        value.try_into().map_err(|_| "invalid u16")?,
+    ))
+}
+
+fn u32_at(bytes: &[u8], offset: usize) -> Result<u32, String> {
+    let value = bytes.get(offset..offset + 4).ok_or("truncated u32")?;
+    Ok(u32::from_le_bytes(
+        value.try_into().map_err(|_| "invalid u32")?,
+    ))
+}
+
+fn u64_at(bytes: &[u8], offset: usize) -> Result<u64, String> {
+    let value = bytes.get(offset..offset + 8).ok_or("truncated u64")?;
+    Ok(u64::from_le_bytes(
+        value.try_into().map_err(|_| "invalid u64")?,
+    ))
+}
+
+fn parse_assets(section: &[u8], base: usize) -> Result<Vec<Asset>, String> {
+    if section.is_empty() {
+        return Ok(Vec::new());
+    }
+    let count = u32_at(section, 0)? as usize;
+    if count > 100_000 {
+        return Err("asset count exceeds limit".into());
+    }
+    let mut cursor = 4usize;
+    let mut seen = HashSet::new();
+    let mut assets = Vec::with_capacity(count);
+    for _ in 0..count {
+        let path_len = u16_at(section, cursor)? as usize;
+        let mime_len = u16_at(section, cursor + 2)? as usize;
+        let data_len = usize::try_from(u64_at(section, cursor + 4)?)
+            .map_err(|_| "asset length exceeds platform limit")?;
+        cursor = cursor.checked_add(12).ok_or("asset offset overflow")?;
+        let metadata_end = cursor
+            .checked_add(path_len)
+            .and_then(|value| value.checked_add(mime_len))
+            .ok_or("asset metadata overflow")?;
+        let data_end = metadata_end
+            .checked_add(data_len)
+            .ok_or("asset data overflow")?;
+        if data_end > section.len() {
+            return Err("asset record is truncated".into());
+        }
+        let path = std::str::from_utf8(&section[cursor..cursor + path_len])
+            .map_err(|_| "asset path is not UTF-8")?
+            .to_string();
+        cursor += path_len;
+        let mime = std::str::from_utf8(&section[cursor..cursor + mime_len])
+            .map_err(|_| "asset MIME is not UTF-8")?
+            .to_string();
+        cursor += mime_len;
+        if path.is_empty()
+            || path.starts_with('/')
+            || path.contains("..")
+            || path.contains('\\')
+            || !seen.insert(path.clone())
+        {
+            return Err(format!("unsafe or duplicate asset path: {path}"));
+        }
+        assets.push(Asset {
+            path,
+            mime,
+            range: base + cursor..base + data_end,
+        });
+        cursor = data_end;
+    }
+    if cursor != section.len() {
+        return Err("asset section contains trailing data".into());
+    }
+    Ok(assets)
+}
+
+impl Package {
+    pub fn parse(bytes: Vec<u8>) -> Result<Self, String> {
+        if bytes.len() < HEADER_SIZE {
+            return Err("PIP header is truncated".into());
+        }
+        if bytes.len() > MAX_PACKAGE_SIZE {
+            return Err("PIP package exceeds size limit".into());
+        }
+        if bytes.get(..8) != Some(PIP_MAGIC) {
+            return Err("invalid PIP magic".into());
+        }
+        if u32_at(&bytes, 8)? != PIP_VERSION || u32_at(&bytes, 12)? as usize != HEADER_SIZE {
+            return Err("unsupported PIP header".into());
+        }
+        let mut sections_vec = Vec::with_capacity(SECTION_COUNT);
+        for index in 0..SECTION_COUNT {
+            let entry = 16 + index * SECTION_ENTRY_SIZE;
+            let offset = usize::try_from(u64_at(&bytes, entry)?).map_err(|_| "offset overflow")?;
+            let length =
+                usize::try_from(u64_at(&bytes, entry + 8)?).map_err(|_| "length overflow")?;
+            if length > MAX_SECTION_SIZE || offset < HEADER_SIZE || offset % 8 != 0 {
+                return Err(format!("invalid PIP section {index}"));
+            }
+            let end = offset.checked_add(length).ok_or("section overflow")?;
+            if end > bytes.len() {
+                return Err(format!("PIP section {index} is out of bounds"));
+            }
+            let expected = bytes.get(entry + 16..entry + 48).ok_or("truncated hash")?;
+            if sha256::digest(&bytes[offset..end]) != expected {
+                return Err(format!("PIP section {index} hash mismatch"));
+            }
+            sections_vec.push(offset..end);
+        }
+        let mut ordered = sections_vec.clone();
+        ordered.sort_by_key(|range| range.start);
+        for pair in ordered.windows(2) {
+            if pair[0].end > pair[1].start {
+                return Err("PIP sections overlap".into());
+            }
+        }
+        let sections: [Range<usize>; SECTION_COUNT] = sections_vec
+            .try_into()
+            .map_err(|_| "invalid PIP section count")?;
+        let assets = parse_assets(&bytes[sections[3].clone()], sections[3].start)?;
+        Ok(Self {
+            bytes,
+            sections,
+            assets,
+        })
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn manifest(&self) -> &[u8] {
+        &self.bytes[self.sections[0].clone()]
+    }
+
+    pub fn assets(&self) -> &[Asset] {
+        &self.assets
+    }
+
+    pub fn asset_bytes(&self, asset: &Asset) -> &[u8] {
+        &self.bytes[asset.range.clone()]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Package;
+
+    #[test]
+    fn reads_typescript_fixed_vector() {
+        let package =
+            Package::parse(include_bytes!("../../tests/fixtures/minimal-valid.pip").to_vec())
+                .expect("TypeScript fixture must be a valid PIP");
+        assert_eq!(package.assets().len(), 1);
+        assert_eq!(package.assets()[0].path, "index.html");
+        assert_eq!(package.asset_bytes(&package.assets()[0]), b"<h1>PIP</h1>");
+    }
+}
