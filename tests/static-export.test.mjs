@@ -209,6 +209,7 @@ test("derives and aggregates root pipes without persisting edges", async () => {
 });
 
 test("keeps workbench controls, pipe anchors, and surface focus visually aligned", async () => {
+  const page = await readFile(new URL("app/page.tsx", root), "utf8");
   const workspace = await readFile(
     new URL("app/runtime/workspace.tsx", root),
     "utf8",
@@ -231,6 +232,16 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   assert.match(workspace, /data-surface-id=\{surface\.id\}/);
   assert.match(workspace, /className="surface-container-ports"/);
   assert.match(workspace, /currentContainerNode\.inputs\.map/);
+  assert.match(page, /const selectPanelBusinessNode/);
+  assert.match(
+    page,
+    /renderTree\(contextualBusinessRoot,\s*0,\s*treeContext\)/,
+  );
+  assert.match(
+    page,
+    /selectPanelBusinessNode\(\s*contextAddress\.panelId,\s*target\.id/,
+  );
+  assert.match(page, /navigatePanelBusinessNode/);
   assert.match(workspace, /onContainerMoveStart=\{moveContainer\}/);
   assert.match(workspace, /onContainerResizeStart=\{resizeContainer\}/);
   assert.match(workspace, /scopeWorldSizes/);

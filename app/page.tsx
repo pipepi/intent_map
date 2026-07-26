@@ -2143,26 +2143,104 @@ export default function Home() {
     setSelectedBusinessNodeId(node.id);
   };
 
-  const renderTree = (node: IntentNode, depth = 0): React.ReactNode => {
+  type TreeProjectionContext = {
+    scopeNodeId: string;
+    selectedNodeId?: string;
+    onSelect: (node: IntentNode) => void;
+    onNavigate: (node: IntentNode) => void;
+  };
+
+  const selectPanelBusinessNode = (panelId: string, nodeId: string) => {
+    setDocumentState((active) =>
+      updatePanel(active, panelId, (panel) => ({
+        ...panel,
+        selection: {
+          nodeIds: [nodeId],
+          primaryNodeId: nodeId,
+          revision: panel.selection.revision + 1,
+        },
+      })),
+    );
+    setDirty(true);
+  };
+
+  const navigatePanelBusinessNode = (
+    panelId: string,
+    containerSurfaceId: string,
+    node: IntentNode,
+  ) => {
+    setDocumentState((active) => {
+      const root = getBusinessRoot(active);
+      const path = findPath(root, node.id);
+      if (!path) return active;
+      const selected = updatePanel(active, panelId, (panel) => ({
+        ...panel,
+        selection: {
+          nodeIds: [node.id],
+          primaryNodeId: node.id,
+          revision: panel.selection.revision + 1,
+        },
+      }));
+      return updateSurface(
+        selected,
+        panelId,
+        containerSurfaceId,
+        (surface) =>
+          surface.kind === "current-container"
+            ? {
+                ...surface,
+                scope: {
+                  domain: "business",
+                  nodeId: node.id,
+                  viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+                },
+                navigationStack: path.map((item) => ({
+                  domain: "business" as const,
+                  nodeId: item.id,
+                  viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
+                })),
+              }
+            : surface,
+      );
+    });
+    setDirty(true);
+  };
+
+  const renderTree = (
+    node: IntentNode,
+    depth = 0,
+    context?: TreeProjectionContext,
+  ): React.ReactNode => {
     const matches =
       !search ||
       node.name.toLowerCase().includes(search.toLowerCase()) ||
       node.description.toLowerCase().includes(search.toLowerCase());
+    const scopeNodeId = context?.scopeNodeId ?? businessScope.id;
+    const selectedNodeId =
+      context?.selectedNodeId ?? selectedBusinessNodeId;
     return (
       <Fragment key={node.id}>
         {matches && (
           <button
-            className={`runtime-tree-row ${businessScope.id === node.id ? "scope" : ""} ${selectedBusinessNodeId === node.id ? "selected" : ""}`}
+            className={`runtime-tree-row ${scopeNodeId === node.id ? "scope" : ""} ${selectedNodeId === node.id ? "selected" : ""}`}
             style={{ paddingLeft: 12 + depth * 14 }}
-            onClick={() => setSelectedBusinessNodeId(node.id)}
-            onDoubleClick={() => navigateToBusinessNode(node)}
+            onClick={() => {
+              if (context) context.onSelect(node);
+              else setSelectedBusinessNodeId(node.id);
+            }}
+            onDoubleClick={() => {
+              if (context) context.onNavigate(node);
+              else navigateToBusinessNode(node);
+            }}
           >
             <span>{node.children?.length ? "◇" : "ƒ"}</span>
             <strong>{node.name}</strong>
             <small>{node.children?.length ?? 0}</small>
           </button>
         )}
-        {node.children?.map((child) => renderTree(child, depth + 1))}
+        {node.children?.map((child) =>
+          renderTree(child, depth + 1, context),
+        )}
       </Fragment>
     );
   };
@@ -2583,10 +2661,39 @@ export default function Home() {
       );
     }
     if (key === "intent-tree") {
+      const treeContext =
+        contextAddress && surfaceContext?.panel
+          ? {
+              scopeNodeId:
+                surfaceContext.container?.scope.nodeId ??
+                contextualBusinessScope.id,
+              selectedNodeId:
+                surfaceContext.panel.selection.primaryNodeId,
+              onSelect: (target: IntentNode) =>
+                selectPanelBusinessNode(
+                  contextAddress.panelId,
+                  target.id,
+                ),
+              onNavigate: (target: IntentNode) => {
+                if (surfaceContext.container) {
+                  navigatePanelBusinessNode(
+                    contextAddress.panelId,
+                    surfaceContext.container.id,
+                    target,
+                  );
+                } else {
+                  selectPanelBusinessNode(
+                    contextAddress.panelId,
+                    target.id,
+                  );
+                }
+              },
+            }
+          : undefined;
       return (
         <div className="tree-surface">
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索意图或端口" />
-          <div>{renderTree(contextualBusinessRoot)}</div>
+          <div>{renderTree(contextualBusinessRoot, 0, treeContext)}</div>
         </div>
       );
     }
