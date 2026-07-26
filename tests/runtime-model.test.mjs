@@ -66,7 +66,7 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
   );
 
   const workbench = document.workspaceState.panels[0];
-  assert.equal(workbench.layoutLocked, true);
+  assert.equal(workbench.layoutLocked, false);
   assert.deepEqual(workbench.frame, {
     x: 0,
     y: 0,
@@ -74,6 +74,11 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
     height: 1,
   });
   assert.equal(workbench.activeContainerSurfaceId, "workbench-container");
+  assert.deepEqual(workbench.selection, {
+    nodeIds: ["business_root"],
+    primaryNodeId: "business_root",
+    revision: 0,
+  });
   assert.equal(workbench.surfaces.length, 3);
   assert.equal(
     workbench.surfaces.filter((surface) => surface.kind === "current-container")
@@ -89,7 +94,48 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
   const container = workbench.surfaces.find(
     (surface) => surface.kind === "current-container",
   );
+  const tree = workbench.surfaces.find(
+    (surface) => surface.id === "workbench-tree",
+  );
+  const properties = workbench.surfaces.find(
+    (surface) => surface.id === "workbench-properties",
+  );
+  assert.deepEqual(container.frame, {
+    x: 0.245,
+    y: 0.02,
+    width: 0.745,
+    height: 0.96,
+  });
+  assert.equal(
+    container.projections["business:business_root"].camera.scale,
+    0.5,
+  );
+  assert.deepEqual(tree.frame, {
+    x: 0.01,
+    y: 0.02,
+    width: 0.225,
+    height: 0.8,
+  });
+  assert.deepEqual(properties.frame, {
+    x: 0.01,
+    y: 0.84,
+    width: 0.225,
+    height: 0.14,
+  });
+  assert.equal(properties.localState.displayMode, "minimized");
+  assert.deepEqual(properties.localState.expandedFrame, {
+    x: 0.01,
+    y: 0.02,
+    width: 0.225,
+    height: 0.96,
+  });
   assert.equal(container.localState.portsExpanded, false);
+  assert.equal(
+    workbench.surfaces.every(
+      (surface) => surface.localState.frameResizeMode === "simple",
+    ),
+    true,
+  );
 });
 
 test("keeps the root functional graph and current-container reference", () => {

@@ -665,6 +665,7 @@ const defaultContainerSurface = (
   nodeLayoutLocked: false,
   localState: {
     portsExpanded: false,
+    frameResizeMode: "simple",
   },
 });
 
@@ -686,7 +687,10 @@ const defaultFeatureSurface = (
   },
   contextSource: { mode: "follow-active-container" },
   subject: { mode: "follow-panel-selection" },
-  localState: {},
+  localState: {
+    portsExpanded: false,
+    frameResizeMode: "simple",
+  },
 });
 
 export const createDefaultViews = (
@@ -701,9 +705,22 @@ export const createDefaultViews = (
   const workbenchContainer = defaultContainerSurface(
     "workbench-container",
     "当前容器",
-    { x: 0.245, y: 0.02, width: 0.5, height: 0.96 },
+    { x: 0.245, y: 0.02, width: 0.745, height: 0.96 },
     businessRootId,
   );
+  workbenchContainer.projections[`business:${businessRootId}`].camera.scale =
+    0.5;
+  const workbenchProperties = defaultFeatureSurface(
+    "workbench-properties",
+    "属性检视器",
+    "properties",
+    { x: 0.01, y: 0.84, width: 0.225, height: 0.14 },
+  );
+  workbenchProperties.localState = {
+    ...workbenchProperties.localState,
+    displayMode: "minimized",
+    expandedFrame: { x: 0.01, y: 0.02, width: 0.225, height: 0.96 },
+  };
   return [
     {
       id: "view-free-layout",
@@ -716,21 +733,16 @@ export const createDefaultViews = (
       id: "view-workbench",
       name: "工作台",
       kind: "workbench",
-      layoutLocked: true,
+      layoutLocked: false,
       surfaceTemplates: [
         workbenchContainer,
         defaultFeatureSurface(
           "workbench-tree",
           "节点树",
           "intent_tree",
-          { x: 0.01, y: 0.02, width: 0.225, height: 0.96 },
+          { x: 0.01, y: 0.02, width: 0.225, height: 0.8 },
         ),
-        defaultFeatureSurface(
-          "workbench-properties",
-          "属性检视器",
-          "properties",
-          { x: 0.755, y: 0.02, width: 0.235, height: 0.96 },
-        ),
+        workbenchProperties,
       ],
     },
   ];
@@ -754,11 +766,11 @@ export const createDefaultWorkspaceState = (
         viewId: workbenchView.id,
         frame: { x: 0, y: 0, width: 1, height: 1 },
         zIndex: 2,
-        layoutLocked: true,
+        layoutLocked: false,
         activeContainerSurfaceId: "workbench-container",
         selection: {
-          nodeIds: ["scenario_flow"],
-          primaryNodeId: "scenario_flow",
+          nodeIds: [businessRootId],
+          primaryNodeId: businessRootId,
           revision: 0,
         },
         surfaces: workbenchView.surfaceTemplates.map(cloneSurface),

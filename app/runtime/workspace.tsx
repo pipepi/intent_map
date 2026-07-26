@@ -22,7 +22,11 @@ import type {
   SurfaceInstance,
   WorkspaceState,
 } from "./model";
-import { NodeProjection } from "./node-renderer";
+import {
+  NodeProjection,
+  PortRegionToggle,
+  type ResizeDirection,
+} from "./node-renderer";
 import { BusinessGraphProjection } from "./business-graph-projection";
 import {
   BUSINESS_PORT_ROW,
@@ -73,6 +77,23 @@ type DragTarget =
   | { kind: "panel"; panelId: string }
   | { kind: "surface"; panelId: string; surfaceId: string };
 
+const surfaceResizeDirections = [
+  "nw",
+  "n",
+  "ne",
+  "e",
+  "se",
+  "s",
+  "sw",
+  "w",
+] as const satisfies readonly ResizeDirection[];
+const simpleSurfaceResizeDirections = [
+  "e",
+  "s",
+  "se",
+] as const satisfies readonly ResizeDirection[];
+const MINIMIZED_SURFACE_SIZE = { width: 0.18, height: 0.12 };
+
 const findNode = (node: IntentNode, id: string): IntentNode | undefined => {
   if (node.id === id) return node;
   for (const child of node.children ?? []) {
@@ -102,6 +123,34 @@ const clampFrame = (frame: NormalizedFrame): NormalizedFrame => ({
   width: Math.max(0.12, Math.min(1 - frame.x, frame.width)),
   height: Math.max(0.12, Math.min(1 - frame.y, frame.height)),
 });
+
+const clampSurfaceFrame = (frame: NormalizedFrame): NormalizedFrame => {
+  const maxBottom = 1;
+  const width = Math.max(0.12, Math.min(1, frame.width));
+  const height = Math.max(0.12, Math.min(maxBottom, frame.height));
+  const x = Math.max(0, Math.min(1 - width, frame.x));
+  const y = Math.max(0, Math.min(maxBottom - height, frame.y));
+  return { x, y, width, height };
+};
+
+const storedSurfaceFrame = (value: unknown): NormalizedFrame | undefined => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.x !== "number" ||
+    typeof candidate.y !== "number" ||
+    typeof candidate.width !== "number" ||
+    typeof candidate.height !== "number"
+  ) {
+    return;
+  }
+  return {
+    x: candidate.x,
+    y: candidate.y,
+    width: candidate.width,
+    height: candidate.height,
+  };
+};
 
 const frameStyle = (frame: NormalizedFrame): CSSProperties => ({
   left: `${frame.x * 100}%`,
@@ -150,11 +199,13 @@ const sameMeasuredPoints = (
 function PanelPipelineOverlay({
   root,
   panel,
+  focusedSurfaceId,
 }: {
   root: IntentNode;
   panel: PanelInstance;
+  focusedSurfaceId?: string;
 }) {
-  const overlayRef = useRef<SVGSVGElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 1000, height: 1000 });
   const [measuredPoints, setMeasuredPoints] = useState<
     Record<string, MeasuredPipelinePoint>
@@ -163,6 +214,30 @@ function PanelPipelineOverlay({
     () => derivePanelPipelineEdges(root, panel),
     [root, panel],
   );
+  const edgeLayers = useMemo(() => {
+    const maximumSurfaceZ = Math.max(
+      0,
+      ...panel.surfaces.map((surface) => surface.zIndex),
+    );
+    const effectiveSurfaceZ = (surfaceId?: string) => {
+      const surface = panel.surfaces.find(
+        (candidate) => candidate.id === surfaceId,
+      );
+      if (!surface) return 0;
+      return surface.id === focusedSurfaceId
+        ? maximumSurfaceZ + 1
+        : surface.zIndex;
+    };
+    const layers = new Map<number, typeof edges>();
+    for (const edge of edges) {
+      const zIndex = Math.max(
+        effectiveSurfaceZ(edge.sourceSurfaceId),
+        effectiveSurfaceZ(edge.targetSurfaceId),
+      );
+      layers.set(zIndex, [...(layers.get(zIndex) ?? []), edge]);
+    }
+    return [...layers.entries()].sort(([left], [right]) => left - right);
+  }, [edges, focusedSurfaceId, panel.surfaces]);
 
   useLayoutEffect(() => {
     const overlay = overlayRef.current;
@@ -248,60 +323,68 @@ function PanelPipelineOverlay({
 
   if (!edges.length) return null;
   return (
-    <svg
-      ref={overlayRef}
-      className="panel-pipeline-overlay"
-      viewBox={`0 0 ${size.width} ${size.height}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      {edges.map((edge) => {
-        const source = measuredPoints[`${edge.id}:source`] ?? {
-          x: edge.source.x * size.width,
-          y: edge.source.y * size.height,
-        };
-        const target = measuredPoints[`${edge.id}:target`] ?? {
-          x: edge.target.x * size.width,
-          y: edge.target.y * size.height,
-        };
-        const bend = Math.max(55, Math.abs(target.x - source.x) * 0.42);
-        const highlighted =
-          panel.selection.primaryNodeId === edge.sourceNodeId ||
-          panel.selection.primaryNodeId === edge.targetNodeId ||
-          panel.activeContainerSurfaceId === edge.sourceSurfaceId ||
-          panel.activeContainerSurfaceId === edge.targetSurfaceId;
-        return (
-          <g
-            key={edge.id}
-            className={`panel-pipeline channel-${edge.channel} ${
-              highlighted ? "highlighted" : ""
-            }`}
-            data-source-surface={edge.sourceSurfaceId ?? ""}
-            data-target-surface={edge.targetSurfaceId ?? ""}
-          >
-            <path
-              d={`M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`}
-            />
-            {edge.source.boundary && (
-              <circle
-                className="pipeline-boundary-stub"
-                cx={source.x}
-                cy={source.y}
-                r="7"
-              />
-            )}
-            {edge.target.boundary && (
-              <circle
-                className="pipeline-boundary-stub"
-                cx={target.x}
-                cy={target.y}
-                r="7"
-              />
-            )}
-          </g>
-        );
-      })}
-    </svg>
+    <div ref={overlayRef} className="panel-pipeline-overlay" aria-hidden="true">
+      {edgeLayers.map(([zIndex, layerEdges]) => (
+        <svg
+          className="panel-pipeline-layer"
+          data-pipeline-z={zIndex}
+          key={zIndex}
+          style={{ zIndex }}
+          viewBox={`0 0 ${size.width} ${size.height}`}
+          preserveAspectRatio="none"
+        >
+          {layerEdges.map((edge) => {
+            const source = measuredPoints[`${edge.id}:source`] ?? {
+              x: edge.source.x * size.width,
+              y: edge.source.y * size.height,
+            };
+            const target = measuredPoints[`${edge.id}:target`] ?? {
+              x: edge.target.x * size.width,
+              y: edge.target.y * size.height,
+            };
+            const bend = Math.max(
+              55,
+              Math.abs(target.x - source.x) * 0.42,
+            );
+            const highlighted =
+              panel.selection.primaryNodeId === edge.sourceNodeId ||
+              panel.selection.primaryNodeId === edge.targetNodeId ||
+              panel.activeContainerSurfaceId === edge.sourceSurfaceId ||
+              panel.activeContainerSurfaceId === edge.targetSurfaceId;
+            return (
+              <g
+                key={edge.id}
+                className={`panel-pipeline channel-${edge.channel} ${
+                  highlighted ? "highlighted" : ""
+                }`}
+                data-source-surface={edge.sourceSurfaceId ?? ""}
+                data-target-surface={edge.targetSurfaceId ?? ""}
+              >
+                <path
+                  d={`M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`}
+                />
+                {edge.source.boundary && (
+                  <circle
+                    className="pipeline-boundary-stub"
+                    cx={source.x}
+                    cy={source.y}
+                    r="7"
+                  />
+                )}
+                {edge.target.boundary && (
+                  <circle
+                    className="pipeline-boundary-stub"
+                    cx={target.x}
+                    cy={target.y}
+                    r="7"
+                  />
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      ))}
+    </div>
   );
 }
 
@@ -467,7 +550,10 @@ export function Workspace({
               },
             },
             nodeLayoutLocked: false,
-            localState: {},
+            localState: {
+              portsExpanded: false,
+              frameResizeMode: "simple",
+            },
           };
     onWorkspaceChange(
       updatePanel(document.workspaceState, panel.id, (candidate) => ({
@@ -501,7 +587,10 @@ export function Workspace({
       },
       contextSource: { mode: "follow-active-container" },
       subject: { mode: "follow-panel-selection" },
-      localState: {},
+      localState: {
+        portsExpanded: false,
+        frameResizeMode: "simple",
+      },
     };
     onWorkspaceChange(
       updatePanel(document.workspaceState, panel.id, (candidate) => ({
@@ -534,6 +623,93 @@ export function Workspace({
     );
   };
 
+  const renderSurfaceResizeModeToggle = (
+    panel: PanelInstance,
+    surface: SurfaceInstance,
+  ) => {
+    if (panel.layoutLocked) return null;
+    const mode =
+      surface.localState.frameResizeMode === "full" ? "full" : "simple";
+    const selected =
+      focusedSurface?.panelId === panel.id &&
+      focusedSurface.surfaceId === surface.id;
+    return (
+      <button
+        className={`resize-mode-toggle surface-inline-mode-toggle ${mode} ${
+          selected ? "selected" : ""
+        }`}
+        aria-label={
+          mode === "simple"
+            ? `将「${surface.title}」切换为四边四角缩放`
+            : `将「${surface.title}」切换为右边、下边和右下角缩放`
+        }
+        title={
+          mode === "simple"
+            ? "当前：右边、下边、右下角 · 点击切换为八向"
+            : "当前：四边四角 · 点击切换为三向"
+        }
+        onPointerDown={(event) => event.stopPropagation()}
+        onDoubleClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onWorkspaceChange(
+            updateSurface(
+              document.workspaceState,
+              panel.id,
+              surface.id,
+              (candidate) => ({
+                ...candidate,
+                localState: {
+                  ...candidate.localState,
+                  frameResizeMode: mode === "simple" ? "full" : "simple",
+                },
+              }),
+            ),
+          );
+        }}
+      >
+        {mode === "simple" ? "┘" : "⤡"}
+      </button>
+    );
+  };
+
+  const toggleSurfaceDisplayMode = (
+    panel: PanelInstance,
+    surface: SurfaceInstance,
+  ) => {
+    const minimizing = surface.localState.displayMode !== "minimized";
+    onWorkspaceChange(
+      updateSurface(
+        document.workspaceState,
+        panel.id,
+        surface.id,
+        (candidate) => {
+          const expandedFrame = storedSurfaceFrame(
+            candidate.localState.expandedFrame,
+          );
+          return {
+            ...candidate,
+            frame: minimizing
+              ? clampSurfaceFrame({
+                  ...candidate.frame,
+                  width: Math.min(
+                    candidate.frame.width,
+                    MINIMIZED_SURFACE_SIZE.width,
+                  ),
+                  height: MINIMIZED_SURFACE_SIZE.height,
+                })
+              : clampSurfaceFrame(expandedFrame ?? candidate.frame),
+            localState: {
+              ...candidate.localState,
+              displayMode: minimizing ? "minimized" : "expanded",
+              expandedFrame: minimizing ? candidate.frame : null,
+            },
+          };
+        },
+      ),
+    );
+  };
+
   const beginDrag = (
     target: DragTarget,
     frame: NormalizedFrame,
@@ -557,7 +733,7 @@ export function Workspace({
     if (!bounds) return;
 
     const move = (moveEvent: PointerEvent) => {
-      const next = clampFrame({
+      const next = (target.kind === "surface" ? clampSurfaceFrame : clampFrame)({
         ...frame,
         x: frame.x + (moveEvent.clientX - start.x) / bounds.width,
         y: frame.y + (moveEvent.clientY - start.y) / bounds.height,
@@ -593,6 +769,7 @@ export function Workspace({
   const beginResize = (
     target: DragTarget,
     frame: NormalizedFrame,
+    direction: ResizeDirection,
     event: ReactPointerEvent,
   ) => {
     if (event.button !== 0) return;
@@ -612,11 +789,30 @@ export function Workspace({
           )?.getBoundingClientRect();
     if (!bounds) return;
     const move = (moveEvent: PointerEvent) => {
-      const next = clampFrame({
-        ...frame,
-        width: frame.width + (moveEvent.clientX - start.x) / bounds.width,
-        height: frame.height + (moveEvent.clientY - start.y) / bounds.height,
-      });
+      const dx = (moveEvent.clientX - start.x) / bounds.width;
+      const dy = (moveEvent.clientY - start.y) / bounds.height;
+      let left = frame.x;
+      let top = frame.y;
+      let right = frame.x + frame.width;
+      let bottom = frame.y + frame.height;
+      if (direction.includes("e")) {
+        right = Math.max(left + 0.12, Math.min(1, right + dx));
+      }
+      if (direction.includes("w")) {
+        left = Math.max(0, Math.min(right - 0.12, left + dx));
+      }
+      if (direction.includes("s")) {
+        bottom = Math.max(top + 0.12, Math.min(1, bottom + dy));
+      }
+      if (direction.includes("n")) {
+        top = Math.max(0, Math.min(bottom - 0.12, top + dy));
+      }
+      const next = {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+      };
       if (target.kind === "panel") {
         onWorkspaceChange(
           updatePanel(document.workspaceState, target.panelId, (item) => ({
@@ -1200,187 +1396,99 @@ export function Workspace({
     const outsideSelection =
       panel.selection.primaryNodeId &&
       !findNode(scope, panel.selection.primaryNodeId);
+    if (!currentContainerNode) {
+      return <div className="surface-empty">当前容器渲染器节点已不存在</div>;
+    }
+    const displayMode =
+      surface.localState.displayMode === "minimized"
+        ? "minimized"
+        : "expanded";
+    const projectedContainerNode: IntentNode = {
+      ...currentContainerNode,
+      displayMode,
+    };
+    const setCameraScale = (scale: number) =>
+      onWorkspaceChange(
+        updateSurface(
+          document.workspaceState,
+          panel.id,
+          surface.id,
+          (candidate) =>
+            candidate.kind === "current-container"
+              ? {
+                  ...candidate,
+                  projections: {
+                    ...candidate.projections,
+                    [projectionKey]: {
+                      nodeLayouts:
+                        candidate.projections[projectionKey]?.nodeLayouts ?? {},
+                      camera: {
+                        ...camera,
+                        scale: Math.max(0.5, Math.min(2, scale)),
+                      },
+                    },
+                  },
+                }
+              : candidate,
+        ),
+      );
     return (
-      <div className="surface-container-content">
-        <nav
-          onPointerDown={(event) =>
-            beginDrag(
-              {
-                kind: "surface",
-                panelId: panel.id,
-                surfaceId: surface.id,
-              },
-              surface.frame,
-              event,
-            )
-          }
-        >
-          <button
-            disabled={surface.navigationStack.length <= 1}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => {
-              const parent = surface.navigationStack.at(-2);
-              if (parent) navigateContainer(panel.id, surface, parent.nodeId);
-            }}
-          >
-            ←
-          </button>
-          <strong>{scope.name}</strong>
-          <span>
-            {Math.round(camera.scale * 100)}
-            %
-          </span>
-          <button
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() =>
-              onWorkspaceChange(
-                updateSurface(
-                  document.workspaceState,
-                  panel.id,
-                  surface.id,
-                  (candidate) =>
-                    candidate.kind === "current-container"
-                      ? {
-                          ...candidate,
-                          projections: {
-                            ...candidate.projections,
-                            [projectionKey]: {
-                              nodeLayouts:
-                                candidate.projections[projectionKey]
-                                  ?.nodeLayouts ?? {},
-                              camera: {
-                                ...camera,
-                                scale: Math.max(0.5, camera.scale - 0.1),
-                              },
-                            },
-                          },
-                        }
-                      : candidate,
-                ),
-              )
-            }
-          >
-            −
-          </button>
-          <button
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() =>
-              onWorkspaceChange(
-                updateSurface(
-                  document.workspaceState,
-                  panel.id,
-                  surface.id,
-                  (candidate) =>
-                    candidate.kind === "current-container"
-                      ? {
-                          ...candidate,
-                          projections: {
-                            ...candidate.projections,
-                            [projectionKey]: {
-                              nodeLayouts:
-                                candidate.projections[projectionKey]
-                                  ?.nodeLayouts ?? {},
-                              camera: {
-                                ...camera,
-                                scale: Math.min(2, camera.scale + 0.1),
-                              },
-                            },
-                          },
-                        }
-                      : candidate,
-                ),
-              )
-            }
-          >
-            +
-          </button>
-          <button
-            className={portsExpanded ? "active" : ""}
-            title={
-              portsExpanded
-                ? "收起输入输出项区域"
-                : "展开输入输出项区域"
-            }
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={togglePortsExpanded}
-          >
-            ↕
-          </button>
-          <button
-            className="surface-close"
-            title={`关闭 ${surface.title}`}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              removeSurfaceFromPanel(panel, surface.id);
-            }}
-          >
-            ×
-          </button>
-        </nav>
-        <div className="surface-container-context">
-          {currentContainerNode && (
-            <div
-              className={`surface-container-ports ${
-                portsExpanded ? "expanded" : "collapsed"
-              }`}
-              style={{
-                height: portsExpanded
-                  ? Math.max(
-                      currentContainerNode.inputs.length,
-                      currentContainerNode.outputs.length,
-                    ) *
-                      26 +
-                    16
-                  : Math.max(
-                      currentContainerNode.inputs.length,
-                      currentContainerNode.outputs.length,
-                    ) *
-                      8 +
-                    8,
+      <NodeProjection
+        node={projectedContainerNode}
+        scale={1}
+        selected={false}
+        active
+        layoutLocked={panel.layoutLocked}
+        embedded
+        showResizeHandles={false}
+        portsExpanded={portsExpanded}
+        surfacePortRegion
+        actions={
+          <>
+            <button
+              disabled={surface.navigationStack.length <= 1}
+              title="返回上一层容器"
+              onClick={() => {
+                const parent = surface.navigationStack.at(-2);
+                if (parent) navigateContainer(panel.id, surface, parent.nodeId);
               }}
             >
-              {currentContainerNode.inputs.map((input, index) => (
-                <span
-                  className={`runtime-port runtime-port-input channel-${input.channel ?? "data"}`}
-                  data-port-kind="input"
-                  data-port-node={currentContainerNode.id}
-                  data-port-id={input.id}
-                  style={{
-                    top: portsExpanded ? 8 + index * 26 : 4 + index * 8,
-                  }}
-                  key={input.id}
-                  title={input.name}
-                >
-                  <i />
-                  <b>{input.name}</b>
-                </span>
-              ))}
-              {currentContainerNode.outputs.map((output, index) => (
-                <span
-                  className={`runtime-port runtime-port-output channel-${output.channel ?? "data"}`}
-                  data-port-kind="output"
-                  data-port-node={currentContainerNode.id}
-                  data-port-id={output.id}
-                  style={{
-                    top: portsExpanded ? 8 + index * 26 : 4 + index * 8,
-                  }}
-                  key={output.id}
-                  title={output.name}
-                >
-                  <b>{output.name}</b>
-                  <i />
-                </span>
-              ))}
-            </div>
-          )}
+              ←
+            </button>
+            <span className="container-scope-label" title={scope.name}>
+              {scope.name}
+            </span>
+            <button title="缩小当前容器" onClick={() => setCameraScale(camera.scale - 0.1)}>
+              −
+            </button>
+            <button title="当前容器缩放比例">
+              {Math.round(camera.scale * 100)}%
+            </button>
+            <button title="放大当前容器" onClick={() => setCameraScale(camera.scale + 0.1)}>
+              +
+            </button>
+            <PortRegionToggle
+              expanded={portsExpanded}
+              onToggle={togglePortsExpanded}
+            />
+            <button
+              className="surface-close"
+              title={`关闭 ${surface.title}`}
+              onClick={() => removeSurfaceFromPanel(panel, surface.id)}
+            >
+              ×
+            </button>
+            {renderSurfaceResizeModeToggle(panel, surface)}
+          </>
+        }
+        content={
+          <div className="surface-container-projection-body">
           {outsideSelection && (
-          <p className="surface-outside-selection">
-            共享选择位于当前范围之外
-          </p>
+            <p className="surface-outside-selection">
+              共享选择位于当前范围之外
+            </p>
           )}
-        </div>
-        <div
+          <div
           className="surface-business-viewport"
           aria-label={`${scope.name} 容器画布`}
           title="Ctrl+滚轮或双指缩放；持续放大可下探到指针最近的子节点"
@@ -1446,11 +1554,31 @@ export function Workspace({
               }
               onStartPipe={startPipe}
               onAddChild={() => onAddBusinessChild(scope.id)}
-            />
-          </div>
+             />
+           </div>
+         </div>
         </div>
-      </div>
-    );
+        }
+        onSelect={() => undefined}
+        onEnter={() => undefined}
+        onMoveStart={(_node, event) =>
+          beginDrag(
+            {
+              kind: "surface",
+              panelId: panel.id,
+              surfaceId: surface.id,
+            },
+            surface.frame,
+            event,
+          )
+        }
+        onResizeStart={() => undefined}
+        onResizeModeToggle={() => undefined}
+        onDisplayModeToggle={() =>
+          toggleSurfaceDisplayMode(panel, surface)
+        }
+      />
+     );
   };
 
   const renderFeatureHeaderActions = (
@@ -1589,6 +1717,26 @@ export function Workspace({
         : "expanded";
     const projectedNode: IntentNode = { ...featureNode, displayMode };
     const scale = surface.viewport.camera.scale;
+    const portsExpanded = surface.localState.portsExpanded === true;
+    const togglePortsExpanded = () =>
+      onWorkspaceChange(
+        updateSurface(
+          document.workspaceState,
+          panel.id,
+          surface.id,
+          (candidate) =>
+            candidate.kind === "feature-panel"
+              ? {
+                  ...candidate,
+                  localState: {
+                    ...candidate.localState,
+                    portsExpanded:
+                      candidate.localState.portsExpanded !== true,
+                  },
+                }
+              : candidate,
+        ),
+      );
     return (
       <div
         className="feature-node-viewport"
@@ -1606,12 +1754,18 @@ export function Workspace({
           layoutLocked={panel.layoutLocked}
           embedded
           showResizeHandles={false}
+          portsExpanded={portsExpanded}
+          surfacePortRegion
           content={renderNodeContent(featureNode, {
             panelId: panel.id,
             surfaceId: surface.id,
           })}
           actions={
             <>
+              <PortRegionToggle
+                expanded={portsExpanded}
+                onToggle={togglePortsExpanded}
+              />
               {renderFeatureHeaderActions(panel, surface)}
               <button
                 className="surface-close"
@@ -1624,6 +1778,7 @@ export function Workspace({
               >
                 ×
               </button>
+              {renderSurfaceResizeModeToggle(panel, surface)}
             </>
           }
           onSelect={() => undefined}
@@ -1642,26 +1797,7 @@ export function Workspace({
           onResizeStart={() => undefined}
           onResizeModeToggle={() => undefined}
           onDisplayModeToggle={() =>
-            onWorkspaceChange(
-              updateSurface(
-                document.workspaceState,
-                panel.id,
-                surface.id,
-                (candidate) =>
-                  candidate.kind === "feature-panel"
-                    ? {
-                        ...candidate,
-                        localState: {
-                          ...candidate.localState,
-                          displayMode:
-                            displayMode === "expanded"
-                              ? "minimized"
-                              : "expanded",
-                        },
-                      }
-                    : candidate,
-              ),
-            )
+            toggleSurfaceDisplayMode(panel, surface)
           }
         />
       </div>
@@ -1798,6 +1934,12 @@ export function Workspace({
                         (candidate) => ({
                           ...candidate,
                           layoutLocked: !candidate.layoutLocked,
+                          surfaces: candidate.layoutLocked
+                            ? candidate.surfaces.map((surface) => ({
+                                ...surface,
+                                frame: clampSurfaceFrame(surface.frame),
+                              }))
+                            : candidate.surfaces,
                         }),
                       ),
                     )
@@ -1830,6 +1972,11 @@ export function Workspace({
                   <PanelPipelineOverlay
                     root={document.rootIntent}
                     panel={panel}
+                    focusedSurfaceId={
+                      focusedSurface?.panelId === panel.id
+                        ? focusedSurface.surfaceId
+                        : undefined
+                    }
                   />
                 )}
                 {freeLayout ? (
@@ -1841,7 +1988,19 @@ export function Workspace({
                     <div className="workspace-surface-body">{freeCanvas}</div>
                   </article>
                 ) : panel.surfaces.length ? (
-                  panel.surfaces.map((surface) => (
+                  panel.surfaces.map((surface) => {
+                    const frameResizeMode =
+                      surface.localState.frameResizeMode === "full"
+                        ? "full"
+                        : "simple";
+                    const resizeDirections =
+                      frameResizeMode === "full"
+                        ? surfaceResizeDirections
+                        : simpleSurfaceResizeDirections;
+                    const surfaceFocused =
+                      focusedSurface?.panelId === panel.id &&
+                      focusedSurface.surfaceId === surface.id;
+                    return (
                     <article
                       className={`workspace-surface surface-${surface.kind}`}
                       key={surface.id}
@@ -1849,8 +2008,7 @@ export function Workspace({
                       style={{
                         ...frameStyle(surface.frame),
                         zIndex:
-                          focusedSurface?.panelId === panel.id &&
-                          focusedSurface.surfaceId === surface.id
+                          surfaceFocused
                             ? Math.max(
                                 0,
                                 ...panel.surfaces.map((item) => item.zIndex),
@@ -1870,23 +2028,38 @@ export function Workspace({
                           : renderFeatureProjection(panel, surface)}
                       </div>
                       {!panel.layoutLocked && (
-                        <span
-                          className="workspace-frame-resize surface-frame-resize"
-                          onPointerDown={(event) =>
-                            beginResize(
-                              {
-                                kind: "surface",
-                                panelId: panel.id,
-                                surfaceId: surface.id,
-                              },
-                              surface.frame,
-                              event,
-                            )
-                          }
-                        />
+                        <>
+                          <span
+                            className={`surface-resize-layer ${
+                              surfaceFocused ? "selected" : ""
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {resizeDirections.map((direction) => (
+                              <span
+                                className={`resize-handle resize-${direction}`}
+                                data-resize-direction={direction}
+                                key={direction}
+                                onPointerDown={(event) =>
+                                  beginResize(
+                                    {
+                                      kind: "surface",
+                                      panelId: panel.id,
+                                      surfaceId: surface.id,
+                                    },
+                                    surface.frame,
+                                    direction,
+                                    event,
+                                  )
+                                }
+                              />
+                            ))}
+                          </span>
+                        </>
                       )}
                     </article>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="workspace-panel-empty">
                     当前 Panel 没有 Surface
@@ -1900,6 +2073,7 @@ export function Workspace({
                     beginResize(
                       { kind: "panel", panelId: panel.id },
                       panel.frame,
+                      "se",
                       event,
                     )
                   }

@@ -33,6 +33,8 @@ export type NodeProjectionProps = {
   actions?: ReactNode;
   embedded?: boolean;
   showResizeHandles?: boolean;
+  portsExpanded?: boolean;
+  surfacePortRegion?: boolean;
   onSelect: (nodeId: string) => void;
   onEnter: (node: IntentNode) => void;
   onMoveStart: (
@@ -67,6 +69,8 @@ export function NodeProjection({
   actions,
   embedded = false,
   showResizeHandles = true,
+  portsExpanded = true,
+  surfacePortRegion = false,
   onSelect,
   onEnter,
   onMoveStart,
@@ -103,7 +107,10 @@ export function NodeProjection({
         top: embedded ? 0 : node.position.y,
         width: embedded ? "100%" : size.width,
         height: embedded ? "100%" : size.height,
-        gridTemplateRows: rows > 0 ? "38px auto minmax(0, 1fr)" : undefined,
+        gridTemplateRows:
+          rows > 0
+            ? `${embedded ? "auto" : "38px"} auto minmax(0, 1fr)`
+            : undefined,
       }}
       data-node-id={node.id}
       title={minimized ? undefined : `双击进入「${node.name}」`}
@@ -169,9 +176,17 @@ export function NodeProjection({
 
           {rows > 0 && (
             <div
-              className="runtime-node-ports"
-              aria-hidden="true"
-              style={{ height: rows * 26 + 16 }}
+              className={[
+                "runtime-node-ports",
+                surfacePortRegion ? "surface-port-region" : "",
+                portsExpanded ? "expanded" : "collapsed",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-label="输入输出项"
+              style={{
+                height: portsExpanded ? rows * 26 + 16 : rows * 8 + 8,
+              }}
             >
               {businessReference && (
                 <small className="reference-context-heading">引用上下文</small>
@@ -182,7 +197,9 @@ export function NodeProjection({
                   data-port-kind="input"
                   data-port-node={node.id}
                   data-port-id={input.id}
-                  style={{ top: 16 + index * 26 }}
+                  style={{
+                    top: portsExpanded ? 8 + index * 26 : 4 + index * 8,
+                  }}
                   key={input.id}
                   title={
                     businessReference
@@ -204,7 +221,9 @@ export function NodeProjection({
                   data-port-kind="output"
                   data-port-node={node.id}
                   data-port-id={output.id}
-                  style={{ top: 16 + index * 26 }}
+                  style={{
+                    top: portsExpanded ? 8 + index * 26 : 4 + index * 8,
+                  }}
                   key={output.id}
                   title={output.name}
                 >
@@ -276,3 +295,26 @@ export const RUNTIME_RESIZE_DIRECTIONS = resizeDirections;
 export const SIMPLE_RESIZE_DIRECTIONS = simpleResizeDirections;
 export const resizeDirectionsFor = (mode: ResizeMode) =>
   mode === "full" ? resizeDirections : simpleResizeDirections;
+
+export function PortRegionToggle({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      className={expanded ? "active" : ""}
+      aria-pressed={expanded}
+      title={expanded ? "收起输入输出项区域" : "展开输入输出项区域"}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      ↕
+    </button>
+  );
+}

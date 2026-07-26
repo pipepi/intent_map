@@ -23,7 +23,7 @@ test("renders free-layout and a three-surface workbench", async () => {
   assert.match(html, /工作台/);
   assert.match(html, /自由布局/);
   assert.match(html, /节点树/);
-  assert.match(html, /属性检视器/);
+  assert.match(html, /属性编辑器/);
   assert.equal((html.match(/class="workspace-panel /g) ?? []).length, 2);
   assert.equal((html.match(/class="workspace-surface /g) ?? []).length, 4);
 });
@@ -110,6 +110,25 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(shell, /simpleResizeDirections = \["e", "s", "se"\]/);
   assert.match(shell, /resize-handle resize-\$\{direction\}/);
   assert.match(shell, /resize-mode-toggle runtime-mode-toggle/);
+  assert.match(
+    workspace,
+    /simpleSurfaceResizeDirections = \[[\s\S]*?"e",[\s\S]*?"s",[\s\S]*?"se"/,
+  );
+  assert.match(workspace, /surfaceResizeDirections = \[[\s\S]*?"nw",[\s\S]*?"w"/);
+  assert.match(workspace, /frameResizeMode === "full"/);
+  assert.match(workspace, /data-resize-direction=\{direction\}/);
+  assert.match(workspace, /resize-mode-toggle surface-inline-mode-toggle/);
+  assert.match(workspace, /MINIMIZED_SURFACE_SIZE/);
+  assert.match(workspace, /expandedFrame: minimizing/);
+  assert.match(workspace, /clampSurfaceFrame/);
+  assert.match(css, /\.surface-resize-layer/);
+  assert.match(css, /\.surface-inline-mode-toggle/);
+  assert.doesNotMatch(css, /\.surface-mode-toggle/);
+  assert.match(css, /@container \(max-width: 480px\)/);
+  assert.match(
+    css,
+    /\.embedded-node-projection \.node-projection-actions\s*\{[^}]*flex-wrap:\s*wrap/s,
+  );
   assert.match(page, /resizeDirectionsFor\(nodeResizeMode\(scopeNode\)\)/);
   assert.match(businessProjection, /business-mode-toggle/);
   assert.match(page, /<BusinessGraphProjection/);
@@ -236,9 +255,17 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
     /querySelectorAll<HTMLElement>\("\[data-port-kind\]"\)[\s\S]*?querySelector<HTMLElement>\("i"\)[\s\S]*?getBoundingClientRect\(\)/,
   );
   assert.match(workspace, /data-surface-id=\{surface\.id\}/);
-  assert.match(workspace, /currentContainerNode\.inputs\.map/);
-  assert.match(workspace, /surface-container-ports \$\{/);
-  assert.match(workspace, /portsExpanded \? "expanded" : "collapsed"/);
+  assert.match(workspace, /data-pipeline-z=\{zIndex\}/);
+  assert.match(workspace, /surface\.id === focusedSurfaceId/);
+  assert.match(workspace, /maximumSurfaceZ \+ 1/);
+  assert.match(css, /\.panel-pipeline-layer/);
+  assert.doesNotMatch(
+    css,
+    /\.panel-pipeline-overlay\s*\{[^}]*z-index:\s*0/s,
+  );
+  assert.match(workspace, /node=\{projectedContainerNode\}/);
+  assert.match(workspace, /className="surface-container-projection-body"/);
+  assert.doesNotMatch(workspace, /surface-container-ports/);
   assert.match(
     workspace,
     /scale >= BUSINESS_SEMANTIC_ZOOM_ENTER_SCALE/,
