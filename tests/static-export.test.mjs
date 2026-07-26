@@ -225,6 +225,12 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
     /querySelectorAll<HTMLElement>\("\[data-port-kind\]"\)[\s\S]*?querySelector<HTMLElement>\("i"\)[\s\S]*?getBoundingClientRect\(\)/,
   );
   assert.match(workspace, /data-surface-id=\{surface\.id\}/);
+  assert.match(workspace, /className="surface-container-ports"/);
+  assert.match(workspace, /currentContainerNode\.inputs\.map/);
+  assert.match(
+    workspace,
+    /candidate\.dataset\.portNode === nodeId/,
+  );
   assert.match(workspace, /focusedSurface\.surfaceId === surface\.id/);
   assert.match(
     workspace,

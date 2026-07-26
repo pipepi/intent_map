@@ -176,6 +176,7 @@ function PanelPipelineOverlay({
       const findPortCenter = (
         surfaceId: string | undefined,
         kind: "input" | "output",
+        nodeId: string,
         portId: string,
       ) => {
         if (!surfaceId) return;
@@ -187,6 +188,7 @@ function PanelPipelineOverlay({
         ).find(
           (candidate) =>
             candidate.dataset.portKind === kind &&
+            candidate.dataset.portNode === nodeId &&
             candidate.dataset.portId === portId,
         );
         const dot = port?.querySelector<HTMLElement>("i");
@@ -202,11 +204,13 @@ function PanelPipelineOverlay({
         const source = findPortCenter(
           edge.sourceSurfaceId,
           "output",
+          edge.sourceNodeId,
           edge.sourcePortId,
         );
         const target = findPortCenter(
           edge.targetSurfaceId,
           "input",
+          edge.targetNodeId,
           edge.targetPortId,
         );
         if (source) nextPoints[`${edge.id}:source`] = source;
@@ -331,6 +335,10 @@ export function Workspace({
     surfaceId: string;
   } | null>(null);
   const businessRoot = getBusinessRoot(document);
+  const currentContainerNode = findNode(
+    document.rootIntent,
+    "current_container",
+  );
   const workspaceUid = (prefix: string) =>
     `${prefix}_${Date.now().toString(36)}_${Math.random()
       .toString(36)
@@ -1065,11 +1073,56 @@ export function Workspace({
             ×
           </button>
         </nav>
-        {outsideSelection && (
+        <div className="surface-container-context">
+          {currentContainerNode && (
+            <div
+              className="surface-container-ports"
+              style={{
+                height:
+                  Math.max(
+                    currentContainerNode.inputs.length,
+                    currentContainerNode.outputs.length,
+                  ) *
+                    26 +
+                  16,
+              }}
+            >
+              {currentContainerNode.inputs.map((input, index) => (
+                <span
+                  className={`runtime-port runtime-port-input channel-${input.channel ?? "data"}`}
+                  data-port-kind="input"
+                  data-port-node={currentContainerNode.id}
+                  data-port-id={input.id}
+                  style={{ top: 8 + index * 26 }}
+                  key={input.id}
+                  title={input.name}
+                >
+                  <i />
+                  <b>{input.name}</b>
+                </span>
+              ))}
+              {currentContainerNode.outputs.map((output, index) => (
+                <span
+                  className={`runtime-port runtime-port-output channel-${output.channel ?? "data"}`}
+                  data-port-kind="output"
+                  data-port-node={currentContainerNode.id}
+                  data-port-id={output.id}
+                  style={{ top: 8 + index * 26 }}
+                  key={output.id}
+                  title={output.name}
+                >
+                  <b>{output.name}</b>
+                  <i />
+                </span>
+              ))}
+            </div>
+          )}
+          {outsideSelection && (
           <p className="surface-outside-selection">
             共享选择位于当前范围之外
           </p>
-        )}
+          )}
+        </div>
         <div
           className="surface-business-viewport"
           onWheel={handleWheel}

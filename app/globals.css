@@ -1101,6 +1101,11 @@ code,
 
 .surface-current-container {
   grid-template-rows: minmax(0, 1fr);
+  overflow: visible;
+}
+
+.surface-current-container > .workspace-surface-body {
+  overflow: visible;
 }
 
 .surface-feature-panel > .workspace-surface-body {
@@ -1213,6 +1218,25 @@ code,
 .surface-container-content > nav span {
   color: #657296;
   font-size: 8px;
+}
+
+.surface-container-context {
+  position: relative;
+  z-index: 2;
+  background: rgba(8, 13, 29, 0.94);
+}
+
+.surface-container-ports {
+  position: relative;
+  pointer-events: none;
+}
+
+.surface-container-ports .runtime-port {
+  width: 112px;
+}
+
+.surface-container-ports .runtime-port b {
+  width: 94px;
 }
 
 .surface-outside-selection {
