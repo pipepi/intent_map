@@ -3,6 +3,7 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 import { nodeDisplayMode, type IntentNode } from "./model";
+import { projectionUsesSummary } from "./projection";
 
 const resizeDirections = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
 const simpleResizeDirections = ["e", "s", "se"] as const;
@@ -72,7 +73,7 @@ export function NodeRenderer({
   const alwaysLive = node.implementation?.config?.lod === "always-live";
   const businessReference =
     node.implementation?.key === "business-scope-reference";
-  const summary = scale < 0.55 && !active && !alwaysLive;
+  const summary = projectionUsesSummary(scale, { active, alwaysLive });
   const rows = portRows(node);
   const resizeMode = node.resizeMode ?? "simple";
   const visibleDirections =

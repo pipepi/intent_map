@@ -84,7 +84,7 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /className="focused-runtime-content"/);
   assert.doesNotMatch(page, /className="focused-runtime-surface"/);
   assert.doesNotMatch(page, /focused-runtime-surface[\s\S]*<header>/);
-  assert.match(shell, /scale < 0\.55/);
+  assert.match(shell, /projectionUsesSummary\(scale/);
   assert.match(shell, /lod === "always-live"/);
   assert.match(shell, /runtime-node-titlebar/);
   assert.match(shell, /runtime-minimized-titlebar/);
@@ -321,7 +321,7 @@ test("keeps scope changes visible and separates the reference from business cont
   assert.doesNotMatch(page, /className="root-legend"/);
   assert.doesNotMatch(css, /\.root-legend/);
   assert.match(page, /scopeNode\.implementation\?\.key !== "current-container"/);
-  assert.match(page, /const lodSummary = camera\.scale < 0\.55/);
+  assert.match(page, /projectionUsesSummary\(camera\.scale\)/);
   assert.match(css, /\.root-boundary\.scope-arrival/);
   assert.match(css, /\.business-node\.lod-summary/);
   assert.match(css, /\.business-node\s*\{[\s\S]*z-index:\s*2;/);

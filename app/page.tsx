@@ -51,6 +51,10 @@ import {
   runPipLoader,
 } from "./runtime/pip";
 import { cameraForTouchGesture } from "./runtime/camera";
+import {
+  PROJECTION_LOD_THRESHOLD,
+  projectionUsesSummary,
+} from "./runtime/projection";
 import { createSampleBusinessRoot } from "./runtime/sample-business-tree";
 import { Workspace } from "./runtime/workspace";
 import {
@@ -2352,7 +2356,8 @@ export default function Home() {
             const visibleDirections = resizeDirectionsFor(resizeMode);
             const selected = selectedBusinessNodeId === node.id;
             const minimized = nodeDisplayMode(node) === "minimized";
-            const lodSummary = camera.scale < 0.55 && !minimized;
+            const lodSummary =
+              projectionUsesSummary(camera.scale) && !minimized;
             return (
               <Fragment key={node.id}>
                 <article
@@ -2842,7 +2847,7 @@ export default function Home() {
       );
     }
     const Renderer = resolveRenderer(node);
-    return <Renderer node={node} document={documentState} scale={camera.scale} active={scopeNode.id === node.id} selected={selectedAppNodeId === node.id} summary={camera.scale < 0.55} emit={emit} />;
+    return <Renderer node={node} document={documentState} scale={camera.scale} active={scopeNode.id === node.id} selected={selectedAppNodeId === node.id} summary={camera.scale < PROJECTION_LOD_THRESHOLD} emit={emit} />;
   };
 
   const renderEdge = (edge: AggregatedEdge) => {
