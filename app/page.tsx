@@ -35,6 +35,10 @@ import {
   type WorkspaceState,
 } from "./runtime/model";
 import {
+  downloadExport,
+  prepareDocumentExport,
+} from "./runtime/export";
+import {
   MINIMIZED_NODE_SIZE,
   NodeProjection,
   resizeDirectionsFor,
@@ -470,18 +474,6 @@ const executeBusinessNode = async (
   }
 };
 
-const downloadJson = (name: string, value: unknown) => {
-  const blob = new Blob([serializeIntentDocument(value as IntentDocumentV3)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
-};
-
 const downloadBytes = (name: string, bytes: Uint8Array, type: string) => {
   const blob = new Blob([bytes as BlobPart], { type });
   const url = URL.createObjectURL(blob);
@@ -526,6 +518,19 @@ export default function Home() {
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceEntry[]>([]);
   const [lastCommands, setLastCommands] = useState<PipelineCommand[]>([]);
   const [eventTick, setEventTick] = useState(0);
+  const exportDocument = async (source: IntentDocumentV3 = documentState) => {
+    const result = await prepareDocumentExport(serializeIntentDocument(source));
+    if (!result.ok) {
+      setToast(`导出失败：${result.error}`);
+      return result;
+    }
+    downloadExport(result);
+    setDirty(false);
+    setToast(
+      `已导出 ${result.filename} · ${result.byteLength} bytes · SHA-256 ${result.sha256.slice(0, 12)}…`,
+    );
+    return result;
+  };
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
     product_goal: "构建可验证、可持续演进的业务应用",
     business_constraints: "确定性、可审计、严格模块边界",
@@ -1173,8 +1178,7 @@ export default function Home() {
         }
         if ((event.ctrlKey || event.metaKey) && key === "s") {
           event.preventDefault();
-          downloadJson("intent-map-v3.intent-map.json", actions.documentState);
-          setToast("已导出 v3 工作区文档");
+          void exportDocument(actions.documentState);
           return;
         }
         if (!isEditing && event.key === "Enter") {
@@ -2116,7 +2120,7 @@ export default function Home() {
         if (command.type === "NEW_DOCUMENT") newDocument();
         if (command.type === "IMPORT_REQUEST") fileInputRef.current?.click();
         if (command.type === "EXPORT_DOCUMENT")
-          downloadJson("intent-map-v3.intent-map.json", documentState);
+          void exportDocument(documentState);
         if (command.type === "UNDO") undo();
         if (command.type === "REDO") redo();
         if (command.type === "AUTO_LAYOUT") autoLayout();
@@ -2672,7 +2676,7 @@ export default function Home() {
           <div className="runtime-command-grid">
             <button onClick={() => dispatchRuntimeEvent("NEW_DOCUMENT", "global_toolbar")}>新建</button>
             <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "global_toolbar")}>导入</button>
-            <button onClick={() => dispatchRuntimeEvent("EXPORT_DOCUMENT", "global_toolbar")}>导出 v3</button>
+            <button onClick={() => void exportDocument()}>导出 v3</button>
             <button onClick={() => void exportPip()}>导出 .pip</button>
             <button disabled={!history.length} onClick={() => dispatchRuntimeEvent("UNDO", "global_toolbar")}>撤销</button>
             <button disabled={!future.length} onClick={() => dispatchRuntimeEvent("REDO", "global_toolbar")}>重做</button>
