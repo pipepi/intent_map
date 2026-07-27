@@ -2961,10 +2961,27 @@ code,
   fill: #8b5cf6;
 }
 
+.business-add-child {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  z-index: 12;
+  max-width: min(320px, 55%);
+  overflow: hidden;
+  padding: 9px 13px;
+  border: 1px solid #3c92d2;
+  border-radius: 8px;
+  color: #9fd2ff;
+  background: #101a36e8;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .business-empty {
   position: absolute;
   left: 50%;
   top: 50%;
+  right: auto;
   padding: 18px 22px;
   border: 1px dashed #3c92d2;
   border-radius: 8px;

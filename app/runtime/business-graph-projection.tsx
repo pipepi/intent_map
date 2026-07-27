@@ -397,11 +397,15 @@ export function BusinessGraphProjection({
           </article>
         );
       })}
-      {!scope.children?.length && (
-        <button className="business-empty" onClick={onAddChild}>
-          ＋ 添加子意图
-        </button>
-      )}
+      <button
+        className={`business-add-child ${
+          scope.children?.length ? "" : "business-empty"
+        }`}
+        onClick={onAddChild}
+        title={`向「${scope.name}」添加子意图`}
+      >
+        ＋ 添加到「{scope.name}」
+      </button>
     </>
   );
 }

@@ -1909,8 +1909,8 @@ export default function Home() {
       description: "通过节点管道扩展当前作用域。",
       kind: "operator",
       operator: "identity",
-      inputs: [{ id: uid("input"), name: "输入", type: "any" }],
-      outputs: [{ id: uid("output"), name: "输出", type: "any" }],
+      inputs: [{ id: uid("input"), name: "输入", type: "any", channel: "data" }],
+      outputs: [{ id: uid("output"), name: "输出", type: "any", channel: "data" }],
       position: { x: 320, y: 240 },
       size: { width: 220, height: 150 },
       resizeMode: "simple",
@@ -1921,6 +1921,7 @@ export default function Home() {
       children: [...(scope.children ?? []), node],
     }));
     if (selectInFreePanel) setSelectedBusinessNodeId(node.id);
+    setToast(`已向「${findNode(businessRoot, targetScopeId)?.name ?? targetScopeId}」添加子意图`);
   };
 
   const addRuntimeChild = () => {
