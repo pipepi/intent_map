@@ -1939,35 +1939,44 @@ export default function Home() {
     }));
   };
 
-  const duplicateSelected = () => {
-    if (selectedBusinessNode.id === businessRoot.id) return;
-    const parentPath = findPath(businessRoot, selectedBusinessNode.id);
+  const duplicateBusinessNode = (targetId: string, panelId?: string) => {
+    const target = findNode(businessRoot, targetId);
+    if (!target || target.id === businessRoot.id) return;
+    const parentPath = findPath(businessRoot, target.id);
     const parent = parentPath?.at(-2);
     if (!parent) return;
     const duplicate: IntentNode = {
-      ...clone(selectedBusinessNode),
+      ...clone(target),
       id: uid("copy"),
-      name: `${selectedBusinessNode.name} · 副本`,
+      name: `${target.name} · 副本`,
       position: {
-        x: selectedBusinessNode.position.x + 36,
-        y: selectedBusinessNode.position.y + 36,
+        x: target.position.x + 36,
+        y: target.position.y + 36,
       },
     };
     updateDocumentNode(parent.id, (node) => ({
       ...node,
       children: [...(node.children ?? []), duplicate],
     }));
-    setSelectedBusinessNodeId(duplicate.id);
+    if (panelId) selectPanelBusinessNode(panelId, duplicate.id);
+    else setSelectedBusinessNodeId(duplicate.id);
   };
 
-  const deleteSelected = () => {
-    if (selectedBusinessNode.id === businessRoot.id) return;
+  const duplicateSelected = () =>
+    duplicateBusinessNode(selectedBusinessNode.id);
+
+  const deleteBusinessNode = (targetId: string, panelId?: string) => {
+    if (targetId === businessRoot.id) return;
     commit(removeNodeFromPanelSelections({
       ...documentState,
-      rootIntent: removeNode(documentState.rootIntent, selectedBusinessNode.id),
-    }, selectedBusinessNode.id));
-    setSelectedBusinessNodeId(businessScope.id);
+      rootIntent: removeNode(documentState.rootIntent, targetId),
+    }, targetId));
+    if (panelId) selectPanelBusinessNode(panelId, businessScope.id);
+    else setSelectedBusinessNodeId(businessScope.id);
   };
+
+  const deleteSelected = () =>
+    deleteBusinessNode(selectedBusinessNode.id);
 
   const duplicateAppNode = () => {
     const selected = findNode(scopeNode, selectedAppNodeId);
@@ -2948,7 +2957,7 @@ export default function Home() {
               ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputMapping(contextualSubject.id, port.id, event.target.value)}><option value="">未映射</option>{outputMappingOptionsFor(contextualSubject).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
               : <span key={port.id}><i />{port.name}<small>{port.type}</small></span>;
           })}</div>
-          <div className="property-actions"><button onClick={() => dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button className="danger" onClick={() => dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
+          <div className="property-actions"><button onClick={() => contextAddress ? duplicateBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button className="danger" onClick={() => contextAddress ? deleteBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
         </div>
       );
     }

@@ -263,6 +263,48 @@ test("resolves panel selection, fixed source, and fixed subject independently", 
   );
   assert.equal(context.container.id, "workbench-container-2");
   assert.equal(context.subject.id, "scenario_actor_leaf");
+  assert.deepEqual(context.commandContext, {
+    panelId: "panel-workbench",
+    surfaceId: "workbench-properties",
+    activeContainerSurfaceId: "workbench-container-2",
+    scope: businessScopeAddress("business_root"),
+    subjectNodeId: "scenario_actor_leaf",
+  });
+});
+
+test("keeps projection command addresses isolated between panels", () => {
+  let document = createApplicationDocument(createSampleBusinessRoot());
+  document = updatePanel(document, "panel-workbench", (panel) => ({
+    ...panel,
+    selection: {
+      nodeIds: ["scenario_flow"],
+      primaryNodeId: "scenario_flow",
+      revision: 1,
+    },
+  }));
+  document = updatePanel(document, "panel-free-layout", (panel) => ({
+    ...panel,
+    selection: {
+      nodeIds: ["database_schema"],
+      primaryNodeId: "database_schema",
+      revision: 1,
+    },
+  }));
+
+  const workbench = resolveFeatureContext(
+    document,
+    "panel-workbench",
+    "workbench-properties",
+  ).commandContext;
+  const freeLayout = resolveFeatureContext(
+    document,
+    "panel-free-layout",
+    "free-layout-tree",
+  ).commandContext;
+
+  assert.equal(workbench.subjectNodeId, "scenario_flow");
+  assert.equal(freeLayout.subjectNodeId, "database_schema");
+  assert.notEqual(workbench.panelId, freeLayout.panelId);
 });
 
 test("rejects cross-panel and missing active container bindings", () => {

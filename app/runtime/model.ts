@@ -195,6 +195,14 @@ export type WorkspaceState = {
   panels: PanelInstance[];
 };
 
+export type ProjectionCommandContext = {
+  panelId: string;
+  surfaceId: string;
+  activeContainerSurfaceId?: string;
+  scope?: ScopeAddress;
+  subjectNodeId?: string;
+};
+
 export const CORE_WORKSPACE_PANEL_IDS = [
   "panel-workbench",
   "panel-free-layout",
@@ -1382,6 +1390,7 @@ export const resolveFeatureContext = (
   feature?: FeaturePanelSurface;
   container?: ContainerSurface;
   subject?: IntentNode;
+  commandContext: ProjectionCommandContext;
 } => {
   const panel = getPanel(document, panelId);
   const candidate = panel?.surfaces.find((surface) => surface.id === surfaceId);
@@ -1403,6 +1412,13 @@ export const resolveFeatureContext = (
     feature,
     container,
     subject: subjectId ? findNode(document.rootIntent, subjectId) : undefined,
+    commandContext: {
+      panelId,
+      surfaceId,
+      activeContainerSurfaceId: container?.id,
+      scope: container?.scope,
+      subjectNodeId: subjectId,
+    },
   };
 };
 
