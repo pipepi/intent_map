@@ -38,6 +38,7 @@ import {
   downloadExport,
   prepareDocumentExport,
 } from "./runtime/export";
+import { deepCopyIntentSubtree } from "./runtime/authoring";
 import {
   MINIMIZED_NODE_SIZE,
   NodeProjection,
@@ -1886,7 +1887,7 @@ export default function Home() {
       id: uid("linked"),
       name: `${snapshot.name} · 链接`,
       kind: "linkedModule",
-      children: clone(snapshot.children),
+      children: undefined,
       moduleRef: { moduleId: module.moduleId, version: module.version },
       position: { x: 380, y: 300 },
       displayMode: "minimized",
@@ -1950,8 +1951,7 @@ export default function Home() {
     const parent = parentPath?.at(-2);
     if (!parent) return;
     const duplicate: IntentNode = {
-      ...clone(target),
-      id: uid("copy"),
+      ...deepCopyIntentSubtree(target, () => uid("copy")).root,
       name: `${target.name} · 副本`,
       position: {
         x: target.position.x + 36,
@@ -1968,6 +1968,46 @@ export default function Home() {
 
   const duplicateSelected = () =>
     duplicateBusinessNode(selectedBusinessNode.id);
+
+  const createLinkedBusinessNode = (targetId: string, panelId?: string) => {
+    const target = findNode(businessRoot, targetId);
+    if (!target || target.id === businessRoot.id) return;
+    const parent = findPath(businessRoot, target.id)?.at(-2);
+    if (!parent) return;
+    const existing = documentState.publishedModules.filter(
+      (module) => module.moduleId === target.id,
+    );
+    const published: PublishedModule = {
+      moduleId: target.id,
+      name: target.name,
+      version: Math.max(0, ...existing.map((item) => item.version)) + 1,
+      publishedAt: new Date().toISOString().slice(0, 10),
+      snapshot: clone(target),
+    };
+    const linked: IntentNode = {
+      ...clone(target),
+      id: uid("linked"),
+      name: `${target.name} · 链接`,
+      kind: "linkedModule",
+      children: undefined,
+      moduleRef: { moduleId: published.moduleId, version: published.version },
+      position: { x: target.position.x + 54, y: target.position.y + 54 },
+      displayMode: "minimized",
+    };
+    commit({
+      ...documentState,
+      publishedModules: [...documentState.publishedModules, published],
+      rootIntent: updateNode(documentState.rootIntent, parent.id, (node) => ({
+        ...node,
+        children: [...(node.children ?? []), linked],
+      })),
+    });
+    if (panelId) selectPanelBusinessNode(panelId, linked.id);
+    else setSelectedBusinessNodeId(linked.id);
+    setToast(
+      `已创建链接实例：${published.name} v${published.version} · 来源 ${published.moduleId}`,
+    );
+  };
 
   const deleteBusinessNode = (targetId: string, panelId?: string) => {
     if (targetId === businessRoot.id) return;
@@ -2961,7 +3001,7 @@ export default function Home() {
               ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputMapping(contextualSubject.id, port.id, event.target.value)}><option value="">未映射</option>{outputMappingOptionsFor(contextualSubject).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
               : <span key={port.id}><i />{port.name}<small>{port.type}</small></span>;
           })}</div>
-          <div className="property-actions"><button onClick={() => contextAddress ? duplicateBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button className="danger" onClick={() => contextAddress ? deleteBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
+          <div className="property-actions"><button onClick={() => contextAddress ? duplicateBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button onClick={() => createLinkedBusinessNode(contextualSubject.id, contextAddress?.panelId)} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建链接实例</button><button className="danger" onClick={() => contextAddress ? deleteBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
         </div>
       );
     }
