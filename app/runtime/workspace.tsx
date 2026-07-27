@@ -46,7 +46,10 @@ import {
   scaleForWheelGesture,
 } from "./camera";
 import { derivePanelPipelineEdges } from "./panel-pipelines";
-import { validatePortConnection } from "./authoring";
+import {
+  findAvailableSurfaceFrame,
+  validatePortConnection,
+} from "./authoring";
 import {
   businessScopeAddress,
   getBusinessRoot,
@@ -534,24 +537,24 @@ export function Workspace({
         surface.kind === "current-container",
     );
     const id = workspaceUid("container");
+    const availableFrame = findAvailableSurfaceFrame(
+      panel.surfaces.map((surface) => surface.frame),
+      { width: 0.5, height: 0.55 },
+    );
     const surface: ContainerSurface =
       active?.kind === "current-container"
         ? {
             ...active,
             id,
             title: "当前容器",
-            frame: clampFrame({
-              ...active.frame,
-              x: active.frame.x + 0.04,
-              y: active.frame.y + 0.04,
-            }),
+            frame: availableFrame,
             zIndex: Math.max(0, ...panel.surfaces.map((item) => item.zIndex)) + 1,
           }
         : {
             kind: "current-container",
             id,
             title: "当前容器",
-            frame: { x: 0.25, y: 0.08, width: 0.5, height: 0.55 },
+            frame: availableFrame,
             zIndex: 1,
             scope: businessScopeAddress(businessRoot.id),
             navigationStack: [businessScopeAddress(businessRoot.id)],
@@ -580,18 +583,16 @@ export function Workspace({
     const node = findNode(document.rootIntent, featureNodeId);
     if (!node || node.kind !== "renderer") return;
     const id = workspaceUid(featureNodeId);
-    const offset = (panel.surfaces.length % 5) * 0.025;
+    const availableFrame = findAvailableSurfaceFrame(
+      panel.surfaces.map((surface) => surface.frame),
+      { width: 0.34, height: 0.4 },
+    );
     const surface: FeaturePanelSurface = {
       kind: "feature-panel",
       id,
       featureNodeId,
       title: node.name,
-      frame: {
-        x: 0.08 + offset,
-        y: 0.1 + offset,
-        width: 0.34,
-        height: 0.4,
-      },
+      frame: availableFrame,
       zIndex: Math.max(0, ...panel.surfaces.map((item) => item.zIndex)) + 1,
       viewport: {
         camera: { scale: 1, x: 0, y: 0 },

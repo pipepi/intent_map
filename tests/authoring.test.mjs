@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   deepCopyIntentSubtree,
+  findAvailableSurfaceFrame,
   renameIntentNodeId,
   updateIntentPortSchema,
   validatePortConnection,
@@ -44,6 +45,32 @@ test("deep copies every descendant and rewrites only internal references", () =>
   );
   result.root.children[0].name = "changed";
   assert.notEqual(result.root.children[0].name, source.children[0].name);
+});
+
+test("places new surfaces deterministically in the first free rectangle", () => {
+  const occupied = [
+    { x: 0.01, y: 0.02, width: 0.34, height: 0.4 },
+    { x: 0.385, y: 0.02, width: 0.34, height: 0.4 },
+  ];
+  const first = findAvailableSurfaceFrame(occupied, {
+    width: 0.2,
+    height: 0.2,
+  });
+  const second = findAvailableSurfaceFrame(occupied, {
+    width: 0.2,
+    height: 0.2,
+  });
+  assert.deepEqual(first, second);
+  assert.equal(
+    occupied.some(
+      (frame) =>
+        first.x < frame.x + frame.width &&
+        first.x + first.width > frame.x &&
+        first.y < frame.y + frame.height &&
+        first.y + first.height > frame.y,
+    ),
+    false,
+  );
 });
 
 test("accepts only compatible visual pipeline endpoints", () => {

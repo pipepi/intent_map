@@ -2,6 +2,7 @@ import type {
   Expression,
   IntentNode,
   IntentPort,
+  NormalizedFrame,
   PortChannel,
   ValueType,
 } from "./model";
@@ -246,4 +247,31 @@ export const validatePortConnection = (
     };
   }
   return { ok: true, value: true };
+};
+
+const overlaps = (a: NormalizedFrame, b: NormalizedFrame, gap = 0.01) =>
+  a.x < b.x + b.width + gap &&
+  a.x + a.width + gap > b.x &&
+  a.y < b.y + b.height + gap &&
+  a.y + a.height + gap > b.y;
+
+export const findAvailableSurfaceFrame = (
+  occupied: readonly NormalizedFrame[],
+  size: Pick<NormalizedFrame, "width" | "height">,
+): NormalizedFrame => {
+  const step = 0.025;
+  for (let y = 0.02; y <= 0.98 - size.height; y += step) {
+    for (let x = 0.01; x <= 0.99 - size.width; x += step) {
+      const candidate = { x, y, ...size };
+      if (!occupied.some((frame) => overlaps(candidate, frame))) {
+        return candidate;
+      }
+    }
+  }
+  const offset = (occupied.length % 8) * step;
+  return {
+    x: Math.min(0.99 - size.width, 0.04 + offset),
+    y: Math.min(0.98 - size.height, 0.06 + offset),
+    ...size,
+  };
 };
