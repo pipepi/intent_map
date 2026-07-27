@@ -52,6 +52,10 @@ test("implements panel selection and both surface binding dimensions", async () 
   assert.match(workspace, /<NodeProjection/);
   assert.match(workspace, /renderNodeContent\(featureNode/);
   assert.doesNotMatch(workspace, /featureBody|surface-properties|surface-list/);
+  assert.match(workspace, /transientSurfaceZIndex/);
+  assert.match(workspace, /onPointerDownCapture/);
+  assert.match(workspace, /onFocusCapture/);
+  assert.doesNotMatch(model, /focusedSurface/);
 });
 
 test("supports root camera navigation, layout editing, and semantic LOD", async () => {

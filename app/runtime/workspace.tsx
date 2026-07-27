@@ -96,6 +96,15 @@ const simpleSurfaceResizeDirections = [
 ] as const satisfies readonly ResizeDirection[];
 const MINIMIZED_SURFACE_SIZE = { width: 0.18, height: 0.12 };
 
+export const transientSurfaceZIndex = (
+  panel: PanelInstance,
+  surfaceId: string,
+  focusedSurfaceId?: string,
+) =>
+  surfaceId === focusedSurfaceId
+    ? Math.max(0, ...panel.surfaces.map((surface) => surface.zIndex)) + 1
+    : panel.surfaces.find((surface) => surface.id === surfaceId)?.zIndex ?? 0;
+
 const findNode = (node: IntentNode, id: string): IntentNode | undefined => {
   if (node.id === id) return node;
   for (const child of node.children ?? []) {
@@ -2023,15 +2032,19 @@ export function Workspace({
                       data-surface-id={surface.id}
                       style={{
                         ...frameStyle(surface.frame),
-                        zIndex:
-                          surfaceFocused
-                            ? Math.max(
-                                0,
-                                ...panel.surfaces.map((item) => item.zIndex),
-                              ) + 1
-                            : surface.zIndex,
+                        zIndex: transientSurfaceZIndex(
+                          panel,
+                          surface.id,
+                          surfaceFocused ? surface.id : undefined,
+                        ),
                       }}
                       onPointerDownCapture={() =>
+                        setFocusedSurface({
+                          panelId: panel.id,
+                          surfaceId: surface.id,
+                        })
+                      }
+                      onFocusCapture={() =>
                         setFocusedSurface({
                           panelId: panel.id,
                           surfaceId: surface.id,
