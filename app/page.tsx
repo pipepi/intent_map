@@ -288,16 +288,25 @@ const detectCycle = (scope: IntentNode): string[] | null => {
   return null;
 };
 
-const collectValidationIssues = (scope: IntentNode) => {
-  const issues: Array<{
-    level: "error" | "warning" | "info";
-    text: string;
-  }> = [];
+type ValidationIssue = {
+  level: "error" | "warning" | "info";
+  text: string;
+  nodeId: string;
+  portId?: string;
+  edgeId?: string;
+  scopeNodeId: string;
+};
+
+const collectValidationIssues = (scope: IntentNode): ValidationIssue[] => {
+  const issues: ValidationIssue[] = [];
   const cycle = detectCycle(scope);
   if (cycle) {
     issues.push({
       level: "error",
       text: `循环依赖：${cycle.join(" → ")}`,
+      nodeId: cycle[0] ?? scope.id,
+      edgeId: `cycle:${cycle.join(">")}`,
+      scopeNodeId: scope.id,
     });
   }
   const children = scope.children ?? [];
@@ -309,6 +318,9 @@ const collectValidationIssues = (scope: IntentNode) => {
         issues.push({
           level: "warning",
           text: `「${child.name}」输入「${input.name}」未绑定`,
+          nodeId: child.id,
+          portId: input.id,
+          scopeNodeId: scope.id,
         });
       }
       for (const reference of collectRefs(input.binding)) {
@@ -324,6 +336,9 @@ const collectValidationIssues = (scope: IntentNode) => {
       issues.push({
         level: "warning",
         text: `容器输出「${output.name}」未映射`,
+        nodeId: scope.id,
+        portId: output.id,
+        scopeNodeId: scope.id,
       });
     }
     for (const reference of collectRefs(output.mapping)) {
@@ -338,6 +353,9 @@ const collectValidationIssues = (scope: IntentNode) => {
       issues.push({
         level: "info",
         text: `环境输入「${port.name}」未被任何节点消费`,
+        nodeId: scope.id,
+        portId: port.id,
+        scopeNodeId: scope.id,
       });
     }
   }
@@ -351,6 +369,9 @@ const collectValidationIssues = (scope: IntentNode) => {
       issues.push({
         level: "info",
         text: `「${child.name}」的输出未被消费`,
+        nodeId: child.id,
+        portId: child.outputs[0]?.id,
+        scopeNodeId: scope.id,
       });
     }
   }
@@ -731,51 +752,10 @@ export default function Home() {
     () => deriveBusinessVisualEdges(businessScope),
     [businessScope],
   );
-  const businessCycle = useMemo(() => detectCycle(businessScope), [businessScope]);
-  const validationIssues = useMemo(() => {
-    const issues: Array<{ level: "error" | "warning" | "info"; text: string }> = [];
-    if (businessCycle)
-      issues.push({ level: "error", text: `循环依赖：${businessCycle.join(" → ")}` });
-    const children = businessScope.children ?? [];
-    for (const child of children) {
-      for (const input of child.inputs) {
-        if (!input.binding)
-          issues.push({ level: "warning", text: `「${child.name}」输入「${input.name}」未绑定` });
-      }
-    }
-    const consumedEnv = new Set<string>();
-    const consumedOutputs = new Set<string>();
-    for (const child of children) {
-      for (const input of child.inputs) {
-        for (const reference of collectRefs(input.binding)) {
-          if (reference.env) consumedEnv.add(reference.portId);
-          if (reference.nodeId) consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
-        }
-      }
-    }
-    for (const output of businessScope.outputs) {
-      for (const reference of collectRefs(output.mapping)) {
-        if (reference.env) consumedEnv.add(reference.portId);
-        if (reference.nodeId) consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
-      }
-    }
-    for (const port of businessScope.inputs) {
-      if (!consumedEnv.has(port.id))
-        issues.push({ level: "info", text: `环境输入「${port.name}」未被任何节点消费` });
-    }
-    for (const output of businessScope.outputs) {
-      if (!output.mapping)
-        issues.push({ level: "warning", text: `容器输出「${output.name}」未映射` });
-    }
-    for (const child of children) {
-      if (
-        child.outputs.length > 0 &&
-        child.outputs.every((output) => !consumedOutputs.has(`${child.id}:${output.id}`))
-      )
-        issues.push({ level: "info", text: `「${child.name}」的输出未被消费` });
-    }
-    return issues;
-  }, [businessScope, businessCycle]);
+  const validationIssues = useMemo(
+    () => collectValidationIssues(businessScope),
+    [businessScope],
+  );
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
   const scopeMinimized =
     !isBusinessScope && nodeDisplayMode(scopeNode) === "minimized";
@@ -1970,6 +1950,7 @@ export default function Home() {
     }));
     if (panelId) selectPanelBusinessNode(panelId, duplicate.id);
     else setSelectedBusinessNodeId(duplicate.id);
+    setToast(`已深复制「${target.name}」及其全部后代`);
   };
 
   const duplicateSelected = () =>
@@ -2023,6 +2004,7 @@ export default function Home() {
     }, targetId));
     if (panelId) selectPanelBusinessNode(panelId, businessScope.id);
     else setSelectedBusinessNodeId(businessScope.id);
+    setToast(`已删除节点 ${targetId}`);
   };
 
   const deleteSelected = () =>
@@ -2449,6 +2431,7 @@ export default function Home() {
         input.id === portId ? { ...input, binding } : input,
       ),
     }));
+    setToast(binding ? "管道已连接或改绑" : "管道已断开");
   };
 
   const startPipeDrag = (
@@ -2893,7 +2876,20 @@ export default function Home() {
           {contextualValidationIssues.length > 0 && (
             <ul className="validation-issue-list">
               {contextualValidationIssues.slice(0, 8).map((issue, index) => (
-                <li key={index} className={`issue-${issue.level}`}>{issue.text}</li>
+                <li key={`${issue.nodeId}-${issue.portId ?? index}`} className={`issue-${issue.level}`}>
+                  <button onClick={() => {
+                    const target = findNode(contextualBusinessRoot, issue.nodeId);
+                    if (!target) return;
+                    if (contextAddress && surfaceContext?.container) {
+                      navigatePanelBusinessNode(contextAddress.panelId, surfaceContext.container.id, target);
+                    } else if (contextAddress) {
+                      selectPanelBusinessNode(contextAddress.panelId, target.id);
+                    } else {
+                      navigateToBusinessNode(target);
+                    }
+                    setToast(`已定位：${issue.text}`);
+                  }}>{issue.text}</button>
+                </li>
               ))}
               {contextualValidationIssues.length > 8 && (
                 <li className="issue-info">… 其余 {contextualValidationIssues.length - 8} 项</li>

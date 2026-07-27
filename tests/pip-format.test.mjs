@@ -97,3 +97,39 @@ test("PIP preserves the v3 multi-panel workspace and four-level tree", async () 
     "scenario_actor_leaf",
   );
 });
+
+test("PIP round-trips an eight-level business tree without a depth cap", async () => {
+  const businessRoot = createSampleBusinessRoot();
+  let leaf = businessRoot.children[0].children[0].children[0];
+  for (let depth = 5; depth <= 8; depth += 1) {
+    const child = {
+      id: `depth_${depth}`,
+      name: `第 ${depth} 层`,
+      description: "无限递归回归节点",
+      kind: "operator",
+      operator: "identity",
+      inputs: [{ id: `in_${depth}`, name: "输入", type: "any", channel: "data" }],
+      outputs: [{ id: `out_${depth}`, name: "输出", type: "any", channel: "data" }],
+      children: [],
+      position: { x: 80 * depth, y: 60 * depth },
+      size: { width: 220, height: 150 },
+    };
+    leaf.children = [child];
+    leaf = child;
+  }
+  const document = createApplicationDocument(businessRoot);
+  const bytes = await encodePip({
+    manifest,
+    loaderSource: DEFAULT_PIP_LOADER_SOURCE,
+    rootTreeText: serializeIntentDocument(document),
+    assets: [],
+  });
+  const loaded = loadIntentDocument(
+    JSON.parse((await decodePip(bytes)).rootTreeText),
+  );
+  const loadedBusinessRoot =
+    loaded.rootIntent.children[0].children[0];
+  let cursor = loadedBusinessRoot.children[0].children[0].children[0];
+  for (let depth = 5; depth <= 8; depth += 1) cursor = cursor.children[0];
+  assert.equal(cursor.id, "depth_8");
+});
