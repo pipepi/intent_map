@@ -98,6 +98,7 @@ export function NodeProjection({
         selected ? "selected" : "",
         active ? "active" : "",
         minimized ? "minimized" : "expanded",
+        !minimized && rows > 0 ? "has-port-region" : "",
         summary ? "summary" : "live",
       ]
         .filter(Boolean)

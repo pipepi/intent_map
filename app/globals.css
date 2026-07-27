@@ -1230,8 +1230,8 @@ code,
 .surface-container-projection-body {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
 }
 
 .container-scope-label {
@@ -1304,6 +1304,7 @@ code,
 }
 
 .surface-business-viewport {
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   position: relative;
@@ -1857,6 +1858,16 @@ code,
 
 .runtime-port-output > i {
   right: -10px;
+}
+
+.runtime-node.has-port-region {
+  grid-template-rows: 38px auto minmax(0, 1fr);
+}
+
+.runtime-node.has-port-region .runtime-node-body {
+  height: 100%;
+  border-bottom: 1px solid transparent;
+  border-radius: 0 0 9px 9px;
 }
 
 .embedded-node-projection .runtime-port-input {
@@ -2975,6 +2986,8 @@ code,
   background: #101a36e8;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: crosshair;
+  pointer-events: auto;
 }
 
 .business-empty {

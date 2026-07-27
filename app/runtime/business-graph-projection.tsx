@@ -65,6 +65,11 @@ type BusinessGraphProjectionProps = {
     port: IntentPort,
     event: ReactPointerEvent<HTMLElement>,
   ) => void;
+  onStartContainerInput: (
+    port: IntentPort,
+    event: ReactPointerEvent<HTMLElement>,
+  ) => void;
+  onDisconnectContainerOutput: (port: IntentPort) => void;
   onAddChild: () => void;
 };
 
@@ -90,6 +95,8 @@ export function BusinessGraphProjection({
   onDisplayModeToggle,
   onDisconnectInput,
   onStartPipe,
+  onStartContainerInput,
+  onDisconnectContainerOutput,
   onAddChild,
 }: BusinessGraphProjectionProps) {
   const edges = deriveBusinessVisualEdges(scope);
@@ -116,6 +123,12 @@ export function BusinessGraphProjection({
             {scope.inputs.map((port, index) => (
               <span
                 key={port.id}
+                data-port-kind="container-input"
+                data-port-node={scope.id}
+                data-port-id={port.id}
+                onPointerDown={(event) =>
+                  onStartContainerInput(port, event)
+                }
                 style={{
                   top:
                     BUSINESS_CONTAINER_PORT_TOP + index * BUSINESS_PORT_ROW,
@@ -130,6 +143,13 @@ export function BusinessGraphProjection({
             {scope.outputs.map((port, index) => (
               <span
                 key={port.id}
+                data-port-kind="container-output"
+                data-port-node={scope.id}
+                data-port-id={port.id}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  if (port.mapping) onDisconnectContainerOutput(port);
+                }}
                 style={{
                   top:
                     BUSINESS_CONTAINER_PORT_TOP + index * BUSINESS_PORT_ROW,

@@ -74,6 +74,11 @@ type WorkspaceProps = {
     portId: string,
     value: string,
   ) => void;
+  onUpdateOutputMapping: (
+    nodeId: string,
+    portId: string,
+    value: string,
+  ) => void;
   onAddBusinessChild: (scopeId: string) => void;
   onFeedback: (message: string) => void;
 };
@@ -410,6 +415,7 @@ export function Workspace({
   onSaveViewAs,
   renderNodeContent,
   onUpdateInputBinding,
+  onUpdateOutputMapping,
   onAddBusinessChild,
   onFeedback,
 }: WorkspaceProps) {
@@ -429,6 +435,7 @@ export function Workspace({
   );
   const [pendingContainerPipe, setPendingContainerPipe] = useState<{
     surfaceId: string;
+    sourceKind: "environment" | "node";
     sourceNodeId: string;
     sourcePortId: string;
     from: { x: number; y: number };
@@ -1355,6 +1362,7 @@ export function Workspace({
       node: IntentNode,
       port: IntentNode["outputs"][number],
       event: ReactPointerEvent<HTMLElement>,
+      sourceKind: "environment" | "node" = "node",
     ) => {
       event.stopPropagation();
       if (event.button !== 0) return;
@@ -1370,19 +1378,27 @@ export function Workspace({
       const size = businessNodeSize(node);
       const outputIndex = Math.max(
         0,
-        node.outputs.findIndex((output) => output.id === port.id),
+        sourceKind === "environment"
+          ? node.inputs.findIndex((input) => input.id === port.id)
+          : node.outputs.findIndex((output) => output.id === port.id),
       );
       const pending = {
         surfaceId: surface.id,
+        sourceKind,
         sourceNodeId: node.id,
         sourcePortId: port.id,
         from: {
-          x: node.position.x + size.width,
+          x:
+            sourceKind === "environment"
+              ? -9
+              : node.position.x + size.width,
           y:
-            node.position.y +
-            BUSINESS_PORT_TOP +
-            outputIndex * BUSINESS_PORT_ROW +
-            BUSINESS_PORT_ROW / 2,
+            sourceKind === "environment"
+              ? 132 + 12 + outputIndex * BUSINESS_PORT_ROW
+              : node.position.y +
+                BUSINESS_PORT_TOP +
+                outputIndex * BUSINESS_PORT_ROW +
+                BUSINESS_PORT_ROW / 2,
         },
         to: toWorld(event.clientX, event.clientY),
       };
@@ -1402,25 +1418,41 @@ export function Workspace({
         setPendingContainerPipe(null);
         const target = window.document
           .elementFromPoint(upEvent.clientX, upEvent.clientY)
-          ?.closest<HTMLElement>("[data-port-kind='input']");
+          ?.closest<HTMLElement>("[data-port-kind]");
+        const targetKind = target?.dataset.portKind;
+        if (targetKind !== "input" && targetKind !== "container-output") return;
         const targetNodeId = target?.dataset.portNode;
         const targetPortId = target?.dataset.portId;
-        if (!targetNodeId || !targetPortId || targetNodeId === node.id) return;
+        if (!targetNodeId || !targetPortId) return;
+        if (
+          sourceKind === "node" &&
+          targetKind === "input" &&
+          targetNodeId === node.id
+        ) return;
         const targetNode = findNode(scope, targetNodeId);
-        const targetPort = targetNode?.inputs.find(
-          (candidate) => candidate.id === targetPortId,
-        );
+        const targetPort =
+          targetKind === "container-output"
+            ? targetNode?.outputs.find(
+                (candidate) => candidate.id === targetPortId,
+              )
+            : targetNode?.inputs.find(
+                (candidate) => candidate.id === targetPortId,
+              );
         if (!targetPort) return;
         const compatibility = validatePortConnection(port, targetPort);
         if (!compatibility.ok) {
           onFeedback(`连接失败：${compatibility.error}`);
           return;
         }
-        onUpdateInputBinding(
-          targetNodeId,
-          targetPortId,
-          `ref:${node.id}:${port.id}`,
-        );
+        const value =
+          sourceKind === "environment"
+            ? `env:${port.id}`
+            : `ref:${node.id}:${port.id}`;
+        if (targetKind === "container-output") {
+          onUpdateOutputMapping(targetNodeId, targetPortId, value);
+        } else {
+          onUpdateInputBinding(targetNodeId, targetPortId, value);
+        }
         onFeedback(
           `已连接 ${node.name} · ${port.name} → ${targetNode?.name ?? targetNodeId} · ${targetPort.name}`,
         );
@@ -1588,6 +1620,12 @@ export function Workspace({
                 onUpdateInputBinding(node.id, port.id, "")
               }
               onStartPipe={startPipe}
+              onStartContainerInput={(port, event) =>
+                startPipe(scope, port, event, "environment")
+              }
+              onDisconnectContainerOutput={(port) =>
+                onUpdateOutputMapping(scope.id, port.id, "")
+              }
               onAddChild={() => onAddBusinessChild(scope.id)}
              />
            </div>

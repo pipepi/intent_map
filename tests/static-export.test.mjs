@@ -146,6 +146,10 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(businessProjection, /projectionUsesSummary\(scale\)/);
   assert.match(businessProjection, /data-port-kind="input"/);
   assert.match(businessProjection, /data-port-kind="output"/);
+  assert.match(businessProjection, /data-port-kind="container-input"/);
+  assert.match(businessProjection, /data-port-kind="container-output"/);
+  assert.match(businessProjection, /onStartContainerInput/);
+  assert.match(businessProjection, /onDisconnectContainerOutput/);
   assert.doesNotMatch(
     businessProjection,
     /className=\{`resize-mode-toggle business-mode-toggle[\s\S]*?left:\s*node\.position\.x/,
@@ -187,6 +191,7 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(css, /\.runtime-node\.minimized/);
   assert.match(css, /\.business-node\.minimized/);
   assert.match(css, /\.business-container-node/);
+  assert.match(css, /\.runtime-node\.has-port-region/);
   assert.match(css, /\.business-container-header/);
   assert.match(css, /\.business-container-interfaces/);
   assert.match(css, /\.business-container-node > footer/);
@@ -273,6 +278,14 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   );
   assert.match(workspace, /node=\{projectedContainerNode\}/);
   assert.match(workspace, /className="surface-container-projection-body"/);
+  assert.match(
+    css,
+    /\.surface-container-projection-body\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s,
+  );
+  assert.match(
+    css,
+    /\.surface-business-viewport\s*\{[^}]*flex:\s*1 1 auto;/s,
+  );
   assert.doesNotMatch(workspace, /surface-container-ports/);
   assert.match(
     workspace,
@@ -321,6 +334,12 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
     /onSelect:\s*\(target:\s*IntentNode\)\s*=>\s*\{[\s\S]*?navigatePanelBusinessNode\(\s*contextAddress\.panelId,\s*surfaceContext\.container\.id,\s*target/s,
   );
   assert.match(page, /navigatePanelBusinessNode/);
+  assert.match(
+    page,
+    /navigatePanelBusinessNode[\s\S]*?camera:\s*\{\s*scale:\s*1,\s*x:\s*12,\s*y:\s*12\s*\}/,
+  );
+  assert.match(page, /targetKind === "container-output"/);
+  assert.match(page, /sourceKind === "environment"/);
   assert.match(workspace, /onContainerMoveStart=\{moveContainer\}/);
   assert.match(workspace, /onContainerResizeStart=\{resizeContainer\}/);
   assert.match(workspace, /scopeWorldSizes/);

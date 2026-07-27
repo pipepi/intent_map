@@ -14,6 +14,7 @@ import {
 
 import {
   ACTIVE_BUSINESS_SCOPE_REF_ID,
+  businessScopeAddress,
   createApplicationDocument,
   getContainerSurface,
   getBusinessRoot,
@@ -525,6 +526,7 @@ export default function Home() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [scopeLegendOpen, setScopeLegendOpen] = useState(false);
   const [pendingPipe, setPendingPipe] = useState<{
+    sourceKind: "environment" | "node";
     sourceNodeId: string;
     sourcePortId: string;
     sourcePortName: string;
@@ -2330,19 +2332,27 @@ export default function Home() {
         containerSurfaceId,
         (surface) =>
           surface.kind === "current-container"
-            ? {
+            ? (() => {
+                const targetScope = businessScopeAddress(node.id);
+                const targetKey = scopeCameraKey(targetScope);
+                return {
                 ...surface,
-                scope: {
-                  domain: "business",
-                  nodeId: node.id,
-                  viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-                },
+                scope: targetScope,
                 navigationStack: path.map((item) => ({
                   domain: "business" as const,
                   nodeId: item.id,
                   viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
                 })),
-              }
+                projections: {
+                  ...surface.projections,
+                  [targetKey]: {
+                    camera: { scale: 1, x: 12, y: 12 },
+                    nodeLayouts:
+                      surface.projections[targetKey]?.nodeLayouts ?? {},
+                  },
+                },
+              };
+            })()
             : surface,
       );
     });
@@ -2438,6 +2448,7 @@ export default function Home() {
     node: IntentNode,
     port: IntentNode["outputs"][number],
     event: ReactPointerEvent<HTMLElement>,
+    sourceKind: "environment" | "node" = "node",
   ) => {
     if (event.button !== 0) return;
     event.stopPropagation();
@@ -2452,16 +2463,24 @@ export default function Home() {
       };
     };
     const size = businessNodeSize(node);
-    const outputIndex = node.outputs.findIndex((output) => output.id === port.id);
+    const outputIndex = sourceKind === "environment"
+      ? node.inputs.findIndex((input) => input.id === port.id)
+      : node.outputs.findIndex((output) => output.id === port.id);
     const from = {
-      x: node.position.x + size.width,
+      x:
+        sourceKind === "environment"
+          ? -9
+          : node.position.x + size.width,
       y:
-        node.position.y +
-        BUSINESS_PORT_TOP +
-        Math.max(0, outputIndex) * BUSINESS_PORT_ROW +
-        BUSINESS_PORT_ROW / 2,
+        sourceKind === "environment"
+          ? 132 + 12 + Math.max(0, outputIndex) * BUSINESS_PORT_ROW
+          : node.position.y +
+            BUSINESS_PORT_TOP +
+            Math.max(0, outputIndex) * BUSINESS_PORT_ROW +
+            BUSINESS_PORT_ROW / 2,
     };
     setPendingPipe({
+      sourceKind,
       sourceNodeId: node.id,
       sourcePortId: port.id,
       sourcePortName: port.name,
@@ -2482,22 +2501,31 @@ export default function Home() {
       const dropTarget = document
         .elementFromPoint(upEvent.clientX, upEvent.clientY)
         ?.closest("[data-port-kind]");
-      if (!dropTarget || dropTarget.getAttribute("data-port-kind") !== "input")
-        return;
+      if (!dropTarget) return;
+      const targetKind = dropTarget.getAttribute("data-port-kind");
+      if (targetKind !== "input" && targetKind !== "container-output") return;
       const targetNodeId = dropTarget.getAttribute("data-port-node");
       const targetPortId = dropTarget.getAttribute("data-port-id");
-      if (!targetNodeId || !targetPortId || targetNodeId === node.id) return;
+      if (!targetNodeId || !targetPortId) return;
+      if (sourceKind === "node" && targetKind === "input" && targetNodeId === node.id) return;
       const targetNode = findNode(businessRoot, targetNodeId);
-      const targetPort = targetNode?.inputs.find(
-        (input) => input.id === targetPortId,
-      );
+      const targetPort = targetKind === "container-output"
+        ? targetNode?.outputs.find((output) => output.id === targetPortId)
+        : targetNode?.inputs.find((input) => input.id === targetPortId);
       if (!targetPort) return;
       const compatibility = validatePortConnection(port, targetPort);
       if (!compatibility.ok) {
         setToast(`连接失败：${compatibility.error}`);
         return;
       }
-      updateInputBinding(targetNodeId, targetPortId, `ref:${node.id}:${port.id}`);
+      const value = sourceKind === "environment"
+        ? `env:${port.id}`
+        : `ref:${node.id}:${port.id}`;
+      if (targetKind === "container-output") {
+        updateOutputMapping(targetNodeId, targetPortId, value);
+      } else {
+        updateInputBinding(targetNodeId, targetPortId, value);
+      }
       setToast(
         `已连接 ${node.name} · ${port.name} → ${targetNode?.name ?? targetNodeId} · ${targetPort?.name ?? targetPortId}`,
       );
@@ -2690,6 +2718,13 @@ export default function Home() {
           setToast(`已断开「${node.name} · ${port.name}」的管道`);
         }}
         onStartPipe={startPipeDrag}
+        onStartContainerInput={(port, event) =>
+          startPipeDrag(businessScope, port, event, "environment")
+        }
+        onDisconnectContainerOutput={(port) => {
+          updateOutputMapping(businessScope.id, port.id, "");
+          setToast(`已断开当前容器输出「${port.name}」`);
+        }}
         onAddChild={addBusinessChild}
       />
     );
@@ -3285,6 +3320,7 @@ export default function Home() {
         document={documentState}
         renderNodeContent={renderNodeContent}
         onUpdateInputBinding={updateInputBinding}
+        onUpdateOutputMapping={updateOutputMapping}
         onAddBusinessChild={(scopeId) =>
           addBusinessChild(scopeId, false)
         }
