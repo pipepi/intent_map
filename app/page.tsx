@@ -42,6 +42,7 @@ import {
   deepCopyIntentSubtree,
   renameIntentNodeId,
   updateIntentPortSchema,
+  validatePortConnection,
 } from "./runtime/authoring";
 import {
   MINIMIZED_NODE_SIZE,
@@ -2507,6 +2508,12 @@ export default function Home() {
       const targetPort = targetNode?.inputs.find(
         (input) => input.id === targetPortId,
       );
+      if (!targetPort) return;
+      const compatibility = validatePortConnection(port, targetPort);
+      if (!compatibility.ok) {
+        setToast(`连接失败：${compatibility.error}`);
+        return;
+      }
       updateInputBinding(targetNodeId, targetPortId, `ref:${node.id}:${port.id}`);
       setToast(
         `已连接 ${node.name} · ${port.name} → ${targetNode?.name ?? targetNodeId} · ${targetPort?.name ?? targetPortId}`,
@@ -3169,6 +3176,14 @@ export default function Home() {
           event.stopPropagation();
           setSelectedEdgeId(selected ? null : edge.id);
         }}
+        onDoubleClick={(event) => {
+          event.stopPropagation();
+          edge.members.forEach((member) =>
+            updateInputBinding(member.targetNodeId, member.targetPortId, ""),
+          );
+          setSelectedEdgeId(null);
+          setToast(`已断开 ${edge.members.length} 条管道`);
+        }}
       >
         <path d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`} />
         <circle cx={(sx + tx) / 2} cy={(sy + ty) / 2} r={selected ? 12 : 9} />
@@ -3277,6 +3292,7 @@ export default function Home() {
         onAddBusinessChild={(scopeId) =>
           addBusinessChild(scopeId, false)
         }
+        onFeedback={setToast}
         onWorkspaceChange={(workspace: WorkspaceState) => {
           setDocumentState((active) => ({
             ...active,

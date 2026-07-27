@@ -46,6 +46,7 @@ import {
   scaleForWheelGesture,
 } from "./camera";
 import { derivePanelPipelineEdges } from "./panel-pipelines";
+import { validatePortConnection } from "./authoring";
 import {
   businessScopeAddress,
   getBusinessRoot,
@@ -71,6 +72,7 @@ type WorkspaceProps = {
     value: string,
   ) => void;
   onAddBusinessChild: (scopeId: string) => void;
+  onFeedback: (message: string) => void;
 };
 
 type DragTarget =
@@ -397,6 +399,7 @@ export function Workspace({
   renderNodeContent,
   onUpdateInputBinding,
   onAddBusinessChild,
+  onFeedback,
 }: WorkspaceProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const containerTouchPointersRef = useRef(
@@ -1384,10 +1387,23 @@ export function Workspace({
         const targetNodeId = target?.dataset.portNode;
         const targetPortId = target?.dataset.portId;
         if (!targetNodeId || !targetPortId || targetNodeId === node.id) return;
+        const targetNode = findNode(scope, targetNodeId);
+        const targetPort = targetNode?.inputs.find(
+          (candidate) => candidate.id === targetPortId,
+        );
+        if (!targetPort) return;
+        const compatibility = validatePortConnection(port, targetPort);
+        if (!compatibility.ok) {
+          onFeedback(`连接失败：${compatibility.error}`);
+          return;
+        }
         onUpdateInputBinding(
           targetNodeId,
           targetPortId,
           `ref:${node.id}:${port.id}`,
+        );
+        onFeedback(
+          `已连接 ${node.name} · ${port.name} → ${targetNode?.name ?? targetNodeId} · ${targetPort.name}`,
         );
       };
       window.addEventListener("pointermove", move);

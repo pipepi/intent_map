@@ -5,6 +5,7 @@ import {
   deepCopyIntentSubtree,
   renameIntentNodeId,
   updateIntentPortSchema,
+  validatePortConnection,
 } from "../app/runtime/authoring.ts";
 import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts";
 
@@ -43,6 +44,30 @@ test("deep copies every descendant and rewrites only internal references", () =>
   );
   result.root.children[0].name = "changed";
   assert.notEqual(result.root.children[0].name, source.children[0].name);
+});
+
+test("accepts only compatible visual pipeline endpoints", () => {
+  assert.equal(
+    validatePortConnection(
+      { id: "out", name: "out", type: "string", channel: "data" },
+      { id: "in", name: "in", type: "any", channel: "data" },
+    ).ok,
+    true,
+  );
+  assert.match(
+    validatePortConnection(
+      { id: "out", name: "out", type: "string", channel: "event" },
+      { id: "in", name: "in", type: "string", channel: "data" },
+    ).error,
+    /通道不兼容/,
+  );
+  assert.match(
+    validatePortConnection(
+      { id: "out", name: "out", type: "string", channel: "data" },
+      { id: "in", name: "in", type: "number", channel: "data" },
+    ).error,
+    /类型不兼容/,
+  );
 });
 
 test("renames node and port ids atomically across references", () => {

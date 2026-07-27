@@ -222,3 +222,28 @@ export const updateIntentPortSchema = (
     }),
   };
 };
+
+export const validatePortConnection = (
+  output: IntentPort,
+  input: IntentPort,
+): AuthoringResult<true> => {
+  const outputChannel = output.channel ?? "data";
+  const inputChannel = input.channel ?? "data";
+  if (outputChannel !== inputChannel) {
+    return {
+      ok: false,
+      error: `通道不兼容：${outputChannel} 不能连接到 ${inputChannel}`,
+    };
+  }
+  if (
+    output.type !== "any" &&
+    input.type !== "any" &&
+    output.type !== input.type
+  ) {
+    return {
+      ok: false,
+      error: `类型不兼容：${output.type} 不能连接到 ${input.type}`,
+    };
+  }
+  return { ok: true, value: true };
+};
