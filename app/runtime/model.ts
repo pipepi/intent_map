@@ -728,6 +728,7 @@ export const createDefaultViews = (
     ...workbenchProperties.localState,
     displayMode: "minimized",
     expandedFrame: { x: 0.01, y: 0.02, width: 0.225, height: 0.96 },
+    minimizedFrame: { x: 0.01, y: 0.84, width: 0.225, height: 0.14 },
   };
   return [
     {
@@ -885,6 +886,12 @@ const isCameraState = (value: unknown): value is CameraState =>
     (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
   );
 
+const isNormalizedFrame = (value: unknown): value is NormalizedFrame =>
+  isRecord(value) &&
+  ["x", "y", "width", "height"].every(
+    (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
+  );
+
 const normalizeScopeAddress = (
   value: unknown,
   root: IntentNode,
@@ -912,6 +919,24 @@ const normalizeSurfaceState = (
   businessRoot: IntentNode,
 ) => {
   if (!isRecord(rawSurface)) return;
+  const localState = isRecord(rawSurface.localState)
+    ? { ...rawSurface.localState }
+    : {};
+  const frame = isNormalizedFrame(rawSurface.frame)
+    ? rawSurface.frame
+    : { x: 0.05, y: 0.05, width: 0.3, height: 0.3 };
+  const minimized = localState.displayMode === "minimized";
+  if (!isNormalizedFrame(localState.expandedFrame)) {
+    localState.expandedFrame = minimized
+      ? { ...frame, width: Math.max(frame.width, 0.3), height: Math.max(frame.height, 0.4) }
+      : frame;
+  }
+  if (!isNormalizedFrame(localState.minimizedFrame)) {
+    localState.minimizedFrame = minimized
+      ? frame
+      : { ...frame, width: Math.min(frame.width, 0.18), height: 0.12 };
+  }
+  rawSurface.localState = localState;
   if (rawSurface.kind === "feature-panel") {
     if (!isRecord(rawSurface.viewport)) {
       rawSurface.viewport = {
@@ -941,9 +966,7 @@ const normalizeSurfaceState = (
   const projections = isRecord(rawSurface.projections)
     ? rawSurface.projections
     : {};
-  const legacyLocalState = isRecord(rawSurface.localState)
-    ? rawSurface.localState
-    : {};
+  const legacyLocalState = localState;
   const legacyCameras = isRecord(legacyLocalState.cameras)
     ? legacyLocalState.cameras
     : {};
@@ -962,9 +985,9 @@ const normalizeSurfaceState = (
     };
   }
   rawSurface.projections = projections;
-  const localState = { ...legacyLocalState };
-  delete localState.cameras;
-  rawSurface.localState = localState;
+  const normalizedLocalState = { ...legacyLocalState };
+  delete normalizedLocalState.cameras;
+  rawSurface.localState = normalizedLocalState;
   delete rawSurface.scopeNodeId;
   delete rawSurface.camera;
 };

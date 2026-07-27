@@ -129,6 +129,7 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
     width: 0.225,
     height: 0.96,
   });
+  assert.deepEqual(properties.localState.minimizedFrame, properties.frame);
   assert.equal(container.localState.portsExpanded, false);
   assert.equal(
     workbench.surfaces.every(
@@ -199,6 +200,8 @@ test("normalizes legacy v3 surface state only at the load boundary", () => {
   delete container.scope;
   delete container.projections;
   delete feature.viewport;
+  delete feature.localState.expandedFrame;
+  delete feature.localState.minimizedFrame;
   const before = JSON.stringify(legacy);
 
   const loaded = loadIntentDocument(legacy);
@@ -226,6 +229,8 @@ test("normalizes legacy v3 surface state only at the load boundary", () => {
     camera: { scale: 1, x: 0, y: 0 },
     fitMode: "auto",
   });
+  assert.equal(typeof loadedFeature.localState.expandedFrame.width, "number");
+  assert.equal(typeof loadedFeature.localState.minimizedFrame.height, "number");
   assert.doesNotMatch(exported, /"scopeNodeId"|"cameras"/);
 });
 

@@ -699,22 +699,31 @@ export function Workspace({
           const expandedFrame = storedSurfaceFrame(
             candidate.localState.expandedFrame,
           );
+          const minimizedFrame = storedSurfaceFrame(
+            candidate.localState.minimizedFrame,
+          );
+          const fallbackMinimized = clampSurfaceFrame({
+            ...candidate.frame,
+            width: Math.min(
+              candidate.frame.width,
+              MINIMIZED_SURFACE_SIZE.width,
+            ),
+            height: MINIMIZED_SURFACE_SIZE.height,
+          });
           return {
             ...candidate,
             frame: minimizing
-              ? clampSurfaceFrame({
-                  ...candidate.frame,
-                  width: Math.min(
-                    candidate.frame.width,
-                    MINIMIZED_SURFACE_SIZE.width,
-                  ),
-                  height: MINIMIZED_SURFACE_SIZE.height,
-                })
+              ? clampSurfaceFrame(minimizedFrame ?? fallbackMinimized)
               : clampSurfaceFrame(expandedFrame ?? candidate.frame),
             localState: {
               ...candidate.localState,
               displayMode: minimizing ? "minimized" : "expanded",
-              expandedFrame: minimizing ? candidate.frame : null,
+              expandedFrame: minimizing
+                ? candidate.frame
+                : candidate.localState.expandedFrame,
+              minimizedFrame: minimizing
+                ? candidate.localState.minimizedFrame ?? fallbackMinimized
+                : candidate.frame,
             },
           };
         },
