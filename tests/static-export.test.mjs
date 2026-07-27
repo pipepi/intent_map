@@ -7,14 +7,18 @@ const root = new URL("../", import.meta.url);
 test("exports the everything-node application as a static page", async () => {
   const html = await readFile(new URL("out/index.html", root), "utf8");
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const exportRuntime = await readFile(
+    new URL("app/runtime/export.ts", root),
+    "utf8",
+  );
 
   assert.match(html, /<title>Intent Map｜分形意图编辑器<\/title>/);
   assert.match(html, /everything-app/);
   assert.match(html, /root-node-viewport/);
   assert.match(html, /根内树 · 多视图工作区/);
   assert.match(html, />v3</);
-  assert.match(page, /intent-map-v3\.intent-map\.json/);
-  assert.match(page, /已导出 v3 工作区文档/);
+  assert.match(exportRuntime, /intent-map-v3\.intent-map\.json/);
+  assert.match(page, /已导出 \$\{result\.filename\}/);
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 
@@ -341,10 +345,7 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
     /candidate\.dataset\.portNode === nodeId/,
   );
   assert.match(workspace, /focusedSurface\.surfaceId === surface\.id/);
-  assert.match(
-    workspace,
-    /Math\.max\(\s*0,\s*\.\.\.panel\.surfaces\.map\(\(item\) => item\.zIndex\),\s*\) \+ 1/s,
-  );
+  assert.match(workspace, /transientSurfaceZIndex\(/);
   assert.match(
     css,
     /\.embedded-node-projection \.runtime-port-input\s*\{[^}]*left:\s*12px/s,
