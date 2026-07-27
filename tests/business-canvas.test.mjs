@@ -7,10 +7,12 @@ import {
   BUSINESS_PORT_HEIGHT,
   BUSINESS_PORT_TOP,
   businessEdgeGeometry,
+  businessNodeTreeDepth,
   businessNodeSize,
   clampBusinessNodePosition,
   deriveBusinessVisualEdges,
   nearestBusinessChild,
+  pickBusinessNodeDragTarget,
   resizeBusinessNodeGeometry,
 } from "../app/runtime/business-canvas.ts";
 
@@ -187,4 +189,106 @@ test("chooses the nearest child to the semantic zoom anchor", () => {
     "source",
   );
   assert.equal(nearestBusinessChild([], { x: 0, y: 0 }), undefined);
+});
+
+const dragCandidate = (value, overrides = {}) => ({
+  value,
+  bounds: { left: 0, top: 0, right: 100, bottom: 100 },
+  zIndex: 2,
+  treeDepth: 1,
+  domDepth: 1,
+  paintOrder: 0,
+  ...overrides,
+});
+
+test("chooses the nearest node before visual stacking", () => {
+  assert.equal(
+    pickBusinessNodeDragTarget(
+      [
+        dragCandidate("near", {
+          bounds: { left: 100, top: 100, right: 200, bottom: 200 },
+        }),
+        dragCandidate("far-top", {
+          bounds: { left: 400, top: 400, right: 500, bottom: 500 },
+          zIndex: 99,
+        }),
+      ],
+      { x: 210, y: 210 },
+    ),
+    "near",
+  );
+});
+
+test("breaks overlapping drag-target ties by z-index and tree depth", () => {
+  assert.equal(
+    pickBusinessNodeDragTarget(
+      [
+        dragCandidate("deep", { treeDepth: 5, paintOrder: 4 }),
+        dragCandidate("top", { zIndex: 8 }),
+      ],
+      { x: 50, y: 50 },
+    ),
+    "top",
+  );
+  assert.equal(
+    pickBusinessNodeDragTarget(
+      [
+        dragCandidate("shallow", { treeDepth: 2, paintOrder: 10 }),
+        dragCandidate("deep", { treeDepth: 5 }),
+      ],
+      { x: 50, y: 50 },
+    ),
+    "deep",
+  );
+});
+
+test("uses DOM depth and paint order for otherwise equal drag targets", () => {
+  assert.equal(
+    pickBusinessNodeDragTarget(
+      [
+        dragCandidate("painted-later", { paintOrder: 9 }),
+        dragCandidate("nested", { domDepth: 3 }),
+      ],
+      { x: 50, y: 50 },
+    ),
+    "nested",
+  );
+  assert.equal(
+    pickBusinessNodeDragTarget(
+      [
+        dragCandidate("early"),
+        dragCandidate("late", { paintOrder: 2 }),
+      ],
+      { x: 50, y: 50 },
+    ),
+    "late",
+  );
+  assert.equal(
+    pickBusinessNodeDragTarget(
+      [
+        dragCandidate("centered", {
+          bounds: { left: 0, top: 0, right: 100, bottom: 100 },
+        }),
+        dragCandidate("painted-over", {
+          bounds: { left: 40, top: 40, right: 240, bottom: 240 },
+          paintOrder: 2,
+        }),
+      ],
+      { x: 50, y: 50 },
+    ),
+    "painted-over",
+  );
+});
+
+test("reports a node's depth in the business intent tree", () => {
+  const nested = {
+    ...source,
+    id: "nested",
+    children: [{ ...target, id: "leaf" }],
+  };
+  const tree = { ...scope, children: [nested] };
+  assert.equal(businessNodeTreeDepth(tree, "scope"), 0);
+  assert.equal(businessNodeTreeDepth(tree, "nested"), 1);
+  assert.equal(businessNodeTreeDepth(tree, "leaf"), 2);
+  assert.equal(businessNodeTreeDepth(tree, "missing"), undefined);
 });

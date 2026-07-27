@@ -104,6 +104,18 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /onPointerDownCapture/);
   assert.match(page, /points\.size > 1/);
   assert.match(page, /target\.addEventListener\("pointercancel", finish, true\)/);
+  assert.match(workspace, /event\.code !== "Space"/);
+  assert.match(workspace, /spacePanReadyRef\.current/);
+  assert.match(
+    workspace,
+    /className=\{`surface-business-viewport[\s\S]*space-pan-ready/,
+  );
+  assert.match(css, /\.surface-business-viewport\.space-pan-ready/);
+  assert.match(css, /\.surface-business-viewport\.space-panning/);
+  assert.match(workspace, /\(!event\.ctrlKey && !event\.metaKey\)/);
+  assert.match(workspace, /pickBusinessNodeDragTarget\(candidates/);
+  assert.match(workspace, /businessNodeTreeDepth\(projectedBusinessRoot/);
+  assert.match(businessProjection, /data-node-id=\{node\.id\}/);
   assert.match(page, /layoutLocked/);
   assert.match(page, /runtime-add-child/);
   assert.match(page, /className="focused-runtime-content"/);

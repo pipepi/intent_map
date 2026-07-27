@@ -289,6 +289,7 @@ export function BusinessGraphProjection({
               else onEnter(node);
             }}
             onPointerDown={(event) => onMoveStart(node, event)}
+            data-node-id={node.id}
             data-display-mode={minimized ? "minimized" : "expanded"}
             title={minimized ? "双击展开节点" : undefined}
           >

@@ -1289,7 +1289,7 @@ export default function Home() {
   };
 
   const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
+    // event.preventDefault();
     const viewport = viewportRef.current;
     if (!viewport) return;
     const rect = viewport.getBoundingClientRect();

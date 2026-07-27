@@ -136,6 +136,87 @@ export const nearestBusinessChild = (
     return nearest;
   }, undefined)?.node;
 
+export type BusinessNodeDragCandidate<T> = {
+  value: T;
+  bounds: { left: number; top: number; right: number; bottom: number };
+  zIndex: number;
+  treeDepth: number;
+  domDepth: number;
+  paintOrder: number;
+};
+
+const squaredDistanceToBounds = (
+  bounds: BusinessNodeDragCandidate<unknown>["bounds"],
+  point: { x: number; y: number },
+) => {
+  const dx =
+    point.x < bounds.left
+      ? bounds.left - point.x
+      : point.x > bounds.right
+        ? point.x - bounds.right
+        : 0;
+  const dy =
+    point.y < bounds.top
+      ? bounds.top - point.y
+      : point.y > bounds.bottom
+        ? point.y - bounds.bottom
+        : 0;
+  return dx * dx + dy * dy;
+};
+
+export const pickBusinessNodeDragTarget = <T>(
+  candidates: BusinessNodeDragCandidate<T>[],
+  point: { x: number; y: number },
+) =>
+  candidates.reduce<
+    | {
+        candidate: BusinessNodeDragCandidate<T>;
+        distance: number;
+        centerDistance: number;
+      }
+    | undefined
+  >((best, candidate) => {
+    const distance = squaredDistanceToBounds(candidate.bounds, point);
+    const centerX = (candidate.bounds.left + candidate.bounds.right) / 2;
+    const centerY = (candidate.bounds.top + candidate.bounds.bottom) / 2;
+    const centerDistance =
+      (point.x - centerX) ** 2 + (point.y - centerY) ** 2;
+    const next = { candidate, distance, centerDistance };
+    if (!best) return next;
+    if (distance !== best.distance) {
+      return distance < best.distance ? next : best;
+    }
+    if (candidate.zIndex !== best.candidate.zIndex) {
+      return candidate.zIndex > best.candidate.zIndex ? next : best;
+    }
+    if (candidate.treeDepth !== best.candidate.treeDepth) {
+      return candidate.treeDepth > best.candidate.treeDepth ? next : best;
+    }
+    if (candidate.domDepth !== best.candidate.domDepth) {
+      return candidate.domDepth > best.candidate.domDepth ? next : best;
+    }
+    if (candidate.paintOrder !== best.candidate.paintOrder) {
+      return candidate.paintOrder > best.candidate.paintOrder ? next : best;
+    }
+    if (centerDistance !== best.centerDistance) {
+      return centerDistance < best.centerDistance ? next : best;
+    }
+    return best;
+  }, undefined)?.candidate.value;
+
+export const businessNodeTreeDepth = (
+  root: BusinessIntentNode,
+  nodeId: string,
+  depth = 0,
+): number | undefined => {
+  if (root.id === nodeId) return depth;
+  for (const child of root.children ?? []) {
+    const childDepth = businessNodeTreeDepth(child, nodeId, depth + 1);
+    if (childDepth !== undefined) return childDepth;
+  }
+  return undefined;
+};
+
 export const clampBusinessNodePosition = (
   start: { x: number; y: number },
   delta: { x: number; y: number },

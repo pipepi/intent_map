@@ -32,9 +32,11 @@ import {
   BUSINESS_PORT_ROW,
   BUSINESS_PORT_TOP,
   BUSINESS_SEMANTIC_ZOOM_ENTER_SCALE,
+  businessNodeTreeDepth,
   businessNodeSize,
   clampBusinessNodePosition,
   nearestBusinessChild,
+  pickBusinessNodeDragTarget,
   resizeBusinessNodeGeometry,
 } from "./business-canvas";
 import {
@@ -433,6 +435,11 @@ export function Workspace({
       }
     >(),
   );
+  const spacePanReadyRef = useRef(false);
+  const [spacePanReady, setSpacePanReady] = useState(false);
+  const [panningSurfaceId, setPanningSurfaceId] = useState<string | null>(
+    null,
+  );
   const [pendingContainerPipe, setPendingContainerPipe] = useState<{
     surfaceId: string;
     sourceKind: "environment" | "node";
@@ -453,6 +460,43 @@ export function Workspace({
   )
     ? focusedPanelId
     : document.workspaceState.activePanelId;
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      return !!(
+        element &&
+        (element.tagName === "INPUT" ||
+          element.tagName === "TEXTAREA" ||
+          element.tagName === "SELECT" ||
+          element.isContentEditable)
+      );
+    };
+    const setReady = (ready: boolean) => {
+      spacePanReadyRef.current = ready;
+      setSpacePanReady(ready);
+    };
+    const onSpaceDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || isEditableTarget(event.target)) return;
+      event.preventDefault();
+      setReady(true);
+    };
+    const onSpaceUp = (event: KeyboardEvent) => {
+      if (event.code !== "Space") return;
+      setReady(false);
+    };
+    const onBlur = () => {
+      setReady(false);
+      setPanningSurfaceId(null);
+    };
+    window.addEventListener("keydown", onSpaceDown);
+    window.addEventListener("keyup", onSpaceUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onSpaceDown);
+      window.removeEventListener("keyup", onSpaceUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
   useEffect(() => {
     const preventWebViewPageZoom = (event: WheelEvent) => {
       if (event.ctrlKey) {
@@ -979,7 +1023,7 @@ export function Workspace({
         ),
       );
     const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-      event.preventDefault();
+      // event.preventDefault();
       if (!event.ctrlKey) {
         updateCamera({
           ...camera,
@@ -1086,6 +1130,40 @@ export function Workspace({
           2,
         ),
       );
+    };
+    const startSpacePan = (
+      event: ReactPointerEvent<HTMLDivElement>,
+    ) => {
+      if (
+        event.pointerType === "touch" ||
+        event.button !== 0 ||
+        !spacePanReadyRef.current
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPanningSurfaceId(surface.id);
+      const origin = { x: event.clientX, y: event.clientY };
+      const startCamera = { ...camera };
+      const target = event.currentTarget;
+      target.setPointerCapture(event.pointerId);
+      const move = (moveEvent: PointerEvent) =>
+        updateCamera({
+          ...startCamera,
+          x: startCamera.x + moveEvent.clientX - origin.x,
+          y: startCamera.y + moveEvent.clientY - origin.y,
+        });
+      const finish = () => {
+        target.removeEventListener("pointermove", move);
+        target.removeEventListener("pointerup", finish);
+        target.removeEventListener("pointercancel", finish);
+        setPanningSurfaceId((activeId) =>
+          activeId === surface.id ? null : activeId,
+        );
+      };
+      target.addEventListener("pointermove", move);
+      target.addEventListener("pointerup", finish);
+      target.addEventListener("pointercancel", finish);
     };
     if (!scope) {
       return <div className="surface-empty">当前容器节点已不存在</div>;
@@ -1283,9 +1361,10 @@ export function Workspace({
           },
         ),
       );
-    const moveNode = (
+    const startNodeMove = (
       node: IntentNode,
       event: ReactPointerEvent<HTMLElement>,
+      target: HTMLElement,
     ) => {
       if (event.pointerType === "touch") return;
       event.stopPropagation();
@@ -1298,7 +1377,6 @@ export function Workspace({
       const origin = { x: event.clientX, y: event.clientY };
       const start = { ...node.position };
       const size = businessNodeSize(node);
-      const target = event.currentTarget;
       target.setPointerCapture(event.pointerId);
       const move = (moveEvent: PointerEvent) => {
         const position = clampBusinessNodePosition(
@@ -1321,6 +1399,67 @@ export function Workspace({
       target.addEventListener("pointermove", move);
       target.addEventListener("pointerup", finish);
       target.addEventListener("pointercancel", finish);
+    };
+    const moveNode = (
+      node: IntentNode,
+      event: ReactPointerEvent<HTMLElement>,
+    ) => startNodeMove(node, event, event.currentTarget);
+    const moveNearestNode = (
+      event: ReactPointerEvent<HTMLDivElement>,
+    ) => {
+      if (
+        event.pointerType === "touch" ||
+        event.button !== 0 ||
+        (!event.ctrlKey && !event.metaKey) ||
+        surface.nodeLayoutLocked
+      )
+        return;
+      const viewport = event.currentTarget;
+      const candidates = [
+        ...viewport.querySelectorAll<HTMLElement>(
+          ".business-node[data-node-id]",
+        ),
+      ].flatMap((element, paintOrder) => {
+        const nodeId = element.dataset.nodeId;
+        const node = scope.children?.find(
+          (candidate) => candidate.id === nodeId,
+        );
+        if (!node) return [];
+        const rect = element.getBoundingClientRect();
+        const computedZIndex = Number.parseInt(
+          window.getComputedStyle(element).zIndex,
+          10,
+        );
+        let domDepth = 0;
+        let parent = element.parentElement;
+        while (parent && parent !== viewport) {
+          domDepth += 1;
+          parent = parent.parentElement;
+        }
+        return [
+          {
+            value: node,
+            bounds: {
+              left: rect.left,
+              top: rect.top,
+              right: rect.right,
+              bottom: rect.bottom,
+            },
+            zIndex: Number.isFinite(computedZIndex) ? computedZIndex : 0,
+            treeDepth:
+              businessNodeTreeDepth(projectedBusinessRoot, node.id) ?? 0,
+            domDepth,
+            paintOrder,
+          },
+        ];
+      });
+      const targetNode = pickBusinessNodeDragTarget(candidates, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+      if (!targetNode) return;
+      event.preventDefault();
+      startNodeMove(targetNode, event, viewport);
     };
     const resizeNode = (
       node: IntentNode,
@@ -1556,10 +1695,14 @@ export function Workspace({
             </p>
           )}
           <div
-          className="surface-business-viewport"
+          className={`surface-business-viewport ${spacePanReady ? "space-pan-ready" : ""} ${panningSurfaceId === surface.id ? "space-panning" : ""}`}
           aria-label={`${scope.name} 容器画布`}
-          title="Ctrl+滚轮或双指缩放；持续放大可下探到指针最近的子节点"
+          title="按住空格拖拽平移；Ctrl+拖拽移动鼠标附近的最上层节点；Ctrl+滚轮或双指缩放"
           onWheel={handleWheel}
+          onPointerDownCapture={(event) => {
+            if (spacePanReadyRef.current) startSpacePan(event);
+            else moveNearestNode(event);
+          }}
           onPointerDown={(event) => handleTouchPointer("down", event)}
           onPointerMove={(event) => handleTouchPointer("move", event)}
           onPointerUp={(event) => handleTouchPointer("up", event)}
