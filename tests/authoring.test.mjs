@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deepCopyIntentSubtree } from "../app/runtime/authoring.ts";
+import {
+  deepCopyIntentSubtree,
+  renameIntentNodeId,
+  updateIntentPortSchema,
+} from "../app/runtime/authoring.ts";
 import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts";
 
 const flatten = (node) => [
@@ -39,4 +43,60 @@ test("deep copies every descendant and rewrites only internal references", () =>
   );
   result.root.children[0].name = "changed";
   assert.notEqual(result.root.children[0].name, source.children[0].name);
+});
+
+test("renames node and port ids atomically across references", () => {
+  const root = structuredClone(createSampleBusinessRoot());
+  const source = root.children[0];
+  const target = root.children[1];
+  target.inputs[0].binding = {
+    kind: "ref",
+    nodeId: source.id,
+    portId: source.outputs[0].id,
+  };
+
+  const renamedNode = renameIntentNodeId(root, source.id, "renamed_flow");
+  assert.equal(renamedNode.ok, true);
+  assert.equal(renamedNode.value.children[0].id, "renamed_flow");
+  assert.equal(
+    renamedNode.value.children[1].inputs[0].binding.nodeId,
+    "renamed_flow",
+  );
+
+  const output = renamedNode.value.children[0].outputs[0];
+  const renamedPort = updateIntentPortSchema(
+    renamedNode.value,
+    "renamed_flow",
+    "outputs",
+    output.id,
+    { ...output, id: "renamed_output", channel: "event" },
+  );
+  assert.equal(renamedPort.ok, true);
+  assert.equal(
+    renamedPort.value.children[1].inputs[0].binding.portId,
+    "renamed_output",
+  );
+});
+
+test("blocks invalid schema changes and deleting referenced ports", () => {
+  const root = structuredClone(createSampleBusinessRoot());
+  const source = root.children[0];
+  const target = root.children[1];
+  target.inputs[0].binding = {
+    kind: "ref",
+    nodeId: source.id,
+    portId: source.outputs[0].id,
+  };
+
+  assert.equal(renameIntentNodeId(root, source.id, "").ok, false);
+  assert.equal(
+    updateIntentPortSchema(
+      root,
+      source.id,
+      "outputs",
+      source.outputs[0].id,
+      null,
+    ).ok,
+    false,
+  );
 });

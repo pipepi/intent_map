@@ -38,7 +38,11 @@ import {
   downloadExport,
   prepareDocumentExport,
 } from "./runtime/export";
-import { deepCopyIntentSubtree } from "./runtime/authoring";
+import {
+  deepCopyIntentSubtree,
+  renameIntentNodeId,
+  updateIntentPortSchema,
+} from "./runtime/authoring";
 import {
   MINIMIZED_NODE_SIZE,
   NodeProjection,
@@ -2023,6 +2027,92 @@ export default function Home() {
   const deleteSelected = () =>
     deleteBusinessNode(selectedBusinessNode.id);
 
+  const renameBusinessNode = (nodeId: string, nextId: string) => {
+    const result = renameIntentNodeId(documentState.rootIntent, nodeId, nextId);
+    if (!result.ok) {
+      setToast(`修改失败：${result.error}`);
+      return;
+    }
+    commit({
+      ...documentState,
+      businessRootId:
+        documentState.businessRootId === nodeId ? nextId : documentState.businessRootId,
+      rootIntent: result.value,
+      workspaceState: {
+        ...documentState.workspaceState,
+        panels: documentState.workspaceState.panels.map((panel) => ({
+          ...panel,
+          selection: {
+            ...panel.selection,
+            nodeIds: panel.selection.nodeIds.map((id) => id === nodeId ? nextId : id),
+            primaryNodeId:
+              panel.selection.primaryNodeId === nodeId
+                ? nextId
+                : panel.selection.primaryNodeId,
+          },
+        })),
+      },
+    });
+    setToast(`节点 ID 已更新为 ${nextId}`);
+  };
+
+  const editPortSchema = (
+    node: IntentNode,
+    direction: "inputs" | "outputs",
+    portId: string,
+    next: IntentNode["inputs"][number] | null,
+  ) => {
+    const result = updateIntentPortSchema(
+      documentState.rootIntent,
+      node.id,
+      direction,
+      portId,
+      next,
+    );
+    if (!result.ok) {
+      setToast(
+        `端口修改失败：${result.error}${
+          result.references?.length ? `（${result.references.join("、")}）` : ""
+        }`,
+      );
+      return;
+    }
+    commit({ ...documentState, rootIntent: result.value });
+    setToast(next ? `端口「${next.name}」已更新` : `端口「${portId}」已删除`);
+  };
+
+  const addPortSchema = (
+    node: IntentNode,
+    direction: "inputs" | "outputs",
+  ) => {
+    const port = {
+      id: uid(direction === "inputs" ? "input" : "output"),
+      name: direction === "inputs" ? "新输入" : "新输出",
+      type: "any" as const,
+      channel: "data" as const,
+    };
+    updateDocumentNode(node.id, (item) => ({
+      ...item,
+      [direction]: [...item[direction], port],
+    }));
+    setToast(`已新增${direction === "inputs" ? "输入" : "输出"}端口`);
+  };
+
+  const movePortSchema = (
+    node: IntentNode,
+    direction: "inputs" | "outputs",
+    index: number,
+    offset: -1 | 1,
+  ) => {
+    const nextIndex = index + offset;
+    if (nextIndex < 0 || nextIndex >= node[direction].length) return;
+    updateDocumentNode(node.id, (item) => {
+      const ports = [...item[direction]];
+      [ports[index], ports[nextIndex]] = [ports[nextIndex], ports[index]];
+      return { ...item, [direction]: ports };
+    });
+  };
+
   const duplicateAppNode = () => {
     const selected = findNode(scopeNode, selectedAppNodeId);
     if (!selected || selected.id === scopeNode.id) return;
@@ -2979,6 +3069,7 @@ export default function Home() {
       return (
         <div className="properties-surface">
           <div className="property-heading"><span>{contextualSubject.kind === "operator" ? "ƒ" : "◇"}</span><div><small>{contextualSubject.kind}</small><strong>{contextualSubject.name}</strong></div></div>
+          <label>节点 ID<input defaultValue={contextualSubject.id} key={contextualSubject.id} onBlur={(event) => event.target.value !== contextualSubject.id && renameBusinessNode(contextualSubject.id, event.target.value.trim())} /></label>
           <label>名称<input value={contextualSubject.name} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, name: event.target.value }))} /></label>
           <label>描述<textarea rows={3} value={contextualSubject.description} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, description: event.target.value }))} /></label>
           {contextualSubject.kind === "operator" && <label>内置算子<select value={contextualSubject.operator ?? "identity"} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, operator: event.target.value }))}><option value="identity">identity</option><option value="object">object</option><option value="array">array</option><option value="concat">concat</option></select></label>}
@@ -3002,6 +3093,22 @@ export default function Home() {
               ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputMapping(contextualSubject.id, port.id, event.target.value)}><option value="">未映射</option>{outputMappingOptionsFor(contextualSubject).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
               : <span key={port.id}><i />{port.name}<small>{port.type}</small></span>;
           })}</div>
+          {(["inputs", "outputs"] as const).map((direction) => (
+            <section className="port-schema-editor" key={direction}>
+              <header><strong>{direction === "inputs" ? "输入 Schema" : "输出 Schema"}</strong><button onClick={() => addPortSchema(contextualSubject, direction)}>＋ 新增</button></header>
+              {contextualSubject[direction].map((port, index) => (
+                <div className="port-schema-row" key={port.id}>
+                  <input aria-label="端口 ID" defaultValue={port.id} onBlur={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, id: event.target.value.trim() })} />
+                  <input aria-label="端口名称" value={port.name} onChange={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, name: event.target.value })} />
+                  <select aria-label="端口类型" value={port.type} onChange={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, type: event.target.value as typeof port.type })}><option value="any">any</option><option value="string">string</option><option value="number">number</option><option value="boolean">boolean</option><option value="object">object</option><option value="array">array</option></select>
+                  <select aria-label="端口通道" value={port.channel ?? "data"} onChange={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, channel: event.target.value as "data" | "event" })}><option value="data">data</option><option value="event">event</option></select>
+                  <button disabled={index === 0} onClick={() => movePortSchema(contextualSubject, direction, index, -1)}>↑</button>
+                  <button disabled={index === contextualSubject[direction].length - 1} onClick={() => movePortSchema(contextualSubject, direction, index, 1)}>↓</button>
+                  <button className="danger" onClick={() => editPortSchema(contextualSubject, direction, port.id, null)}>×</button>
+                </div>
+              ))}
+            </section>
+          ))}
           <div className="property-actions"><button onClick={() => contextAddress ? duplicateBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button onClick={() => createLinkedBusinessNode(contextualSubject.id, contextAddress?.panelId)} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建链接实例</button><button className="danger" onClick={() => contextAddress ? deleteBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
         </div>
       );
