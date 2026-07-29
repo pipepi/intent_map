@@ -23,7 +23,7 @@ test("keeps the v2 four-level sample business tree stable", () => {
     ["scenario_flow", "ui_consensus", "database_schema", "business_api"],
   );
   assert.equal(actor.outputs[0].id, "actors");
-  assert.deepEqual(root.outputs[0].mapping, {
+  assert.deepEqual(root.outputs[0].binding, {
     kind: "ref",
     nodeId: "business_api",
     portId: "api_contract",

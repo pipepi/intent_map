@@ -48,7 +48,7 @@ export const deepCopyIntentSubtree = (
     })),
     outputs: node.outputs.map((port) => ({
       ...structuredClone(port),
-      mapping: rewriteExpression(port.mapping, nodeIds),
+      binding: rewriteExpression(port.binding, nodeIds),
     })),
     children: node.children?.map(copy),
   });
@@ -120,7 +120,7 @@ export const renameIntentNodeId = (
       })),
       outputs: node.outputs.map((port) => ({
         ...port,
-        mapping: mapExpression(port.mapping, (reference) =>
+        binding: mapExpression(port.binding, (reference) =>
           reference.nodeId === nodeId ? { ...reference, nodeId: nextId } : reference,
         ),
       })),
@@ -149,7 +149,7 @@ const portReferences = (
         }
       };
       visit(port.binding);
-      visit(port.mapping);
+      visit(port.binding);
     });
     return node;
   });
@@ -217,7 +217,7 @@ export const updateIntentPortSchema = (
           (port) => ({ ...port, binding: rewrite(port.binding) }),
         ),
         outputs: (direction === "outputs" && node.id === nodeId ? ports : node.outputs).map(
-          (port) => ({ ...port, mapping: rewrite(port.mapping) }),
+          (port) => ({ ...port, binding: rewrite(port.binding) }),
         ),
       };
     }),

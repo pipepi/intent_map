@@ -247,7 +247,7 @@ const deriveScopeBoundaryEdges = (scope: IntentNode): ScopeBoundaryEdge[] => [
     ),
   ),
   ...scope.outputs.flatMap((output) =>
-    collectRefs(output.mapping).map((reference, index) => ({
+    collectRefs(output.binding).map((reference, index) => ({
       id: `scope-output:${reference.env ? "environment" : reference.nodeId}:${reference.portId}>${output.id}:${index}`,
       sourceKind: reference.env ? ("environment" as const) : ("node" as const),
       sourceId: reference.nodeId,
@@ -333,7 +333,7 @@ const collectValidationIssues = (scope: IntentNode): ValidationIssue[] => {
     }
   }
   for (const output of scope.outputs) {
-    if (!output.mapping) {
+    if (!output.binding) {
       issues.push({
         level: "warning",
         text: `容器输出「${output.name}」未映射`,
@@ -342,7 +342,7 @@ const collectValidationIssues = (scope: IntentNode): ValidationIssue[] => {
         scopeNodeId: scope.id,
       });
     }
-    for (const reference of collectRefs(output.mapping)) {
+    for (const reference of collectRefs(output.binding)) {
       if (reference.env) consumedEnvironment.add(reference.portId);
       if (reference.nodeId) {
         consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
@@ -477,7 +477,7 @@ const executeBusinessNode = async (
     const result = Object.fromEntries(
       node.outputs.map((output) => [
         output.id,
-        evaluateExpression(output.mapping, inputs, outputs),
+        evaluateExpression(output.binding, inputs, outputs),
       ]),
     );
     onTrace({
@@ -2522,7 +2522,7 @@ export default function Home() {
         ? `env:${port.id}`
         : `ref:${node.id}:${port.id}`;
       if (targetKind === "container-output") {
-        updateOutputMapping(targetNodeId, targetPortId, value);
+        updateOutputBinding(targetNodeId, targetPortId, value);
       } else {
         updateInputBinding(targetNodeId, targetPortId, value);
       }
@@ -2534,7 +2534,7 @@ export default function Home() {
     window.addEventListener("pointerup", up);
   };
 
-  const outputMappingOptionsFor = (node: IntentNode) => [
+  const outputBindingOptionsFor = (node: IntentNode) => [
     ...node.inputs.map((input) => ({
       value: `env:${input.id}`,
       label: `输入 · ${input.name}`,
@@ -2547,17 +2547,17 @@ export default function Home() {
     ),
   ];
 
-  const updateOutputMapping = (
+  const updateOutputBinding = (
     nodeId: string,
     portId: string,
     value: string,
   ) => {
-    let mapping: Expression | undefined;
+    let binding: Expression | undefined;
     if (value.startsWith("env:")) {
-      mapping = { kind: "ref", portId: value.slice(4), env: true };
+      binding = { kind: "ref", portId: value.slice(4), env: true };
     } else if (value.startsWith("ref:")) {
       const [, nodeIdValue, portIdValue] = value.split(":");
-      mapping = {
+      binding = {
         kind: "ref",
         nodeId: nodeIdValue,
         portId: portIdValue,
@@ -2566,7 +2566,7 @@ export default function Home() {
     updateDocumentNode(nodeId, (node) => ({
       ...node,
       outputs: node.outputs.map((output) =>
-        output.id === portId ? { ...output, mapping } : output,
+        output.id === portId ? { ...output, binding } : output,
       ),
     }));
   };
@@ -2722,7 +2722,7 @@ export default function Home() {
           startPipeDrag(businessScope, port, event, "environment")
         }
         onDisconnectContainerOutput={(port) => {
-          updateOutputMapping(businessScope.id, port.id, "");
+          updateOutputBinding(businessScope.id, port.id, "");
           setToast(`已断开当前容器输出「${port.name}」`);
         }}
         onAddChild={addBusinessChild}
@@ -3121,14 +3121,14 @@ export default function Home() {
             return <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateInputBinding(contextualSubject.id, port.id, event.target.value)}><option value="">未绑定</option>{bindingOptionsFor(contextualSubject.id).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>;
           })}</div>
           <div className="property-ports outputs"><strong>输出</strong>{contextualSubject.outputs.map((port) => {
-            const reference = collectRefs(port.mapping)[0];
+            const reference = collectRefs(port.binding)[0];
             const value = reference?.env
               ? `env:${reference.portId}`
               : reference?.nodeId
                 ? `ref:${reference.nodeId}:${reference.portId}`
                 : "";
             return contextualSubject.kind === "composite"
-              ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputMapping(contextualSubject.id, port.id, event.target.value)}><option value="">未映射</option>{outputMappingOptionsFor(contextualSubject).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
+              ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputBinding(contextualSubject.id, port.id, event.target.value)}><option value="">未映射</option>{outputBindingOptionsFor(contextualSubject).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
               : <span key={port.id}><i />{port.name}<small>{port.type}</small></span>;
           })}</div>
           {(["inputs", "outputs"] as const).map((direction) => (
@@ -3320,7 +3320,7 @@ export default function Home() {
         document={documentState}
         renderNodeContent={renderNodeContent}
         onUpdateInputBinding={updateInputBinding}
-        onUpdateOutputMapping={updateOutputMapping}
+        onUpdateOutputBinding={updateOutputBinding}
         onAddBusinessChild={(scopeId) =>
           addBusinessChild(scopeId, false)
         }

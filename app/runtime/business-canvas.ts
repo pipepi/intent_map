@@ -13,7 +13,7 @@ type BusinessIntentNode = {
   outputs: Array<{
     id: string;
     channel?: "data" | "event";
-    mapping?: Expression;
+    binding?: Expression;
   }>;
   children?: BusinessIntentNode[];
   position: { x: number; y: number };
@@ -332,7 +332,7 @@ export const deriveBusinessVisualEdges = (
     ),
   );
   const outputEdges = scope.outputs.flatMap((output) =>
-    collectExpressionRefs(output.mapping).map((reference, index) => ({
+    collectExpressionRefs(output.binding).map((reference, index) => ({
       id: `output:${reference.env ? "env" : reference.nodeId}:${reference.portId}>${output.id}:${index}`,
       sourceKind: reference.env ? ("environment" as const) : ("node" as const),
       sourceId: reference.nodeId,

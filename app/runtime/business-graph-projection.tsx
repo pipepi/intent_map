@@ -148,7 +148,7 @@ export function BusinessGraphProjection({
                 data-port-id={port.id}
                 onDoubleClick={(event) => {
                   event.stopPropagation();
-                  if (port.mapping) onDisconnectContainerOutput(port);
+                  if (port.binding) onDisconnectContainerOutput(port);
                 }}
                 style={{
                   top:

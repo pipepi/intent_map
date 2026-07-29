@@ -75,7 +75,7 @@ const scope = {
       id: "container_output",
       name: "Result",
       type: "string",
-      mapping: {
+      binding: {
         kind: "ref",
         nodeId: "target",
         portId: "target_output",

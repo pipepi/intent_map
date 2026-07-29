@@ -152,8 +152,8 @@ test("keeps the root functional graph and current-container reference", () => {
   assert.equal(
     currentContainer.outputs.every(
       (output) =>
-        output.mapping?.kind === "ref" &&
-        output.mapping.nodeId === ACTIVE_BUSINESS_SCOPE_REF_ID,
+        output.binding?.kind === "ref" &&
+        output.binding.nodeId === ACTIVE_BUSINESS_SCOPE_REF_ID,
     ),
     true,
   );

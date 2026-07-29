@@ -23,7 +23,7 @@ test("deep copies every descendant and rewrites only internal references", () =>
     nodeId: "external_node",
     portId: "external_port",
   };
-  source.outputs[0].mapping = {
+  source.outputs[0].binding = {
     kind: "ref",
     nodeId: descendants.at(-1).id,
     portId: descendants.at(-1).outputs[0]?.id ?? "leaf_output",
@@ -40,7 +40,7 @@ test("deep copies every descendant and rewrites only internal references", () =>
   );
   assert.equal(result.root.inputs[0].binding.nodeId, "external_node");
   assert.equal(
-    result.root.outputs[0].mapping.nodeId,
+    result.root.outputs[0].binding.nodeId,
     `copy_${descendants.at(-1).id}`,
   );
   result.root.children[0].name = "changed";

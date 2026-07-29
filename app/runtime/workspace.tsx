@@ -76,7 +76,7 @@ type WorkspaceProps = {
     portId: string,
     value: string,
   ) => void;
-  onUpdateOutputMapping: (
+  onUpdateOutputBinding: (
     nodeId: string,
     portId: string,
     value: string,
@@ -417,7 +417,7 @@ export function Workspace({
   onSaveViewAs,
   renderNodeContent,
   onUpdateInputBinding,
-  onUpdateOutputMapping,
+  onUpdateOutputBinding: onUpdateOutputBinding,
   onAddBusinessChild,
   onFeedback,
 }: WorkspaceProps) {
@@ -1588,7 +1588,7 @@ export function Workspace({
             ? `env:${port.id}`
             : `ref:${node.id}:${port.id}`;
         if (targetKind === "container-output") {
-          onUpdateOutputMapping(targetNodeId, targetPortId, value);
+          onUpdateOutputBinding(targetNodeId, targetPortId, value);
         } else {
           onUpdateInputBinding(targetNodeId, targetPortId, value);
         }
@@ -1767,7 +1767,7 @@ export function Workspace({
                 startPipe(scope, port, event, "environment")
               }
               onDisconnectContainerOutput={(port) =>
-                onUpdateOutputMapping(scope.id, port.id, "")
+                onUpdateOutputBinding(scope.id, port.id, "")
               }
               onAddChild={() => onAddBusinessChild(scope.id)}
              />

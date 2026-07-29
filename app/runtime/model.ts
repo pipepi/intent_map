@@ -25,7 +25,6 @@ export type IntentPort = {
   type: ValueType;
   channel?: PortChannel;
   binding?: Expression;
-  mapping?: Expression;
 };
 
 export type NodeKind =
@@ -352,7 +351,7 @@ const wireCurrentContainerReference = (node: IntentNode): IntentNode => {
     ],
     outputs: node.outputs.map((output) => ({
       ...output,
-      mapping: {
+      binding: {
         kind: "ref",
         nodeId: ACTIVE_BUSINESS_SCOPE_REF_ID,
         portId: output.id,

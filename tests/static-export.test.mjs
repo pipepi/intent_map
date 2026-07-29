@@ -420,7 +420,7 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /createApplicationDocument\(clone\(businessRoot\)/);
   assert.match(page, /bindingOptionsFor/);
   assert.match(page, /updateInputBinding/);
-  assert.match(page, /updateOutputMapping/);
+  assert.match(page, /updateOutputBinding/);
   assert.match(page, /moveBusinessNodeStart/);
   assert.match(page, /resizeBusinessNodeStart/);
   assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);

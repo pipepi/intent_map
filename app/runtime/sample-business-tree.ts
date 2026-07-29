@@ -177,7 +177,7 @@ export const createSampleBusinessRoot = (): IntentNode => {
         id: "delivery_blueprint",
         name: "可实施软件交付蓝图",
         type: "object",
-        mapping: {
+        binding: {
           kind: "ref",
           nodeId: "business_api",
           portId: "api_contract",
