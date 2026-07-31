@@ -1,5 +1,43 @@
 "use client";
 
+/**
+ * ============================================================================
+ * Intent Map 主页面（一切皆管道 · v3）
+ * ----------------------------------------------------------------------------
+ * 本文件是整个应用的主编辑画布，核心概念：
+ *
+ * 【两棵节点树 / 两个"域"】
+ *   - 应用域（app）：运行时节点图，即编辑器的系统 UI 本身（工具栏、树面板、
+ *     属性面板等都是"应用节点"），由 rootIntent 描述。
+ *   - 业务域（business）：用户真正编辑的业务意图树，嵌在应用树中，
+ *     由 businessRoot 描述，通过 ACTIVE_BUSINESS_SCOPE_REF_ID 引用节点接入。
+ *
+ * 【作用域钻取】
+ *   - navigationStack: ScopeAddress[] 记录当前钻取路径，栈顶 = 当前作用域；
+ *     每层作用域是一块可平移缩放的画布（freeCanvas），双击进入、Esc 返回。
+ *
+ * 【事件管线】
+ *   - 所有 UI 操作不直接改状态，而是 dispatchRuntimeEvent() 入队，
+ *     由"事件时钟"effect 批量处理（processEventBatch），产生 runtimeState
+ *     （scopeId / selectionId / layoutLocked 等）与命令（lastCommands），
+ *     再由命令处理器 effect 执行真正的文档操作，保证可审计、可重放。
+ *
+ * 【文档与撤销】
+ *   - documentState 是唯一事实源（IntentDocumentV3）；commit() 进历史栈
+ *     （可撤销），commitView() 只改视图投影（布局/相机，不进历史）。
+ *
+ * 文件结构自上而下：
+ *   1. 纯函数工具区（树操作 / 表达式求值 / 校验 / 业务执行器）
+ *   2. Home 组件：状态与 refs
+ *   3. 作用域派生（六个核心渲染条件在这里计算）
+ *   4. 相机、导航、快捷键
+ *   5. 指针交互（平移 / 节点拖拽缩放 / 连线）
+ *   6. 文档操作（导入导出 / 模块 / 节点增删改）
+ *   7. 渲染函数（renderNodeContent / renderBusinessScopeLayer / 边渲染）
+ *   8. 主 JSX（条件渲染矩阵集中在 freeCanvas 的 root-boundary 内）
+ * ============================================================================
+ */
+
 import {
   Fragment,
   useCallback,
@@ -8,7 +46,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 
@@ -20,8 +57,6 @@ import {
   getBusinessRoot,
   loadIntentDocument,
   nodeDisplayMode,
-  removeNodeFromPanelSelections,
-  resolveFeatureContext,
   scopeCameraKey,
   serializeIntentDocument,
   updatePanel,
@@ -31,7 +66,6 @@ import {
   type IntentDocumentV3,
   type IntentNode,
   type JsonValue,
-  type PublishedModule,
   type ScopeAddress,
   type WorkspaceState,
 } from "./runtime/model";
@@ -40,20 +74,16 @@ import {
   prepareDocumentExport,
 } from "./runtime/export";
 import {
-  deepCopyIntentSubtree,
   renameIntentNodeId,
   updateIntentPortSchema,
-  validatePortConnection,
 } from "./runtime/authoring";
 import {
   MINIMIZED_NODE_SIZE,
   NodeProjection,
   resizeDirectionsFor,
   runtimeNodeRenderSize,
-  type ResizeDirection,
 } from "./runtime/node-renderer";
 import {
-  resolveRenderer,
   type RuntimeCommand,
 } from "./runtime/registry";
 import {
@@ -63,28 +93,19 @@ import {
   runPipLoader,
 } from "./runtime/pip";
 import {
-  cameraForTouchGesture,
   scaleForWheelGesture,
 } from "./runtime/camera";
 import {
-  PROJECTION_LOD_THRESHOLD,
   defaultNodeProjectionLayout,
   projectIntentTree,
 } from "./runtime/projection";
-import { createSampleBusinessRoot } from "./runtime/sample-business-tree";
 import { Workspace } from "./runtime/workspace";
 import {
-  BUSINESS_PORT_ROW,
-  BUSINESS_PORT_TOP,
   businessNodeSize,
-  clampBusinessNodePosition,
   deriveBusinessVisualEdges,
-  resizeBusinessNodeGeometry,
 } from "./runtime/business-canvas";
-import { BusinessGraphProjection } from "./runtime/business-graph-projection";
 import {
   deriveNodeBindingEdges,
-  type NodeBindingEdge,
 } from "./runtime/panel-pipelines";
 import {
   createRuntimeEvent,
@@ -94,448 +115,105 @@ import {
   type RuntimeCommand as PipelineCommand,
   type RuntimeEvent,
 } from "./runtime/pipeline";
+// ---- 从本文件拆出的功能模块（app/editor/）----
+import {
+  FIT_VIEW_PADDING,
+  MAX_SCALE,
+  MIN_SCALE,
+  PORT_ROW,
+  PORT_TOP,
+} from "./editor/constants";
+import {
+  clone,
+  findNode,
+  findPath,
+  freePanelContext,
+  nodeResizeMode,
+  nodeSize,
+  removeNode,
+  sampleDocument,
+  uid,
+  updateNode,
+} from "./editor/tree-utils";
+import {
+  aggregateEdges,
+  deriveScopeBoundaryEdges,
+} from "./editor/bindings";
+import { collectValidationIssues } from "./editor/validation";
+import { computeLaneAutoLayout } from "./editor/auto-layout";
+import { executeBusinessNode, type Trace } from "./editor/executor";
+import { downloadBytes } from "./editor/download";
+import {
+  renderNodeSurface,
+  type NodeSurfaceDeps,
+} from "./editor/node-surfaces";
+import {
+  createMoveNodeStart,
+  createResizeNodeStart,
+  createResizeScopeCanvasStart,
+  createViewportPointerDownHandler,
+  type PointerGestureDeps,
+} from "./editor/pointer-gestures";
+import {
+  createAddBusinessChild,
+  createCreateLinkedBusinessNode,
+  createDeleteBusinessNode,
+  createDuplicateBusinessNode,
+  createInsertModule,
+  createMoveBusinessNodeStart,
+  createPublishModule,
+  createResizeBusinessNodeStart,
+  createStartPipeDrag,
+  createToggleBusinessDisplayMode,
+  createToggleBusinessResizeMode,
+  type BusinessOpsDeps,
+  type PendingPipeState,
+} from "./editor/business-ops";
+import {
+  renderEdge,
+  renderScopeBoundaryEdge,
+  type EdgeRendererDeps,
+} from "./editor/edge-renderer";
+import {
+  BusinessScopeLayer,
+  type BusinessScopeLayerDeps,
+} from "./editor/business-scope-layer";
 
-type Trace = {
-  id: string;
-  name: string;
-  path: string;
-  status: "waiting" | "running" | "success" | "failed" | "skipped" | "cancelled";
-  duration?: number;
-  output?: Record<string, unknown>;
-  error?: string;
-};
+// ============================================================================
+// 画布交互常量 → ./editor/constants
+// 树操作 / 绑定 / 校验 / 执行器等纯函数 → ./editor/{tree-utils,bindings,validation,executor}
+// ============================================================================
 
-type AggregatedEdge = NodeBindingEdge & {
-  count: number;
-  members: NodeBindingEdge[];
-};
-
-type ScopeBoundaryEdge = {
-  id: string;
-  sourceKind: "environment" | "node";
-  sourceId?: string;
-  sourcePortId: string;
-  targetKind: "node" | "container-output";
-  targetId?: string;
-  targetPortId: string;
-  channel: "data" | "event";
-};
-
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 2;
-const NODE_MIN_SIZE = { width: 220, height: 140 };
-const NODE_MAX_SIZE = { width: 1200, height: 900 };
-const ROOT_CANVAS_MIN_SIZE = { width: 640, height: 420 };
-const ROOT_CANVAS_MAX_SIZE = { width: 8000, height: 6000 };
-const ROOT_CANVAS_PADDING = 40;
-const FIT_VIEW_PADDING = 56;
-const PORT_ROW = 26;
-const PORT_TOP = 65;
-
-const uid = (prefix = "id") =>
-  `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
-
-const sampleDocument = () =>
-  createApplicationDocument(createSampleBusinessRoot());
-
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
-const findNode = (node: IntentNode, id: string): IntentNode | undefined => {
-  if (node.id === id) return node;
-  for (const child of node.children ?? []) {
-    const found = findNode(child, id);
-    if (found) return found;
-  }
-  return undefined;
-};
-
-const findPath = (node: IntentNode, id: string, path: IntentNode[] = []): IntentNode[] | null => {
-  const next = [...path, node];
-  if (node.id === id) return next;
-  for (const child of node.children ?? []) {
-    const found = findPath(child, id, next);
-    if (found) return found;
-  }
-  return null;
-};
-
-const freePanelContext = (document: IntentDocumentV3) => {
-  const panel = document.workspaceState.panels.find(
-    (candidate) => candidate.id === "panel-free-layout",
-  );
-  const candidate = panel?.surfaces.find(
-    (surface) => surface.id === panel.activeContainerSurfaceId,
-  );
-  const container =
-    candidate?.kind === "current-container" ? candidate : undefined;
-  const addresses: ScopeAddress[] = container
-    ? [...container.navigationStack]
-    : [
-        {
-          domain: "business",
-          nodeId: document.businessRootId,
-          viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-        },
-      ];
-  if (addresses[0]?.nodeId !== document.rootIntent.id) {
-    addresses.unshift({ domain: "app", nodeId: document.rootIntent.id });
-  }
-  return {
-    navigationStack: addresses,
-    scopeId: container?.scope.nodeId ?? document.businessRootId,
-    selectionId:
-      panel?.selection.primaryNodeId ?? document.businessRootId,
-  };
-};
-
-const updateNode = (
-  node: IntentNode,
-  id: string,
-  updater: (target: IntentNode) => IntentNode,
-): IntentNode => {
-  if (node.id === id) return updater(node);
-  return {
-    ...node,
-    children: node.children?.map((child) => updateNode(child, id, updater)),
-  };
-};
-
-const removeNode = (node: IntentNode, id: string): IntentNode => ({
-  ...node,
-  children: node.children
-    ?.filter((child) => child.id !== id)
-    .map((child) => removeNode(child, id)),
-});
-
-const collectRefs = (expression?: Expression): Array<Extract<Expression, { kind: "ref" }>> => {
-  if (!expression) return [];
-  if (expression.kind === "ref") return [expression];
-  if (expression.kind === "op") return expression.args.flatMap(collectRefs);
-  return [];
-};
-
-const nodeSize = (node: IntentNode) => node.size ?? { width: 320, height: 220 };
-const nodeResizeMode = (node: IntentNode) => node.resizeMode ?? "simple";
-const aggregateEdges = (edges: NodeBindingEdge[]): AggregatedEdge[] => {
-  const groups = new Map<string, NodeBindingEdge[]>();
-  for (const edge of edges) {
-    const key = `${edge.sourceNodeId}>${edge.targetNodeId}:${edge.channel}`;
-    groups.set(key, [...(groups.get(key) ?? []), edge]);
-  }
-  return [...groups.entries()].map(([id, members]) => ({
-    ...members[0],
-    id,
-    count: members.length,
-    members,
-  }));
-};
-
-const deriveScopeBoundaryEdges = (scope: IntentNode): ScopeBoundaryEdge[] => [
-  ...(scope.children ?? []).flatMap((target) =>
-    target.inputs.flatMap((input) =>
-      collectRefs(input.binding)
-        .filter((reference) => reference.env)
-        .map((reference, index) => ({
-          id: `environment:${reference.portId}>${target.id}:${input.id}:${index}`,
-          sourceKind: "environment" as const,
-          sourcePortId: reference.portId,
-          targetKind: "node" as const,
-          targetId: target.id,
-          targetPortId: input.id,
-          channel: input.channel ?? "data",
-        })),
-    ),
-  ),
-  ...scope.outputs.flatMap((output) =>
-    collectRefs(output.binding).map((reference, index) => ({
-      id: `scope-output:${reference.env ? "environment" : reference.nodeId}:${reference.portId}>${output.id}:${index}`,
-      sourceKind: reference.env ? ("environment" as const) : ("node" as const),
-      sourceId: reference.nodeId,
-      sourcePortId: reference.portId,
-      targetKind: "container-output" as const,
-      targetPortId: output.id,
-      channel: output.channel ?? "data",
-    })),
-  ),
-];
-
-const detectCycle = (scope: IntentNode): string[] | null => {
-  const dataEdges = deriveNodeBindingEdges(scope).filter(
-    (edge) => edge.channel === "data",
-  );
-  const graph = new Map<string, string[]>();
-  (scope.children ?? []).forEach((child) => graph.set(child.id, []));
-  dataEdges.forEach((edge) =>
-    graph.get(edge.targetNodeId)?.push(edge.sourceNodeId),
-  );
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const walk = (id: string, path: string[]): string[] | null => {
-    if (visiting.has(id)) return [...path, id];
-    if (visited.has(id)) return null;
-    visiting.add(id);
-    for (const dependency of graph.get(id) ?? []) {
-      const found = walk(dependency, [...path, id]);
-      if (found) return found;
-    }
-    visiting.delete(id);
-    visited.add(id);
-    return null;
-  };
-  for (const id of graph.keys()) {
-    const found = walk(id, []);
-    if (found) return found;
-  }
-  return null;
-};
-
-type ValidationIssue = {
-  level: "error" | "warning" | "info";
-  text: string;
-  nodeId: string;
-  portId?: string;
-  edgeId?: string;
-  scopeNodeId: string;
-};
-
-const collectValidationIssues = (scope: IntentNode): ValidationIssue[] => {
-  const issues: ValidationIssue[] = [];
-  const cycle = detectCycle(scope);
-  if (cycle) {
-    issues.push({
-      level: "error",
-      text: `循环依赖：${cycle.join(" → ")}`,
-      nodeId: cycle[0] ?? scope.id,
-      edgeId: `cycle:${cycle.join(">")}`,
-      scopeNodeId: scope.id,
-    });
-  }
-  const children = scope.children ?? [];
-  const consumedEnvironment = new Set<string>();
-  const consumedOutputs = new Set<string>();
-  for (const child of children) {
-    for (const input of child.inputs) {
-      if (!input.binding) {
-        issues.push({
-          level: "warning",
-          text: `「${child.name}」输入「${input.name}」未绑定`,
-          nodeId: child.id,
-          portId: input.id,
-          scopeNodeId: scope.id,
-        });
-      }
-      for (const reference of collectRefs(input.binding)) {
-        if (reference.env) consumedEnvironment.add(reference.portId);
-        if (reference.nodeId) {
-          consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
-        }
-      }
-    }
-  }
-  for (const output of scope.outputs) {
-    if (!output.binding) {
-      issues.push({
-        level: "warning",
-        text: `容器输出「${output.name}」未映射`,
-        nodeId: scope.id,
-        portId: output.id,
-        scopeNodeId: scope.id,
-      });
-    }
-    for (const reference of collectRefs(output.binding)) {
-      if (reference.env) consumedEnvironment.add(reference.portId);
-      if (reference.nodeId) {
-        consumedOutputs.add(`${reference.nodeId}:${reference.portId}`);
-      }
-    }
-  }
-  for (const port of scope.inputs) {
-    if (!consumedEnvironment.has(port.id)) {
-      issues.push({
-        level: "info",
-        text: `环境输入「${port.name}」未被任何节点消费`,
-        nodeId: scope.id,
-        portId: port.id,
-        scopeNodeId: scope.id,
-      });
-    }
-  }
-  for (const child of children) {
-    if (
-      child.outputs.length > 0 &&
-      child.outputs.every(
-        (output) => !consumedOutputs.has(`${child.id}:${output.id}`),
-      )
-    ) {
-      issues.push({
-        level: "info",
-        text: `「${child.name}」的输出未被消费`,
-        nodeId: child.id,
-        portId: child.outputs[0]?.id,
-        scopeNodeId: scope.id,
-      });
-    }
-  }
-  return issues;
-};
-
-const evaluateExpression = (
-  expression: Expression | undefined,
-  environment: Record<string, unknown>,
-  outputs: Map<string, Record<string, unknown>>,
-): unknown => {
-  if (!expression) return undefined;
-  if (expression.kind === "const") return expression.value;
-  if (expression.kind === "ref") {
-    if (expression.env) return environment[expression.portId];
-    return expression.nodeId ? outputs.get(expression.nodeId)?.[expression.portId] : undefined;
-  }
-  const values = expression.args.map((argument) =>
-    evaluateExpression(argument, environment, outputs),
-  );
-  if (expression.op === "concat") return values.join("");
-  if (expression.op === "add") return values.reduce<number>((sum, value) => sum + Number(value), 0);
-  if (expression.op === "and") return values.every(Boolean);
-  if (expression.op === "or") return values.some(Boolean);
-  if (expression.op === "array") return values;
-  return values[0];
-};
-
-const executeBusinessNode = async (
-  node: IntentNode,
-  inputs: Record<string, unknown>,
-  path: string,
-  onTrace: (trace: Trace) => void,
-  cancelled: () => boolean,
-): Promise<Record<string, unknown>> => {
-  if (cancelled()) throw new Error("cancelled");
-  const started = performance.now();
-  onTrace({ id: node.id, name: node.name, path, status: "running" });
-  try {
-    if (!node.children?.length) {
-      let value: unknown = Object.values(inputs)[0];
-      if (node.operator === "object") value = { ...inputs };
-      if (node.operator === "array") value = Object.values(inputs);
-      if (node.operator === "concat") value = Object.values(inputs).join("");
-      const result = Object.fromEntries(
-        node.outputs.map((output, index) => [
-          output.id,
-          index === 0 ? value : undefined,
-        ]),
-      );
-      onTrace({
-        id: node.id,
-        name: node.name,
-        path,
-        status: "success",
-        duration: Math.round(performance.now() - started),
-        output: result,
-      });
-      return result;
-    }
-    const cycle = detectCycle(node);
-    if (cycle) throw new Error(`循环依赖：${cycle.join(" → ")}`);
-    const outputs = new Map<string, Record<string, unknown>>();
-    const pending = new Set(node.children.map((child) => child.id));
-    while (pending.size) {
-      if (cancelled()) throw new Error("cancelled");
-      const ready = node.children.filter(
-        (child) =>
-          pending.has(child.id) &&
-          child.inputs.every((input) =>
-            collectRefs(input.binding).every(
-              (reference) => reference.env || !reference.nodeId || outputs.has(reference.nodeId),
-            ),
-          ),
-      );
-      if (!ready.length) throw new Error(`作用域 ${path} 中存在无法解析的依赖`);
-      const resolved = await Promise.all(
-        ready.map(async (child) => {
-          const childInputs = Object.fromEntries(
-            child.inputs.map((input) => [
-              input.id,
-              evaluateExpression(input.binding, inputs, outputs),
-            ]),
-          );
-          return [
-            child.id,
-            await executeBusinessNode(
-              child,
-              childInputs,
-              `${path} / ${child.name}`,
-              onTrace,
-              cancelled,
-            ),
-          ] as const;
-        }),
-      );
-      resolved.forEach(([id, result]) => {
-        outputs.set(id, result);
-        pending.delete(id);
-      });
-    }
-    const result = Object.fromEntries(
-      node.outputs.map((output) => [
-        output.id,
-        evaluateExpression(output.binding, inputs, outputs),
-      ]),
-    );
-    onTrace({
-      id: node.id,
-      name: node.name,
-      path,
-      status: "success",
-      duration: Math.round(performance.now() - started),
-      output: result,
-    });
-    return result;
-  } catch (error) {
-    onTrace({
-      id: node.id,
-      name: node.name,
-      path,
-      status: error instanceof Error && error.message === "cancelled" ? "cancelled" : "failed",
-      duration: Math.round(performance.now() - started),
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
-};
-
-const downloadBytes = (name: string, bytes: Uint8Array, type: string) => {
-  const blob = new Blob([bytes as BlobPart], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
-};
+// ============================================================================
+// 主组件
+// ============================================================================
 
 export default function Home() {
+  // ---- 文档与历史 ----
+  // documentState 是唯一事实源；history/future 支撑撤销/重做（各保留约 30 步）。
   const [documentState, setDocumentState] = useState<IntentDocumentV3>(() => sampleDocument());
   const [history, setHistory] = useState<IntentDocumentV3[]>([]);
   const [future, setFuture] = useState<IntentDocumentV3[]>([]);
+  // ---- 作用域导航 ----
+  // 钻取路径栈：栈顶 = 当前作用域；初始值从持久化的自由布局面板恢复。
   const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>(() =>
     freePanelContext(sampleDocument()).navigationStack,
   );
-  const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container");
-  const [camera, setCamera] = useState<CameraState>({ scale: 0.5, x: 12, y: 12 });
-  const [search, setSearch] = useState("");
-  const [dirty, setDirty] = useState(false);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [scopeLegendOpen, setScopeLegendOpen] = useState(false);
-  const [pendingPipe, setPendingPipe] = useState<{
-    sourceKind: "environment" | "node";
-    sourceNodeId: string;
-    sourcePortId: string;
-    sourcePortName: string;
-    from: { x: number; y: number };
-    to: { x: number; y: number };
-  } | null>(null);
-  const [toast, setToast] = useState("");
+  // ---- 画布视图状态 ----
+  const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container"); // 应用域选中节点
+  const [camera, setCamera] = useState<CameraState>({ scale: 0.5, x: 12, y: 12 }); // 平移 x/y + 缩放 scale
+  const [search, setSearch] = useState("");          // 意图树搜索关键字
+  const [dirty, setDirty] = useState(false);         // 有未导出修改（关闭页面前提示）
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null); // 选中的聚合管道边
+  const [scopeLegendOpen, setScopeLegendOpen] = useState(false);             // 管道图例弹层
+  // 正在拖拽中的连线（从端口拉出、尚未落点），null = 未在连线
+  const [pendingPipe, setPendingPipe] = useState<PendingPipeState>(null);
+  const [toast, setToast] = useState("");            // 轻提示文案（2.4s 自动消失）
+  // ---- 业务执行 ----
   const [runState, setRunState] = useState<"idle" | "running" | "success" | "failed">("idle");
-  const [trace, setTrace] = useState<Trace[]>([]);
+  const [trace, setTrace] = useState<Trace[]>([]);   // 执行轨迹（运行面板逐行展示）
+  // ---- 事件管线（见文件头说明）----
+  // runtimeState 是事件处理器归约出的运行时状态：当前业务作用域、选中、布局锁等。
   const [runtimeState, setRuntimeState] = useState<ApplicationRuntimeState>({
     scopeId: "business_root",
     selectionId: "scenario_flow",
@@ -543,10 +221,11 @@ export default function Home() {
     documentRevision: 0,
     lastEventType: "BOOT",
   });
-  const [pendingEvents, setPendingEvents] = useState<RuntimeEvent[]>([]);
-  const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceEntry[]>([]);
-  const [lastCommands, setLastCommands] = useState<PipelineCommand[]>([]);
-  const [eventTick, setEventTick] = useState(0);
+  const [pendingEvents, setPendingEvents] = useState<RuntimeEvent[]>([]);       // 待处理事件队列
+  const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceEntry[]>([]); // 事件流水（保留最近 ~100 条）
+  const [lastCommands, setLastCommands] = useState<PipelineCommand[]>([]);      // 最近一批事件产生的命令
+  const [eventTick, setEventTick] = useState(0);     // 事件时钟：每批事件处理完 +1
+  /** 导出当前文档为 v3 JSON 文件（带 SHA-256 校验），导出成功后清除 dirty 标记。 */
   const exportDocument = async (source: IntentDocumentV3 = documentState) => {
     const result = await prepareDocumentExport(serializeIntentDocument(source));
     if (!result.ok) {
@@ -560,14 +239,17 @@ export default function Home() {
     );
     return result;
   };
+  // 业务根节点的运行输入值（运行面板中可编辑，object/array 类型按 JSON 解析）
   const [rootInput, setRootInput] = useState<Record<string, unknown>>({
     product_goal: "构建可验证、可持续演进的业务应用",
     business_constraints: "确定性、可审计、严格模块边界",
     stakeholders: "需求方, 产品设计, 工程实现",
   });
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cancelRunRef = useRef(false);
+  // ---- Refs（不触发重渲染的可变引用）----
+  const viewportRef = useRef<HTMLDivElement>(null);   // 画布视口 DOM（测尺寸/坐标换算）
+  const fileInputRef = useRef<HTMLInputElement>(null); // 隐藏的导入文件选择框
+  const cancelRunRef = useRef(false);                  // 业务执行取消标记
+  // 快捷键处理器通过该 ref 访问最新的动作与状态，避免键盘 effect 反复重挂
   const actionRefs = useRef<{
     undo: () => void;
     redo: () => void;
@@ -581,24 +263,30 @@ export default function Home() {
     selectedAppNodeId: string;
     selectedBusinessNodeId: string;
   } | null>(null);
-  const cameraRef = useRef(camera);
-  const lastEnterAtRef = useRef(0);
-  const fitOnNextScopeRef = useRef(false);
-  const resetScaleOnNextScopeRef = useRef(false);
-  const touchPointersRef = useRef(
+  const cameraRef = useRef(camera);            // 相机最新值（拖拽手势闭包中读取，避免过期）
+  const lastEnterAtRef = useRef(0);            // 上次进入节点时间戳（280ms 内防抖，防双击误触发两次）
+  const fitOnNextScopeRef = useRef(false);     // 切换作用域后：下一帧自动"适应视图"
+  const resetScaleOnNextScopeRef = useRef(false); // 切换作用域后：下一帧重置为 100% 居中
+  const touchPointersRef = useRef(             // 触屏活跃触点表（pointerId → 坐标，支持双指）
     new Map<number, { x: number; y: number }>(),
   );
 
+  // 一次触摸手势的起始快照：起始相机、触点中心、双指间距、是否允许单指平移
   const touchGestureRef = useRef<{
     startCamera: CameraState;
     startCenter: { x: number; y: number };
     startDistance?: number;
     allowSinglePan: boolean;
   } | null>(null);
-  const businessScopeId = runtimeState.scopeId;
-  const selectedBusinessNodeId = runtimeState.selectionId;
-  const layoutLocked = runtimeState.layoutLocked;
+  // ---- runtimeState 的三个常用字段别名（事件管线归约结果）----
+  const businessScopeId = runtimeState.scopeId;         // 当前业务作用域节点 id
+  const selectedBusinessNodeId = runtimeState.selectionId; // 业务域选中节点 id
+  const layoutLocked = runtimeState.layoutLocked;       // 布局锁定：禁止一切拖拽/缩放
 
+  /**
+   * 事件管线入口：所有 UI 操作统一调用它把事件投入 pendingEvents 队列，
+   * 由下方"事件时钟"effect 批量归约成新的 runtimeState 与命令。
+   */
   const dispatchRuntimeEvent = useCallback(
     (
       type: string,
@@ -613,12 +301,17 @@ export default function Home() {
     [],
   );
 
+  /** 切换业务作用域：发 NAVIGATE_SCOPE 事件，由事件管线更新 runtimeState.scopeId。 */
   const setBusinessScopeId = useCallback(
     (scopeId: string) =>
       dispatchRuntimeEvent("NAVIGATE_SCOPE", "scope-navigation", { scopeId }),
     [dispatchRuntimeEvent],
   );
 
+  /**
+   * 选中业务节点：一方面发 SELECT_NODE 事件更新 runtimeState.selectionId，
+   * 另一方面同步持久化到自由布局面板的 selection（供视图保存/恢复）。
+   */
   const setSelectedBusinessNodeId = useCallback(
     (nodeId: string) => {
       dispatchRuntimeEvent("SELECT_NODE", "node-selection", { nodeId });
@@ -644,6 +337,11 @@ export default function Home() {
     [dispatchRuntimeEvent],
   );
 
+  /**
+   * 事件时钟：pendingEvents 非空时推进一个 tick，调用 processEventBatch
+   * 把整批事件原子地归约成新 runtimeState + 事件流水 + 命令列表；
+   * 命令列表由后面的 lastCommands effect 消费执行。
+   */
   useEffect(() => {
     if (!pendingEvents.length) return;
     const tick = eventTick + 1;
@@ -662,11 +360,14 @@ export default function Home() {
     }
   }, [eventTick, pendingEvents, runtimeState]);
 
+  // ---- 两棵树的投影 ----
+  // freeContainer：自由布局面板的容器 surface，持久化各作用域的相机与节点布局投影。
   const freeContainer = getContainerSurface(
     documentState,
     "panel-free-layout",
     "free-layout-container",
   );
+  // appRoot：把 rootIntent 投影成带布局信息的应用节点树（业务树以引用节点形式挂在其中）。
   const appRoot = useMemo(
     () =>
       projectIntentTree(
@@ -680,6 +381,7 @@ export default function Home() {
       freeContainer?.projections,
     ],
   );
+  // businessRoot：从投影后的应用树中解引用出业务意图树的根。
   const businessRoot = useMemo(
     () =>
       getBusinessRoot({
@@ -688,13 +390,21 @@ export default function Home() {
       }),
     [appRoot, documentState],
   );
+  // ========================================================================
+  // 当前作用域派生（主 JSX 的六个条件渲染标志都在这里计算）
+  // ========================================================================
+
+  // activeAddress：钻取栈顶 = 当前作用域地址；栈为空时兜底为应用根。
   const activeAddress = useMemo(
     () =>
       navigationStack.at(-1) ??
       ({ domain: "app", nodeId: appRoot.id } as const),
     [appRoot.id, navigationStack],
   );
+  // 【条件①】isBusinessScope：当前作用域是否在业务域。
+  // true → 主 JSX 走 renderBusinessScopeLayer()；false → 走应用域的端口/连线/NodeProjection。
   const isBusinessScope = activeAddress.domain === "business";
+  // scopeNode：当前作用域对应的节点（按域分别在业务树/应用树中查找，找不到兜底为根）。
   const scopeNode = useMemo(
     () =>
       activeAddress.domain === "business"
@@ -702,6 +412,8 @@ export default function Home() {
         : findNode(appRoot, activeAddress.nodeId) ?? appRoot,
     [activeAddress, appRoot, businessRoot],
   );
+  // businessScope：当前业务作用域节点。在业务域时就是 scopeNode；
+  // 在应用域时按 runtimeState.scopeId 定位（应用画布里也常需要引用它）。
   const businessScope = useMemo(
     () =>
       isBusinessScope
@@ -709,9 +421,14 @@ export default function Home() {
         : findNode(businessRoot, businessScopeId) ?? businessRoot,
     [businessRoot, businessScopeId, isBusinessScope, scopeNode],
   );
+  // selectedBusinessNode：当前选中的业务节点（属性面板等以它为编辑对象）。
   const selectedBusinessNode =
     findNode(businessRoot, selectedBusinessNodeId) ?? businessScope;
 
+  /**
+   * 持久化浏览上下文：把当前作用域地址、钻取路径、布局锁写回
+   * 自由布局面板的容器 surface，保存视图/重开文档时可还原。
+   */
   useEffect(() => {
     setDocumentState((active) =>
       updateSurface(
@@ -742,28 +459,43 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [activeAddress, layoutLocked, navigationStack]);
 
+  // ---- 当前作用域的三组连线（用于 SVG 渲染与管道计数）----
+  // appEdges：应用域子节点之间的绑定边（聚合同源同通道的多条管道）。
   const appEdges = useMemo(
     () => aggregateEdges(deriveNodeBindingEdges(scopeNode)),
     [scopeNode],
   );
+  // scopeBoundaryEdges：环境输入 → 子节点、子节点 → 容器输出 的边界虚拟边。
   const scopeBoundaryEdges = useMemo(
     () => deriveScopeBoundaryEdges(scopeNode),
     [scopeNode],
   );
+  // businessVisualEdges：业务域画布内的可视化引用边。
   const businessVisualEdges = useMemo(
     () => deriveBusinessVisualEdges(businessScope),
     [businessScope],
   );
+  // validationIssues：当前业务作用域的校验问题（循环依赖/未绑定/未消费）。
   const validationIssues = useMemo(
     () => collectValidationIssues(businessScope),
     [businessScope],
   );
+  // 【条件②】visibleNodes：当前作用域的子节点列表（应用域时映射为 NodeProjection；
+  // 为空且已钻入深层 = 叶子作用域，触发 focused-runtime-content 面板）。
   const visibleNodes = useMemo(() => scopeNode.children ?? [], [scopeNode.children]);
+  // 【条件③】scopeMinimized：当前作用域处于最小化形态（整块画布缩成一个小块，
+  // 双击展开）。注意定义中排除了业务域——业务作用域永不最小化。
   const scopeMinimized =
     !isBusinessScope && nodeDisplayMode(scopeNode) === "minimized";
+  // activeCameraKey：当前作用域的投影键（相机与布局按此键持久化到 surface.projections）。
   const activeCameraKey = scopeCameraKey(activeAddress);
+  // scopeCanvasProjection：当前作用域画布持久化的布局（含 frame 尺寸）。
   const scopeCanvasProjection =
     freeContainer?.projections[activeCameraKey]?.nodeLayouts[scopeNode.id];
+  // scopeWorldSize：画布世界尺寸。优先级：
+  //   最小化 → 固定小块尺寸；
+  //   有持久化投影 → 用投影的 frame；
+  //   否则按子节点包围盒 + 100px 余量推导（最小 900×600）。
   const scopeWorldSize = useMemo(
     () =>
       scopeMinimized
@@ -791,6 +523,7 @@ export default function Home() {
           },
     [scopeCanvasProjection, scopeMinimized, scopeNode.canvasSize, visibleNodes],
   );
+  // scopePath：钻取路径上每层作用域的显示名（面包屑导航使用）。
   const scopePath = useMemo(
     () =>
       navigationStack.map((address) => {
@@ -803,6 +536,11 @@ export default function Home() {
     [appRoot, businessRoot, navigationStack],
   );
 
+  /**
+   * 两条文档提交通道：
+   *   commit     结构性修改——进历史栈（可撤销）、标脏、广播 DOCUMENT_CHANGED；
+   *   commitView 纯视图修改（布局/相机/显示模式）——不进历史，只标脏。
+   */
   const commit = useCallback(
     (next: IntentDocumentV3) => {
       setHistory((items) => [...items.slice(-29), documentState]);
@@ -814,6 +552,7 @@ export default function Home() {
     [dispatchRuntimeEvent, documentState],
   );
 
+  /** commitView：见上方 commit 注释——视图修改不污染撤销历史。 */
   const commitView = useCallback(
     (next: IntentDocumentV3) => {
       setDocumentState(next);
@@ -823,6 +562,11 @@ export default function Home() {
     [dispatchRuntimeEvent],
   );
 
+  // ========================================================================
+  // 布局投影持久化（位置/尺寸改动写入 surface.projections，按作用域键存储）
+  // ========================================================================
+
+  /** 把单个节点的布局（位置/尺寸/显示模式等）持久化到当前作用域的投影表。 */
   const storeNodeProjection = useCallback(
     (document: IntentDocumentV3, node: IntentNode) =>
       updateSurface(
@@ -853,6 +597,7 @@ export default function Home() {
     [activeCameraKey],
   );
 
+  /** 持久化当前作用域画布本身的尺寸（容器 frame 从原点起算）。 */
   const storeScopeCanvasProjection = useCallback(
     (
       document: IntentDocumentV3,
@@ -891,6 +636,7 @@ export default function Home() {
     [activeCameraKey],
   );
 
+  /** 视图级节点更新（显示模式/缩放模式等）：走 commitView，不进撤销历史。 */
   const updateDocumentNodeView = useCallback(
     (id: string, updater: (node: IntentNode) => IntentNode) => {
       const current = findNode(appRoot, id);
@@ -900,6 +646,7 @@ export default function Home() {
     [appRoot, commitView, documentState, storeNodeProjection],
   );
 
+  /** 结构级节点更新（增删改/绑定等）：走 commit，进撤销历史。 */
   const updateDocumentNode = useCallback(
     (id: string, updater: (node: IntentNode) => IntentNode) => {
       commit({
@@ -910,6 +657,7 @@ export default function Home() {
     [commit, documentState],
   );
 
+  /** 切换节点缩放模式：simple（三向）⇄ full（八向）。 */
   const toggleNodeResizeMode = useCallback(
     (node: IntentNode) => {
       updateDocumentNodeView(node.id, (item) => ({
@@ -921,6 +669,7 @@ export default function Home() {
     [updateDocumentNodeView],
   );
 
+  /** 切换节点显示模式：expanded ⇄ minimized（折叠为只显示名字的小块）。 */
   const toggleNodeDisplayMode = useCallback(
     (node: IntentNode) => {
       updateDocumentNodeView(node.id, (item) => ({
@@ -933,6 +682,10 @@ export default function Home() {
     [updateDocumentNodeView],
   );
 
+  /**
+   * 设置相机：立即更新 state 与 ref（ref 供手势闭包读取）；
+   * persist=true 时同时持久化到当前作用域的投影（下次进入该作用域可恢复视角）。
+   */
   const setScopeCamera = useCallback(
     (next: CameraState, persist = false) => {
       cameraRef.current = next;
@@ -965,6 +718,11 @@ export default function Home() {
     [activeCameraKey],
   );
 
+  /**
+   * 计算"适应视图"相机：让世界内容恰好填满视口。
+   * 业务域按子节点包围盒（四周留 ~200px 余量）计算，应用域按整块画布尺寸计算，
+   * 缩放限制在 MIN_SCALE–MAX_SCALE，并水平和垂直居中。
+   */
   const calculateFitCamera = useCallback((): CameraState | undefined => {
     const viewport = viewportRef.current;
     if (!viewport) return undefined;
@@ -1011,6 +769,7 @@ export default function Home() {
     };
   }, [scopeWorldSize, isBusinessScope, visibleNodes]);
 
+  /** 判断给定相机下作用域是否仍有 ≥96×96 像素可见（用于决定能否恢复旧相机）。 */
   const cameraKeepsScopeVisible = useCallback(
     (candidate: CameraState) => {
       const viewport = viewportRef.current;
@@ -1032,11 +791,16 @@ export default function Home() {
     [scopeWorldSize],
   );
 
+  /** 执行"适应视图"并持久化相机。 */
   const fitScope = useCallback(() => {
     const next = calculateFitCamera();
     if (next) setScopeCamera(next, true);
   }, [calculateFitCamera, setScopeCamera]);
 
+  /**
+   * 计算"以指定缩放居中"的相机：内容比视口大时贴左上（留 padding），
+   * 否则居中显示。用于"重置为 100%"（数字键 0 / 进入新作用域时）。
+   */
   const centerScopeAtScale = useCallback(
     (scale: number): CameraState | undefined => {
       const viewport = viewportRef.current;
@@ -1061,6 +825,13 @@ export default function Home() {
     [scopeWorldSize],
   );
 
+  /**
+   * 作用域切换时的相机恢复策略（下一帧执行，优先级从高到低）：
+   *   1. resetScaleOnNextScopeRef → 重置为 100% 居中（如 Ctrl+滚轮进入/返回）；
+   *   2. fitOnNextScopeRef       → 自动适应视图；
+   *   3. 有持久化相机且仍可见     → 恢复上次的视角；
+   *   4. 兜底                    → 适应视图。
+   */
   useEffect(() => {
     const saved = getContainerSurface(
       documentState,
@@ -1091,6 +862,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCameraKey]);
 
+  /** 显示模式切换（最小化⇄展开）后重新适应视图：世界尺寸变了，相机需要重算。 */
   useEffect(() => {
     const frame = window.requestAnimationFrame(fitScope);
     return () => window.cancelAnimationFrame(frame);
@@ -1098,12 +870,18 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeMinimized]);
 
+  /** toast 轻提示 2.4 秒后自动消失。 */
   useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(""), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  // ========================================================================
+  // 作用域导航（钻取路径栈的压入/弹出）
+  // ========================================================================
+
+  /** 返回上级：弹栈一层；若回到业务域，同步业务作用域与选中节点。 */
   const navigateToParent = useCallback(() => {
     setNavigationStack((path) => {
       if (path.length <= 1) return path;
@@ -1117,6 +895,7 @@ export default function Home() {
     });
   }, [scopeNode.id, setBusinessScopeId, setSelectedBusinessNodeId]);
 
+  /** 面包屑跳转：截断栈到第 index 层，并按目标域同步选中状态、标记适应视图。 */
   const navigateToScopeFrame = useCallback(
     (index: number) => {
       fitOnNextScopeRef.current = true;
@@ -1137,6 +916,16 @@ export default function Home() {
     [setBusinessScopeId, setSelectedBusinessNodeId],
   );
 
+  /**
+   * 全局键盘快捷键：
+   *   Esc            返回上级作用域
+   *   Ctrl/Cmd+Z     撤销（+Shift 重做）；Ctrl/Cmd+Y 重做
+   *   Ctrl/Cmd+S     导出文档
+   *   Enter          进入当前选中节点
+   *   Delete/Backspace  删除选中的应用节点（业务域不响应）
+   *   Home           适应视图；数字 0 重置为 100% 居中
+   * 输入框/文本域/可编辑元素聚焦时，编辑类快捷键自动失效。
+   */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && navigationStack.length > 1) {
@@ -1214,6 +1003,7 @@ export default function Home() {
     setScopeCamera,
   ]);
 
+  /** 有未导出修改时，关闭/刷新页面前弹出浏览器确认提示。 */
   useEffect(() => {
     const warning = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -1222,7 +1012,16 @@ export default function Home() {
     return () => window.removeEventListener("beforeunload", warning);
   }, [dirty]);
 
+  /**
+   * 进入节点（双击/Enter/Ctrl+滚轮放大触发），280ms 防抖。按节点类型分四种：
+   *   1. current-container 渲染器 → 解引用直接进入业务画布，跳过占位层；
+   *   2. 业务作用域引用节点（ACTIVE_BUSINESS_SCOPE_REF_ID）→ 进入业务域；
+   *   3. 已在业务域中           → 压入业务子作用域；
+   *   4. 普通应用节点           → 压入应用子作用域。
+   * resetScale=true 时进入后重置为 100% 缩放（滚轮放大进入的场景）。
+   */
   const enterNode = (node: IntentNode, resetScale = false) => {
+    // eslint-disable-next-line react-hooks/purity -- enterNode 仅在事件回调中执行（双击/导航），performance.now() 用于 280ms 防连击去抖；lint 因其被装入 deps 对象而误判为渲染期调用
     const now = performance.now();
     if (now - lastEnterAtRef.current < 280) return;
     lastEnterAtRef.current = now;
@@ -1268,6 +1067,7 @@ export default function Home() {
     setSelectedAppNodeId(node.id);
   };
 
+  /** 找出屏幕坐标 (clientX, clientY) 在世界坐标系下中心距离最近的子节点。 */
   const nearestNode = (clientX: number, clientY: number) => {
     const viewport = viewportRef.current;
     if (!viewport || !visibleNodes.length) return undefined;
@@ -1288,6 +1088,13 @@ export default function Home() {
     }, undefined);
   };
 
+  /**
+   * 滚轮交互（"缩放即导航"设计）：
+   *   普通滚轮            → 平移画布（兼容行/页/像素三种 deltaMode）；
+   *   Ctrl+滚轮           → 以指针为锚点缩放；
+   *   放大到 MAX_SCALE 再滚 → 进入指针下最近的节点（没有更深节点时提示）；
+   *   缩小到 MIN_SCALE 再滚 → 返回上级作用域（已在根则提示）。
+   */
   const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     // event.preventDefault();
     const viewport = viewportRef.current;
@@ -1358,343 +1165,50 @@ export default function Home() {
     );
   };
 
-  const onViewportPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    // 交互控件与功能面板优先响应自身事件；平移手势只在空白画布上启动，
-    // 否则 setPointerCapture 会把 click 重定向到视口，吞掉面板内的鼠标点击。
-    const panOrigin = event.target as HTMLElement;
-    if (
-      panOrigin.closest(
-        "button, input, select, textarea, a, option, [contenteditable], .focused-runtime-content, .scope-navigation-bar"
-      )
-    )
-      return;
-    if (event.pointerType === "touch") {
-      event.preventDefault();
-      const target = event.currentTarget;
-      const points = touchPointersRef.current;
-      points.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      const allowSinglePan = !panOrigin.closest(
-        ".runtime-node, .business-node, .graph-node",
-      );
-      if (points.size > 1) event.stopPropagation();
-      const measureTouch = () => {
-        const active = [...points.values()];
-        const rect = target.getBoundingClientRect();
-        const clientCenter = {
-          x: active.reduce((sum, point) => sum + point.x, 0) / active.length,
-          y: active.reduce((sum, point) => sum + point.y, 0) / active.length,
-        };
-        return {
-          center: {
-            x: clientCenter.x - rect.left,
-            y: clientCenter.y - rect.top,
-          },
-          distance:
-            active.length > 1
-              ? Math.hypot(
-                  active[0].x - active[1].x,
-                  active[0].y - active[1].y,
-                )
-              : undefined,
-        };
-      };
-      const startTouch = measureTouch();
-      touchGestureRef.current = {
-        startCamera: { ...cameraRef.current },
-        startCenter: startTouch.center,
-        startDistance: startTouch.distance,
-        allowSinglePan,
-      };
-      target.setPointerCapture(event.pointerId);
-      const move = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== event.pointerId) return;
-        points.set(moveEvent.pointerId, {
-          x: moveEvent.clientX,
-          y: moveEvent.clientY,
-        });
-        const gesture = touchGestureRef.current;
-        if (!gesture || points.size === 0) return;
-        if (points.size === 1 && !gesture.allowSinglePan) return;
-        if (points.size > 1) {
-          moveEvent.preventDefault();
-          moveEvent.stopPropagation();
-        }
-        const currentTouch = measureTouch();
-        setScopeCamera(
-          cameraForTouchGesture(
-            gesture.startCamera,
-            gesture.startCenter,
-            currentTouch.center,
-            gesture.startDistance,
-            currentTouch.distance,
-            MIN_SCALE,
-            MAX_SCALE,
-          ),
-        );
-      };
-      const finish = (finishEvent: PointerEvent) => {
-        if (finishEvent.pointerId !== event.pointerId) return;
-        const wasPinching = points.size > 1;
-        if (wasPinching) {
-          finishEvent.preventDefault();
-          finishEvent.stopPropagation();
-        }
-        points.delete(finishEvent.pointerId);
-        target.removeEventListener("pointermove", move, true);
-        target.removeEventListener("pointerup", finish, true);
-        target.removeEventListener("pointercancel", finish, true);
-        if (points.size > 0) {
-          const nextTouch = measureTouch();
-          touchGestureRef.current = {
-            startCamera: { ...cameraRef.current },
-            startCenter: nextTouch.center,
-            startDistance: nextTouch.distance,
-            allowSinglePan: false,
-          };
-        } else {
-          touchGestureRef.current = null;
-          setScopeCamera(cameraRef.current, true);
-        }
-      };
-      target.addEventListener("pointermove", move, true);
-      target.addEventListener("pointerup", finish, true);
-      target.addEventListener("pointercancel", finish, true);
-      return;
-    }
-    const start = { x: event.clientX, y: event.clientY };
-    const startCamera = { ...cameraRef.current };
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    const move = (moveEvent: PointerEvent) => {
-      setScopeCamera({
-        ...startCamera,
-        x: startCamera.x + moveEvent.clientX - start.x,
-        y: startCamera.y + moveEvent.clientY - start.y,
-      });
-    };
-    const up = () => {
-      target.removeEventListener("pointermove", move);
-      target.removeEventListener("pointerup", up);
-      setScopeCamera(cameraRef.current, true);
-    };
-    target.addEventListener("pointermove", move);
-    target.addEventListener("pointerup", up);
+  /**
+   * 指针交互手势（已拆到 ./editor/pointer-gestures.ts）：
+   * 视口平移（鼠标/触屏）、应用节点拖拽/缩放、作用域画布缩放。
+   * 这里组装依赖并调用工厂创建处理器，签名与原闭包一致。
+   */
+  const pointerGestureDeps: PointerGestureDeps = {
+    viewportRef,
+    cameraRef,
+    touchPointersRef,
+    touchGestureRef,
+    layoutLocked,
+    isBusinessScope,
+    scopeNode,
+    scopeWorldSize,
+    visibleNodes,
+    documentState,
+    setDocumentState,
+    setHistory,
+    setFuture,
+    setDirty,
+    dispatchRuntimeEvent,
+    setScopeCamera,
+    storeNodeProjection,
+    storeScopeCanvasProjection,
   };
+  // eslint-disable-next-line react-hooks/refs -- 工厂仅创建手势闭包，ref 只在事件回调内访问
+  const onViewportPointerDown = createViewportPointerDownHandler(pointerGestureDeps);
+  // eslint-disable-next-line react-hooks/refs -- 同上
+  const moveNodeStart = createMoveNodeStart(pointerGestureDeps);
+  // eslint-disable-next-line react-hooks/refs -- 同上
+  const resizeNodeStart = createResizeNodeStart(pointerGestureDeps);
+  // eslint-disable-next-line react-hooks/refs -- 同上
+  const resizeScopeCanvasStart = createResizeScopeCanvasStart(pointerGestureDeps);
 
-  const moveNodeStart = (
-    node: IntentNode,
-    event: ReactPointerEvent<HTMLElement>,
-  ) => {
-    if (layoutLocked || event.button !== 0) return;
-    const start = { ...node.position };
-    const size = runtimeNodeRenderSize(node);
-    const bounds = scopeNode.canvasSize ?? { width: 2400, height: 1500 };
-    const origin = { x: event.clientX, y: event.clientY };
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    let latest = start;
-    const move = (moveEvent: PointerEvent) => {
-      latest = {
-        x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / cameraRef.current.scale)),
-        y: Math.max(56, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / cameraRef.current.scale)),
-      };
-      setDocumentState((active) =>
-        storeNodeProjection(active, { ...node, position: latest }),
-      );
-    };
-    const up = () => {
-      target.removeEventListener("pointermove", move);
-      target.removeEventListener("pointerup", up);
-      if (latest.x === start.x && latest.y === start.y) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
-      dispatchRuntimeEvent("DOCUMENT_CHANGED", "node-move");
-    };
-    target.addEventListener("pointermove", move);
-    target.addEventListener("pointerup", up);
-  };
-
-  const resizeNodeStart = (
-    node: IntentNode,
-    direction: ResizeDirection,
-    event: ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    if (layoutLocked || event.button !== 0) return;
-    const startSize = nodeSize(node);
-    let dragged = false;
-    const startPosition = { ...node.position };
-    const bounds = scopeNode.canvasSize ?? { width: 2400, height: 1500 };
-    const origin = { x: event.clientX, y: event.clientY };
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    const move = (moveEvent: PointerEvent) => {
-      if (Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 3) dragged = true;
-      const dx = (moveEvent.clientX - origin.x) / cameraRef.current.scale;
-      const dy = (moveEvent.clientY - origin.y) / cameraRef.current.scale;
-      let x = startPosition.x;
-      let y = startPosition.y;
-      let width = startSize.width;
-      let height = startSize.height;
-      if (direction.includes("e")) width = Math.max(NODE_MIN_SIZE.width, Math.min(NODE_MAX_SIZE.width, bounds.width - startPosition.x - 20, startSize.width + dx));
-      if (direction.includes("s")) height = Math.max(NODE_MIN_SIZE.height, Math.min(NODE_MAX_SIZE.height, bounds.height - startPosition.y - 20, startSize.height + dy));
-      if (direction.includes("w")) {
-        width = Math.max(NODE_MIN_SIZE.width, Math.min(NODE_MAX_SIZE.width, startSize.width - dx));
-        x = Math.max(20, startPosition.x + startSize.width - width);
-        width = startPosition.x + startSize.width - x;
-      }
-      if (direction.includes("n")) {
-        height = Math.max(NODE_MIN_SIZE.height, Math.min(NODE_MAX_SIZE.height, startSize.height - dy));
-        y = Math.max(56, startPosition.y + startSize.height - height);
-        height = startPosition.y + startSize.height - y;
-      }
-      setDocumentState((active) =>
-        storeNodeProjection(active, {
-          ...node,
-          position: { x, y },
-          size: { width, height },
-        }),
-      );
-    };
-    const up = () => {
-      target.removeEventListener("pointermove", move);
-      target.removeEventListener("pointerup", up);
-      if (!dragged) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
-      dispatchRuntimeEvent("DOCUMENT_CHANGED", "node-resize");
-    };
-    target.addEventListener("pointermove", move);
-    target.addEventListener("pointerup", up);
-  };
-
-  const resizeScopeCanvasStart = (
-    direction: ResizeDirection,
-    event: ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    if (layoutLocked || event.button !== 0) return;
-    const startSize = scopeWorldSize;
-    const startCamera = { ...cameraRef.current };
-    const origin = { x: event.clientX, y: event.clientY };
-    const contentMinimum = visibleNodes.reduce(
-      (minimum, node) => {
-        const size = isBusinessScope
-          ? businessNodeSize(node)
-          : runtimeNodeRenderSize(node);
-        return {
-          width: Math.max(
-            minimum.width,
-            node.position.x + size.width + ROOT_CANVAS_PADDING,
-          ),
-          height: Math.max(
-            minimum.height,
-            node.position.y + size.height + ROOT_CANVAS_PADDING,
-          ),
-        };
-      },
-      ROOT_CANVAS_MIN_SIZE,
-    );
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-
-    const move = (moveEvent: PointerEvent) => {
-      const dx =
-        (moveEvent.clientX - origin.x) / cameraRef.current.scale;
-      const dy =
-        (moveEvent.clientY - origin.y) / cameraRef.current.scale;
-      let width = startSize.width;
-      let height = startSize.height;
-
-      if (direction.includes("e")) {
-        width = Math.max(
-          contentMinimum.width,
-          Math.min(ROOT_CANVAS_MAX_SIZE.width, startSize.width + dx),
-        );
-      }
-      if (direction.includes("s")) {
-        height = Math.max(
-          contentMinimum.height,
-          Math.min(ROOT_CANVAS_MAX_SIZE.height, startSize.height + dy),
-        );
-      }
-      if (direction.includes("w")) {
-        width = Math.max(
-          contentMinimum.width,
-          Math.min(ROOT_CANVAS_MAX_SIZE.width, startSize.width - dx),
-        );
-      }
-      if (direction.includes("n")) {
-        height = Math.max(
-          contentMinimum.height,
-          Math.min(ROOT_CANVAS_MAX_SIZE.height, startSize.height - dy),
-        );
-      }
-
-      setDocumentState((active) =>
-        storeScopeCanvasProjection(active, scopeNode, { width, height }),
-      );
-      setScopeCamera({
-        ...startCamera,
-        x: direction.includes("w")
-          ? startCamera.x + (startSize.width - width) * startCamera.scale
-          : startCamera.x,
-        y: direction.includes("n")
-          ? startCamera.y + (startSize.height - height) * startCamera.scale
-          : startCamera.y,
-      });
-    };
-
-    const up = () => {
-      target.removeEventListener("pointermove", move);
-      target.removeEventListener("pointerup", up);
-      target.removeEventListener("pointercancel", up);
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
-      setScopeCamera(cameraRef.current, true);
-      dispatchRuntimeEvent("DOCUMENT_CHANGED", "scope-canvas-resize");
-    };
-
-    target.addEventListener("pointermove", move);
-    target.addEventListener("pointerup", up);
-    target.addEventListener("pointercancel", up);
-  };
-
+  /**
+   * 泳道自动布局（薄封装）：泳道几何与堆叠算法在 ./editor/auto-layout 的
+   * computeLaneAutoLayout（纯函数）中；此处只负责把结果写入 surface
+   * 投影并触发适应视图。
+   */
   const autoLayout = () => {
-    const laneColumns = {
-      runtime: [90],
-      interface: [500, 950, 1400],
-      output: [1880],
-    };
-    const laneHeights = {
-      runtime: [80],
-      interface: [80, 80, 80],
-      output: [80],
-    };
-    let maximumBottom = 0;
-    const layouts = Object.fromEntries(
-      (scopeNode.children ?? []).map((node) => {
-        const lane = String(
-          node.implementation?.config?.lane ?? "interface",
-        ) as keyof typeof laneColumns;
-        const size = runtimeNodeRenderSize(node);
-        const column = laneHeights[lane].indexOf(Math.min(...laneHeights[lane]));
-        const x = laneColumns[lane][column];
-        const y = laneHeights[lane][column];
-        laneHeights[lane][column] += size.height + 48;
-        maximumBottom = Math.max(maximumBottom, y + size.height + 80);
-        return [
-          node.id,
-          defaultNodeProjectionLayout({
-            ...node,
-            position: { x, y },
-          }),
-        ];
-      }),
+    const { nodeLayouts, canvasLayout } = computeLaneAutoLayout(
+      scopeNode,
+      scopeWorldSize.width,
     );
-    const canvasLayout = defaultNodeProjectionLayout(scopeNode);
     commitView(
       updateSurface(
         documentState,
@@ -1714,16 +1228,8 @@ export default function Home() {
                 ...projection,
                 nodeLayouts: {
                   ...projection.nodeLayouts,
-                  ...layouts,
-                  [scopeNode.id]: {
-                    ...canvasLayout,
-                    frame: {
-                      x: 0,
-                      y: 0,
-                      width: Math.max(scopeWorldSize.width, 2400),
-                      height: Math.max(1500, maximumBottom),
-                    },
-                  },
+                  ...nodeLayouts,
+                  [scopeNode.id]: canvasLayout,
                 },
               },
             },
@@ -1733,6 +1239,10 @@ export default function Home() {
     );
     setTimeout(fitScope, 0);
   };
+
+  // ========================================================================
+  // 撤销 / 重做（history 为撤销栈，future 为重做队列）
+  // ========================================================================
 
   const undo = () => {
     const previous = history.at(-1);
@@ -1750,6 +1260,11 @@ export default function Home() {
     setDocumentState(next);
   };
 
+  // ========================================================================
+  // 文档加载 / 导入 / 导出（v3 JSON 与 .pip 种子两种格式）
+  // ========================================================================
+
+  /** 应用一份已加载的文档：进历史、还原持久化的浏览位置、清脏标记。 */
   const applyLoadedDocument = (loaded: IntentDocumentV3) => {
     const restored = freePanelContext(loaded);
     setHistory((items) => [...items, documentState]);
@@ -1762,6 +1277,7 @@ export default function Home() {
     setDirty(false);
   };
 
+  /** 导出 .pip 种子：把文档序列化后与加载器源码、清单一起打包下载。 */
   const exportPip = async () => {
     try {
       const bytes = await encodePip({
@@ -1787,6 +1303,11 @@ export default function Home() {
     }
   };
 
+  /**
+   * 解码 .pip 字节并运行其中的 Loader：SHA-256 只能校验完整性，
+   * requireConfirmation=true（用户手动导入）时先弹确认框，
+   * 然后在隔离 Worker 中执行 Loader 得到文档。
+   */
   const loadPipBytes = async (bytes: ArrayBuffer, requireConfirmation: boolean) => {
     const pip = await decodePip(bytes);
     if (
@@ -1805,6 +1326,7 @@ export default function Home() {
     return loadIntentDocument(parsed);
   };
 
+  /** 文件导入入口：按扩展名分派 .pip（走 Loader）或 .json（直接解析）。 */
   const importDocument = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1821,6 +1343,7 @@ export default function Home() {
     }
   };
 
+  /** Rust 宿主引导：URL 带 ?token= 时从宿主接口拉取 .pip 种子并加载（仅启动时一次）。 */
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token");
     if (!token) return;
@@ -1849,68 +1372,58 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const publishModule = () => {
-    const existing = documentState.publishedModules.filter(
-      (module) => module.moduleId === selectedBusinessNode.id,
-    );
-    const published: PublishedModule = {
-      moduleId: selectedBusinessNode.id,
-      name: selectedBusinessNode.name,
-      version: Math.max(0, ...existing.map((item) => item.version)) + 1,
-      publishedAt: new Date().toISOString().slice(0, 10),
-      snapshot: clone(selectedBusinessNode),
-    };
-    commit({
-      ...documentState,
-      publishedModules: [...documentState.publishedModules, published],
-    });
-    setToast(`已发布 ${published.name} v${published.version}`);
-  };
+  // ========================================================================
+  // 模块发布与业务节点增删改（已拆到 ./editor/business-ops.ts）
+  //   这里组装依赖并调用工厂创建操作函数，名称与原闭包一致。
+  //   selectPanelBusinessNode / updateInputBinding / updateOutputBinding
+  //   在组件后段才声明，用箭头函数惰性转发避免 TDZ 引用错误。
+  // ========================================================================
 
-  const insertModule = (module: PublishedModule) => {
-    const snapshot = clone(module.snapshot);
-    const linked: IntentNode = {
-      ...snapshot,
-      id: uid("linked"),
-      name: `${snapshot.name} · 链接`,
-      kind: "linkedModule",
-      children: undefined,
-      moduleRef: { moduleId: module.moduleId, version: module.version },
-      position: { x: 380, y: 300 },
-      displayMode: "minimized",
-    };
-    updateDocumentNode(businessScope.id, (scope) => ({
-      ...scope,
-      children: [...(scope.children ?? []), linked],
-    }));
-    setSelectedBusinessNodeId(linked.id);
+  const businessOpsDeps: BusinessOpsDeps = {
+    viewportRef,
+    cameraRef,
+    layoutLocked,
+    businessRoot,
+    businessScope,
+    selectedBusinessNode,
+    documentState,
+    setDocumentState,
+    setHistory,
+    setFuture,
+    setDirty,
+    setToast,
+    setPendingPipe,
+    commit,
+    updateDocumentNode,
+    updateDocumentNodeView,
+    storeNodeProjection,
+    setSelectedBusinessNodeId,
+    dispatchRuntimeEvent,
+    selectPanelBusinessNode: (panelId, nodeId) =>
+      selectPanelBusinessNode(panelId, nodeId),
+    updateInputBinding: (nodeId, portId, value) =>
+      updateInputBinding(nodeId, portId, value),
+    updateOutputBinding: (nodeId, portId, value) =>
+      updateOutputBinding(nodeId, portId, value),
   };
+  /* eslint-disable react-hooks/refs -- 工厂模式：businessOpsDeps 包含 ref，但下列工厂仅在事件回调中读取，渲染期不解引用 */
+  const publishModule = createPublishModule(businessOpsDeps);
+  const insertModule = createInsertModule(businessOpsDeps);
+  const addBusinessChild = createAddBusinessChild(businessOpsDeps);
+  const duplicateBusinessNode = createDuplicateBusinessNode(businessOpsDeps);
+  const createLinkedBusinessNode = createCreateLinkedBusinessNode(businessOpsDeps);
+  const deleteBusinessNode = createDeleteBusinessNode(businessOpsDeps);
+  const startPipeDrag = createStartPipeDrag(businessOpsDeps);
+  const moveBusinessNodeStart = createMoveBusinessNodeStart(businessOpsDeps);
+  const resizeBusinessNodeStart = createResizeBusinessNodeStart(businessOpsDeps);
+  const toggleBusinessResizeMode = createToggleBusinessResizeMode(businessOpsDeps);
+  const toggleBusinessDisplayMode = createToggleBusinessDisplayMode(businessOpsDeps);
+  /* eslint-enable react-hooks/refs */
 
-  const addBusinessChild = (
-    targetScopeId = businessScope.id,
-    selectInFreePanel = true,
-  ) => {
-    const node: IntentNode = {
-      id: uid("intent"),
-      name: "新子意图",
-      description: "通过节点管道扩展当前作用域。",
-      kind: "operator",
-      operator: "identity",
-      inputs: [{ id: uid("input"), name: "输入", type: "any", channel: "data" }],
-      outputs: [{ id: uid("output"), name: "输出", type: "any", channel: "data" }],
-      position: { x: 320, y: 240 },
-      size: { width: 220, height: 150 },
-      resizeMode: "simple",
-      displayMode: "minimized",
-    };
-    updateDocumentNode(targetScopeId, (scope) => ({
-      ...scope,
-      children: [...(scope.children ?? []), node],
-    }));
-    if (selectInFreePanel) setSelectedBusinessNodeId(node.id);
-    setToast(`已向「${findNode(businessRoot, targetScopeId)?.name ?? targetScopeId}」添加子意图`);
-  };
-
+  /**
+   * 向当前应用叶子作用域添加运行时子节点（composite 空容器）。
+   * 只在 canAddRuntimeChild 为 true 时有入口（见主 JSX 渲染标志区）。
+   */
   const addRuntimeChild = () => {
     const node: IntentNode = {
       id: uid("node"),
@@ -1932,86 +1445,15 @@ export default function Home() {
     }));
   };
 
-  const duplicateBusinessNode = (targetId: string, panelId?: string) => {
-    const target = findNode(businessRoot, targetId);
-    if (!target || target.id === businessRoot.id) return;
-    const parentPath = findPath(businessRoot, target.id);
-    const parent = parentPath?.at(-2);
-    if (!parent) return;
-    const duplicate: IntentNode = {
-      ...deepCopyIntentSubtree(target, () => uid("copy")).root,
-      name: `${target.name} · 副本`,
-      position: {
-        x: target.position.x + 36,
-        y: target.position.y + 36,
-      },
-    };
-    updateDocumentNode(parent.id, (node) => ({
-      ...node,
-      children: [...(node.children ?? []), duplicate],
-    }));
-    if (panelId) selectPanelBusinessNode(panelId, duplicate.id);
-    else setSelectedBusinessNodeId(duplicate.id);
-    setToast(`已深复制「${target.name}」及其全部后代`);
-  };
-
+  /** 复制当前选中的业务节点（深复制含后代）。 */
   const duplicateSelected = () =>
     duplicateBusinessNode(selectedBusinessNode.id);
 
-  const createLinkedBusinessNode = (targetId: string, panelId?: string) => {
-    const target = findNode(businessRoot, targetId);
-    if (!target || target.id === businessRoot.id) return;
-    const parent = findPath(businessRoot, target.id)?.at(-2);
-    if (!parent) return;
-    const existing = documentState.publishedModules.filter(
-      (module) => module.moduleId === target.id,
-    );
-    const published: PublishedModule = {
-      moduleId: target.id,
-      name: target.name,
-      version: Math.max(0, ...existing.map((item) => item.version)) + 1,
-      publishedAt: new Date().toISOString().slice(0, 10),
-      snapshot: clone(target),
-    };
-    const linked: IntentNode = {
-      ...clone(target),
-      id: uid("linked"),
-      name: `${target.name} · 链接`,
-      kind: "linkedModule",
-      children: undefined,
-      moduleRef: { moduleId: published.moduleId, version: published.version },
-      position: { x: target.position.x + 54, y: target.position.y + 54 },
-      displayMode: "minimized",
-    };
-    commit({
-      ...documentState,
-      publishedModules: [...documentState.publishedModules, published],
-      rootIntent: updateNode(documentState.rootIntent, parent.id, (node) => ({
-        ...node,
-        children: [...(node.children ?? []), linked],
-      })),
-    });
-    if (panelId) selectPanelBusinessNode(panelId, linked.id);
-    else setSelectedBusinessNodeId(linked.id);
-    setToast(
-      `已创建链接实例：${published.name} v${published.version} · 来源 ${published.moduleId}`,
-    );
-  };
-
-  const deleteBusinessNode = (targetId: string, panelId?: string) => {
-    if (targetId === businessRoot.id) return;
-    commit(removeNodeFromPanelSelections({
-      ...documentState,
-      rootIntent: removeNode(documentState.rootIntent, targetId),
-    }, targetId));
-    if (panelId) selectPanelBusinessNode(panelId, businessScope.id);
-    else setSelectedBusinessNodeId(businessScope.id);
-    setToast(`已删除节点 ${targetId}`);
-  };
-
+  /** 删除当前选中的业务节点。 */
   const deleteSelected = () =>
     deleteBusinessNode(selectedBusinessNode.id);
 
+  /** 重命名节点 ID：同步更新 businessRootId、树内引用以及所有面板的 selection。 */
   const renameBusinessNode = (nodeId: string, nextId: string) => {
     const result = renameIntentNodeId(documentState.rootIntent, nodeId, nextId);
     if (!result.ok) {
@@ -2041,6 +1483,9 @@ export default function Home() {
     setToast(`节点 ID 已更新为 ${nextId}`);
   };
 
+  // ---- 端口 Schema 编辑（属性面板的"输入/输出 Schema"区）----
+
+  /** 修改/删除端口（next=null 表示删除）；有外部引用时校验会阻止并提示引用方。 */
   const editPortSchema = (
     node: IntentNode,
     direction: "inputs" | "outputs",
@@ -2066,6 +1511,7 @@ export default function Home() {
     setToast(next ? `端口「${next.name}」已更新` : `端口「${portId}」已删除`);
   };
 
+  /** 新增端口（默认 any 类型、data 通道）。 */
   const addPortSchema = (
     node: IntentNode,
     direction: "inputs" | "outputs",
@@ -2083,6 +1529,7 @@ export default function Home() {
     setToast(`已新增${direction === "inputs" ? "输入" : "输出"}端口`);
   };
 
+  /** 端口上移/下移（与相邻端口交换位置，影响边界端口的纵向排列顺序）。 */
   const movePortSchema = (
     node: IntentNode,
     direction: "inputs" | "outputs",
@@ -2098,6 +1545,9 @@ export default function Home() {
     });
   };
 
+  // ---- 应用节点操作 ----
+
+  /** 复制选中的应用节点（副本不再是核心节点，可自由删除）。 */
   const duplicateAppNode = () => {
     const selected = findNode(scopeNode, selectedAppNodeId);
     if (!selected || selected.id === scopeNode.id) return;
@@ -2120,6 +1570,7 @@ export default function Home() {
     setSelectedAppNodeId(duplicate.id);
   };
 
+  /** 删除选中的应用节点；核心节点（编辑器自身 UI）需二次确认。 */
   const deleteAppNode = () => {
     const selected = findNode(scopeNode, selectedAppNodeId);
     if (!selected || selected.id === scopeNode.id) return;
@@ -2133,6 +1584,7 @@ export default function Home() {
     setSelectedAppNodeId(scopeNode.children?.[0]?.id ?? scopeNode.id);
   };
 
+  /** 重置应用节点图：按当前业务树重新生成应用文档（业务意图与模块快照保留）。 */
   const resetApplicationGraph = () => {
     if (!window.confirm("重置全部应用节点布局和系统绑定？业务意图与模块快照会保留。")) return;
     const reset = createApplicationDocument(clone(businessRoot), clone(documentState.publishedModules));
@@ -2149,6 +1601,12 @@ export default function Home() {
     setDirty(true);
   };
 
+  // ---- 业务执行 ----
+
+  /**
+   * 运行整棵业务树：根输入中 object/array 类型的值先按 JSON 解析，
+   * 然后交给 executeBusinessNode 拓扑执行，轨迹实时写入 trace 状态。
+   */
   const run = async () => {
     setRunState("running");
     setTrace([]);
@@ -2191,11 +1649,14 @@ export default function Home() {
     }
   };
 
+  /** 停止运行：置取消标记，执行器下一轮调度时抛出 cancelled。 */
   const stop = () => {
     cancelRunRef.current = true;
     setRunState("idle");
   };
 
+  // 每次渲染都把最新动作与状态写入 ref，供键盘快捷键 effect 读取
+  //（这样键盘 effect 无需把这些值列入依赖、反复解绑重挂）。
   actionRefs.current = {
     undo,
     redo,
@@ -2210,6 +1671,7 @@ export default function Home() {
     selectedBusinessNodeId,
   };
 
+  /** 新建文档：有未导出修改时先确认；重置为示例文档并还原浏览位置。 */
   const newDocument = () => {
     if (
       dirty &&
@@ -2229,6 +1691,11 @@ export default function Home() {
     setDirty(false);
   };
 
+  /**
+   * 命令处理器：事件管线产生的命令（lastCommands）在这里被翻译成
+   * 实际的文档/相机/执行操作。UI 按钮只发事件 → 管线归约出命令 →
+   * 此处统一执行，保证所有操作走同一条可审计路径。
+   */
   useEffect(() => {
     if (!lastCommands.length) return;
     const timer = window.setTimeout(() => {
@@ -2267,10 +1734,15 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastCommands]);
 
+  /** 渲染器回调桥：把子渲染器发来的 RuntimeCommand 转投到事件管线。 */
   const emit = (command: RuntimeCommand) => {
     dispatchRuntimeEvent(command.type, command.source ?? "renderer", command.payload);
   };
 
+  /**
+   * 从意图树直接跳转到任意业务节点：重建整条钻取栈
+   * （应用根 → 业务路径上的每一层），并定位/选中目标节点。
+   */
   const navigateToBusinessNode = (node: IntentNode) => {
     const path = findPath(businessRoot, node.id) ?? [businessRoot];
     fitOnNextScopeRef.current = true;
@@ -2288,13 +1760,7 @@ export default function Home() {
     setSelectedBusinessNodeId(node.id);
   };
 
-  type TreeProjectionContext = {
-    scopeNodeId: string;
-    selectedNodeId?: string;
-    onSelect: (node: IntentNode) => void;
-    onNavigate: (node: IntentNode) => void;
-  };
-
+  /** 在指定面板内选中业务节点（只改该面板的 selection，不影响全局选中）。 */
   const selectPanelBusinessNode = (panelId: string, nodeId: string) => {
     setDocumentState((active) =>
       updatePanel(active, panelId, (panel) => ({
@@ -2309,6 +1775,7 @@ export default function Home() {
     setDirty(true);
   };
 
+  /** 在指定面板的容器 surface 内跳转到业务节点：更新面板选中 + 重写该 surface 的钻取栈。 */
   const navigatePanelBusinessNode = (
     panelId: string,
     containerSurfaceId: string,
@@ -2359,48 +1826,11 @@ export default function Home() {
     setDirty(true);
   };
 
-  const renderTree = (
-    node: IntentNode,
-    depth = 0,
-    context?: TreeProjectionContext,
-  ): React.ReactNode => {
-    const matches =
-      !search ||
-      node.name.toLowerCase().includes(search.toLowerCase()) ||
-      node.description.toLowerCase().includes(search.toLowerCase());
-    const scopeNodeId = context?.scopeNodeId ?? businessScope.id;
-    const selectedNodeId =
-      context?.selectedNodeId ?? selectedBusinessNodeId;
-    return (
-      <Fragment key={node.id}>
-        {matches && (
-          <button
-            className={`runtime-tree-row ${scopeNodeId === node.id ? "scope" : ""} ${selectedNodeId === node.id ? "selected" : ""}`}
-            style={{ paddingLeft: 12 + depth * 14 }}
-            onClick={() => {
-              if (context) context.onSelect(node);
-              else setSelectedBusinessNodeId(node.id);
-            }}
-            onDoubleClick={() => {
-              if (context) context.onNavigate(node);
-              else navigateToBusinessNode(node);
-            }}
-          >
-            <span>{node.children?.length ? "◇" : "ƒ"}</span>
-            <strong>{node.name}</strong>
-            <small>{node.children?.length ?? 0}</small>
-          </button>
-        )}
-        {node.children?.map((child) =>
-          renderTree(child, depth + 1, context),
-        )}
-      </Fragment>
-    );
-  };
-
+  /** 节点的父作用域（绑定候选列表以"同层兄弟 + 父容器输入"为来源）。 */
   const parentScopeFor = (nodeId: string) =>
     findPath(businessRoot, nodeId)?.at(-2) ?? businessRoot;
 
+  /** 输入端口的绑定候选：父容器环境输入（env:）+ 同层兄弟节点的输出（ref:）。 */
   const bindingOptionsFor = (nodeId: string) => {
     const parent = parentScopeFor(nodeId);
     return [
@@ -2419,6 +1849,10 @@ export default function Home() {
     ];
   };
 
+  /**
+   * 更新输入端口绑定：value 为空 = 断开；"env:portId" = 绑环境输入；
+   * "ref:nodeId:portId" = 绑上游节点输出。
+   */
   const updateInputBinding = (
     nodeId: string,
     portId: string,
@@ -2444,96 +1878,7 @@ export default function Home() {
     setToast(binding ? "管道已连接或改绑" : "管道已断开");
   };
 
-  const startPipeDrag = (
-    node: IntentNode,
-    port: IntentNode["outputs"][number],
-    event: ReactPointerEvent<HTMLElement>,
-    sourceKind: "environment" | "node" = "node",
-  ) => {
-    if (event.button !== 0) return;
-    event.stopPropagation();
-    event.preventDefault();
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const toWorld = (clientX: number, clientY: number) => {
-      const rect = viewport.getBoundingClientRect();
-      return {
-        x: (clientX - rect.left - cameraRef.current.x) / cameraRef.current.scale,
-        y: (clientY - rect.top - cameraRef.current.y) / cameraRef.current.scale,
-      };
-    };
-    const size = businessNodeSize(node);
-    const outputIndex = sourceKind === "environment"
-      ? node.inputs.findIndex((input) => input.id === port.id)
-      : node.outputs.findIndex((output) => output.id === port.id);
-    const from = {
-      x:
-        sourceKind === "environment"
-          ? -9
-          : node.position.x + size.width,
-      y:
-        sourceKind === "environment"
-          ? 132 + 12 + Math.max(0, outputIndex) * BUSINESS_PORT_ROW
-          : node.position.y +
-            BUSINESS_PORT_TOP +
-            Math.max(0, outputIndex) * BUSINESS_PORT_ROW +
-            BUSINESS_PORT_ROW / 2,
-    };
-    setPendingPipe({
-      sourceKind,
-      sourceNodeId: node.id,
-      sourcePortId: port.id,
-      sourcePortName: port.name,
-      from,
-      to: toWorld(event.clientX, event.clientY),
-    });
-    const move = (moveEvent: PointerEvent) => {
-      setPendingPipe((active) =>
-        active
-          ? { ...active, to: toWorld(moveEvent.clientX, moveEvent.clientY) }
-          : active,
-      );
-    };
-    const up = (upEvent: PointerEvent) => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      setPendingPipe(null);
-      const dropTarget = document
-        .elementFromPoint(upEvent.clientX, upEvent.clientY)
-        ?.closest("[data-port-kind]");
-      if (!dropTarget) return;
-      const targetKind = dropTarget.getAttribute("data-port-kind");
-      if (targetKind !== "input" && targetKind !== "container-output") return;
-      const targetNodeId = dropTarget.getAttribute("data-port-node");
-      const targetPortId = dropTarget.getAttribute("data-port-id");
-      if (!targetNodeId || !targetPortId) return;
-      if (sourceKind === "node" && targetKind === "input" && targetNodeId === node.id) return;
-      const targetNode = findNode(businessRoot, targetNodeId);
-      const targetPort = targetKind === "container-output"
-        ? targetNode?.outputs.find((output) => output.id === targetPortId)
-        : targetNode?.inputs.find((input) => input.id === targetPortId);
-      if (!targetPort) return;
-      const compatibility = validatePortConnection(port, targetPort);
-      if (!compatibility.ok) {
-        setToast(`连接失败：${compatibility.error}`);
-        return;
-      }
-      const value = sourceKind === "environment"
-        ? `env:${port.id}`
-        : `ref:${node.id}:${port.id}`;
-      if (targetKind === "container-output") {
-        updateOutputBinding(targetNodeId, targetPortId, value);
-      } else {
-        updateInputBinding(targetNodeId, targetPortId, value);
-      }
-      setToast(
-        `已连接 ${node.name} · ${port.name} → ${targetNode?.name ?? targetNodeId} · ${targetPort?.name ?? targetPortId}`,
-      );
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
-
+  /** 容器输出端口的映射候选：容器自身环境输入 + 内部子节点的输出。 */
   const outputBindingOptionsFor = (node: IntentNode) => [
     ...node.inputs.map((input) => ({
       value: `env:${input.id}`,
@@ -2547,6 +1892,7 @@ export default function Home() {
     ),
   ];
 
+  /** 更新容器输出端口的映射（格式同 updateInputBinding；空值 = 断开映射）。 */
   const updateOutputBinding = (
     nodeId: string,
     portId: string,
@@ -2571,748 +1917,139 @@ export default function Home() {
     }));
   };
 
-  const moveBusinessNodeStart = (
-    node: IntentNode,
-    previewScale: number,
-    event: ReactPointerEvent<HTMLElement>,
-  ) => {
-    event.stopPropagation();
-    if (layoutLocked || event.button !== 0) return;
-    const target = event.currentTarget;
-    const origin = { x: event.clientX, y: event.clientY };
-    const start = { ...node.position };
-    let dragged = false;
-    const size = businessNodeSize(node);
-    const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
-    const world = target.closest<HTMLElement>(".business-preview-world");
-    const renderedScale =
-      world && world.offsetWidth > 0
-        ? world.getBoundingClientRect().width / world.offsetWidth
-        : previewScale * cameraRef.current.scale;
-    const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
-    target.setPointerCapture(event.pointerId);
-    const move = (moveEvent: PointerEvent) => {
-      if (Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 3) dragged = true;
-      const position = clampBusinessNodePosition(
-        start,
-        {
-          x: moveEvent.clientX - origin.x,
-          y: moveEvent.clientY - origin.y,
-        },
-        pointerScale,
-        size,
-        bounds,
-      );
-      setDocumentState((active) =>
-        storeNodeProjection(active, { ...node, position }),
-      );
-    };
-    const up = () => {
-      target.removeEventListener("pointermove", move);
-      target.removeEventListener("pointerup", up);
-      target.removeEventListener("pointercancel", up);
-      if (!dragged) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
-      dispatchRuntimeEvent("DOCUMENT_CHANGED", "current_container");
-    };
-    target.addEventListener("pointermove", move);
-    target.addEventListener("pointerup", up);
-    target.addEventListener("pointercancel", up);
+  /**
+   * 业务作用域图层（已拆到 ./editor/business-scope-layer.tsx）：
+   * 整棵业务画布委托给 BusinessGraphProjection；这里把页面级状态与动作
+   * 打包成 BusinessScopeLayerDeps 传入（选中/进入/拖拽/缩放/连线/断开/添加）。
+   */
+  const businessScopeLayerDeps: BusinessScopeLayerDeps = {
+    scope: businessScope,
+    worldSize: scopeWorldSize,
+    scale: camera.scale,
+    selectedNodeId: selectedBusinessNodeId ?? undefined,
+    layoutLocked,
+    pendingPipe,
+    selectNode: setSelectedBusinessNodeId,
+    enterNode,
+    moveNodeStart: moveBusinessNodeStart,
+    resizeNodeStart: resizeBusinessNodeStart,
+    toggleResizeMode: toggleBusinessResizeMode,
+    toggleDisplayMode: toggleBusinessDisplayMode,
+    updateInputBinding,
+    updateOutputBinding,
+    setToast,
+    startPipeDrag,
+    addChild: addBusinessChild,
   };
 
-  const resizeBusinessNodeStart = (
-    node: IntentNode,
-    direction: ResizeDirection,
-    previewScale: number,
-    event: ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    event.stopPropagation();
-    if (layoutLocked || event.button !== 0) return;
-    const target = event.currentTarget;
-    const origin = { x: event.clientX, y: event.clientY };
-    const bounds = businessScope.canvasSize ?? { width: 1400, height: 850 };
-    let dragged = false;
-    const world = target.closest<HTMLElement>(".business-preview-world");
-    const renderedScale =
-      world && world.offsetWidth > 0
-        ? world.getBoundingClientRect().width / world.offsetWidth
-        : previewScale * cameraRef.current.scale;
-    const pointerScale = renderedScale > 0 ? renderedScale : previewScale;
-    target.setPointerCapture(event.pointerId);
-    const move = (moveEvent: PointerEvent) => {
-      if (Math.abs(moveEvent.clientX - origin.x) + Math.abs(moveEvent.clientY - origin.y) > 3) dragged = true;
-      const geometry = resizeBusinessNodeGeometry(
-        node,
-        direction,
-        {
-          x: moveEvent.clientX - origin.x,
-          y: moveEvent.clientY - origin.y,
-        },
-        pointerScale,
-        bounds,
-      );
-      setDocumentState((active) =>
-        storeNodeProjection(active, {
-          ...node,
-          position: geometry.position,
-          size: geometry.size,
-        }),
-      );
-    };
-    const up = () => {
-      target.removeEventListener("pointermove", move);
-      target.removeEventListener("pointerup", up);
-      target.removeEventListener("pointercancel", up);
-      if (!dragged) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
-      dispatchRuntimeEvent("DOCUMENT_CHANGED", "current_container");
-    };
-    target.addEventListener("pointermove", move);
-    target.addEventListener("pointerup", up);
-    target.addEventListener("pointercancel", up);
+  /**
+   * 节点内容渲染器分发（已拆到 ./editor/node-surfaces.tsx）：
+   * 16 个内置面板分支 + 注册表兜底渲染器；这里把组件状态与动作
+   * 打包成 NodeSurfaceDeps 传入。
+   */
+  const nodeSurfaceDeps: NodeSurfaceDeps = {
+    documentState,
+    appRoot,
+    businessRoot,
+    businessScope,
+    scopeNode,
+    selectedBusinessNode,
+    selectedBusinessNodeId,
+    selectedAppNodeId,
+    validationIssues,
+    runtimeState,
+    eventTick,
+    pendingEvents,
+    pipelineTrace,
+    lastCommands,
+    runState,
+    trace,
+    rootInput,
+    setRootInput,
+    history,
+    future,
+    dirty,
+    layoutLocked,
+    camera,
+    search,
+    setSearch,
+    navigationStack,
+    setToast,
+    dispatchRuntimeEvent,
+    exportDocument,
+    exportPip,
+    emit,
+    navigateToBusinessNode,
+    navigatePanelBusinessNode,
+    selectPanelBusinessNode,
+    setSelectedBusinessNodeId,
+    renameBusinessNode,
+    updateDocumentNode,
+    bindingOptionsFor,
+    updateInputBinding,
+    outputBindingOptionsFor,
+    updateOutputBinding,
+    editPortSchema,
+    addPortSchema,
+    movePortSchema,
+    duplicateBusinessNode,
+    createLinkedBusinessNode,
+    deleteBusinessNode,
+    insertModule,
   };
-
-  const toggleBusinessResizeMode = (node: IntentNode) => {
-    updateDocumentNodeView(node.id, (item) => ({
-      ...item,
-      resizeMode: nodeResizeMode(item) === "simple" ? "full" : "simple",
-    }));
-    setSelectedBusinessNodeId(node.id);
-  };
-
-  const toggleBusinessDisplayMode = (node: IntentNode) => {
-    updateDocumentNodeView(node.id, (item) => ({
-      ...item,
-      displayMode:
-        nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
-    }));
-    setSelectedBusinessNodeId(node.id);
-  };
-
-  const renderBusinessScopeLayer = () => {
-    return (
-      <BusinessGraphProjection
-        projectionId="free-layout-container"
-        scope={businessScope}
-        worldSize={scopeWorldSize}
-        scale={camera.scale}
-        selectedNodeId={selectedBusinessNodeId}
-        layoutLocked={layoutLocked}
-        pendingPipe={pendingPipe}
-        onSelect={(node) => setSelectedBusinessNodeId(node.id)}
-        onEnter={enterNode}
-        onMoveStart={(node, event) =>
-          moveBusinessNodeStart(node, 1, event)
-        }
-        onResizeStart={(node, direction, event) =>
-          resizeBusinessNodeStart(node, direction, 1, event)
-        }
-        onResizeModeToggle={toggleBusinessResizeMode}
-        onDisplayModeToggle={toggleBusinessDisplayMode}
-        onDisconnectInput={(node, port) => {
-          updateInputBinding(node.id, port.id, "");
-          setToast(`已断开「${node.name} · ${port.name}」的管道`);
-        }}
-        onStartPipe={startPipeDrag}
-        onStartContainerInput={(port, event) =>
-          startPipeDrag(businessScope, port, event, "environment")
-        }
-        onDisconnectContainerOutput={(port) => {
-          updateOutputBinding(businessScope.id, port.id, "");
-          setToast(`已断开当前容器输出「${port.name}」`);
-        }}
-        onAddChild={addBusinessChild}
-      />
-    );
-  };
-
   const renderNodeContent = (
     node: IntentNode,
     contextAddress?: { panelId: string; surfaceId: string },
-  ) => {
-    const surfaceContext = contextAddress
-      ? resolveFeatureContext(
-          documentState,
-          contextAddress.panelId,
-          contextAddress.surfaceId,
-        )
-      : undefined;
-    const contextualRoot = surfaceContext?.container
-      ? projectIntentTree(
-          documentState.rootIntent,
-          documentState.businessRootId,
-          surfaceContext.container.projections,
-        )
-      : appRoot;
-    const contextualBusinessRoot = getBusinessRoot({
-      ...documentState,
-      rootIntent: contextualRoot,
-    });
-    const contextualBusinessScope = surfaceContext?.container
-      ? findNode(
-          contextualBusinessRoot,
-          surfaceContext.container.scope.nodeId,
-        ) ?? contextualBusinessRoot
-      : businessScope;
-    const contextualSubject = surfaceContext?.subject
-      ? findNode(contextualRoot, surfaceContext.subject.id) ??
-        surfaceContext.subject
-      : selectedBusinessNode;
-    const contextualValidationIssues = contextAddress
-      ? collectValidationIssues(contextualBusinessScope)
-      : validationIssues;
-    const key = node.implementation?.key;
-    if (key === "intent-document-loader") {
-      return (
-        <div className="runtime-inspector-surface">
-          <span>DOCUMENT</span>
-          <strong>IntentDocument v{documentState.version}</strong>
-          <small>业务根：{documentState.businessRootId}</small>
-          <small>模块快照：{documentState.publishedModules.length}</small>
-          <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "document_loader")}>加载文档</button>
-        </div>
-      );
-    }
-    if (key === "application-state") {
-      return (
-        <div className="runtime-inspector-surface">
-          <span>STATE NODE</span>
-          <strong>revision {runtimeState.documentRevision}</strong>
-          <small>scope：{runtimeState.scopeId}</small>
-          <small>selection：{runtimeState.selectionId}</small>
-          <small>layout：{runtimeState.layoutLocked ? "locked" : "editable"}</small>
-        </div>
-      );
-    }
-    if (key === "event-clock") {
-      return (
-        <div className="runtime-inspector-surface">
-          <span>EVENT CLOCK</span>
-          <strong>tick {eventTick}</strong>
-          <small>当前队列：{pendingEvents.length}</small>
-          <small>最近事件：{runtimeState.lastEventType}</small>
-          <div className="runtime-mini-trace">
-            {pipelineTrace.slice(-4).map((item) => (
-              <i key={`${item.tick}-${item.sequence}`}>#{item.tick}.{item.sequence} {item.eventType}</i>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    if (key === "command-processor") {
-      return (
-        <div className="runtime-inspector-surface">
-          <span>COMMANDS</span>
-          <strong>{lastCommands.length} 条当前命令</strong>
-          <div className="runtime-mini-trace">
-            {lastCommands.slice(-5).map((command) => <i key={command.id}>{command.type}</i>)}
-          </div>
-        </div>
-      );
-    }
-    if (key === "intent-executor") {
-      return (
-        <div className="runtime-inspector-surface">
-          <span>EXECUTOR</span>
-          <strong>{runState.toUpperCase()}</strong>
-          <small>业务根：{businessRoot.name}</small>
-          <small>追踪步骤：{trace.length}</small>
-          <button onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "intent_executor")} disabled={runState === "running"}>执行业务根</button>
-        </div>
-      );
-    }
-    if (key === "global-toolbar") {
-      return (
-        <div className="global-toolbar-surface">
-          <div className="runtime-brand"><i>◈</i><span><strong>Intent Map</strong><small>一切皆管道（节点）· v3</small></span></div>
-          <div className="runtime-command-grid">
-            <button onClick={() => dispatchRuntimeEvent("NEW_DOCUMENT", "global_toolbar")}>新建</button>
-            <button onClick={() => dispatchRuntimeEvent("IMPORT_REQUEST", "global_toolbar")}>导入</button>
-            <button onClick={() => void exportDocument()}>导出 v3</button>
-            <button onClick={() => void exportPip()}>导出 .pip</button>
-            <button disabled={!history.length} onClick={() => dispatchRuntimeEvent("UNDO", "global_toolbar")}>撤销</button>
-            <button disabled={!future.length} onClick={() => dispatchRuntimeEvent("REDO", "global_toolbar")}>重做</button>
-            <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "global_toolbar")}>泳道布局</button>
-            <button onClick={() => dispatchRuntimeEvent("PUBLISH_MODULE", "global_toolbar")}>发布模块</button>
-            <button onClick={() => dispatchRuntimeEvent("SET_LAYOUT_LOCK", "global_toolbar", { locked: !layoutLocked })}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
-            {runState === "running" ? <button className="danger" onClick={() => dispatchRuntimeEvent("STOP_REQUEST", "global_toolbar")}>停止</button> : <button className="primary" onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "global_toolbar")}>运行</button>}
-          </div>
-          <small className="runtime-save-state">{dirty ? "● 未导出" : "○ 已同步到文件"}</small>
-        </div>
-      );
-    }
-    if (key === "intent-tree") {
-      const treeContext =
-        contextAddress && surfaceContext?.panel
-          ? {
-              scopeNodeId:
-                surfaceContext.container?.scope.nodeId ??
-                contextualBusinessScope.id,
-              selectedNodeId:
-                surfaceContext.panel.selection.primaryNodeId,
-              onSelect: (target: IntentNode) => {
-                if (surfaceContext.container) {
-                  navigatePanelBusinessNode(
-                    contextAddress.panelId,
-                    surfaceContext.container.id,
-                    target,
-                  );
-                } else {
-                  selectPanelBusinessNode(
-                    contextAddress.panelId,
-                    target.id,
-                  );
-                }
-              },
-              onNavigate: (target: IntentNode) => {
-                if (surfaceContext.container) {
-                  navigatePanelBusinessNode(
-                    contextAddress.panelId,
-                    surfaceContext.container.id,
-                    target,
-                  );
-                } else {
-                  selectPanelBusinessNode(
-                    contextAddress.panelId,
-                    target.id,
-                  );
-                }
-              },
-            }
-          : undefined;
-      return (
-        <div className="tree-surface">
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索意图或端口" />
-          <div>{renderTree(contextualBusinessRoot, 0, treeContext)}</div>
-        </div>
-      );
-    }
-    if (key === "module-library") {
-      return (
-        <div className="module-surface">
-          <div className="surface-heading"><strong>已发布模块</strong><span>{documentState.publishedModules.length}</span></div>
-          {documentState.publishedModules.length ? documentState.publishedModules.slice().reverse().map((module) => (
-            <button key={`${module.moduleId}-${module.version}`} onClick={() => insertModule(module)}>
-              <i>◇</i><span><strong>{module.name}</strong><small>v{module.version} · {module.publishedAt}</small></span><b>＋</b>
-            </button>
-          )) : <div className="surface-empty">选择业务节点后发布模块</div>}
-        </div>
-      );
-    }
-    if (key === "validation") {
-      return (
-        <div className={`validation-surface ${detectCycle(contextualBusinessScope) ? "error" : "ok"}`}>
-          <i>{contextualValidationIssues.some((issue) => issue.level === "error") ? "!" : contextualValidationIssues.length ? "△" : "✓"}</i>
-          <span><strong>{contextualValidationIssues.length ? `${contextualValidationIssues.filter((issue) => issue.level === "error").length} 错误 · ${contextualValidationIssues.filter((issue) => issue.level === "warning").length} 警告 · ${contextualValidationIssues.filter((issue) => issue.level === "info").length} 提示` : "作用域有效"}</strong><small>{contextualValidationIssues.length ? "端口、依赖与消费关系检查" : "端口、可见性与数据 DAG 校验通过"}</small></span>
-          {contextualValidationIssues.length > 0 && (
-            <ul className="validation-issue-list">
-              {contextualValidationIssues.slice(0, 8).map((issue, index) => (
-                <li key={`${issue.nodeId}-${issue.portId ?? index}`} className={`issue-${issue.level}`}>
-                  <button onClick={() => {
-                    const target = findNode(contextualBusinessRoot, issue.nodeId);
-                    if (!target) return;
-                    if (contextAddress && surfaceContext?.container) {
-                      navigatePanelBusinessNode(contextAddress.panelId, surfaceContext.container.id, target);
-                    } else if (contextAddress) {
-                      selectPanelBusinessNode(contextAddress.panelId, target.id);
-                    } else {
-                      navigateToBusinessNode(target);
-                    }
-                    setToast(`已定位：${issue.text}`);
-                  }}>{issue.text}</button>
-                </li>
-              ))}
-              {contextualValidationIssues.length > 8 && (
-                <li className="issue-info">… 其余 {contextualValidationIssues.length - 8} 项</li>
-              )}
-            </ul>
-          )}
-        </div>
-      );
-    }
-    if (key === "breadcrumb") {
-      const path = findPath(businessRoot, businessScope.id) ?? [businessRoot];
-      return <div className="breadcrumb-surface">{path.map((item, index) => <Fragment key={item.id}><button onClick={() => navigateToBusinessNode(item)}>{item.name}</button>{index < path.length - 1 && <i>›</i>}</Fragment>)}</div>;
-    }
-    if (key === "scope-toolbar") {
-      return (
-        <div className="scope-toolbar-surface">
-          <div className="scope-toolbar-context">
-            <span>{scopeNode.kind.toUpperCase()}</span>
-            <strong>
-              {navigationStack
-                .map((address) =>
-                  address.domain === "business"
-                    ? findNode(businessRoot, address.nodeId)?.name ??
-                      address.nodeId
-                    : findNode(appRoot, address.nodeId)?.name ??
-                      address.nodeId,
-                )
-                .join(" / ")}
-            </strong>
-            <small>
-              {businessScope.name} · {businessScope.inputs.length} 输入 ·{" "}
-              {businessScope.outputs.length} 输出
-            </small>
-          </div>
-          <div className="scope-toolbar-actions">
-            <button
-              disabled={navigationStack.length === 1}
-              onClick={() =>
-                dispatchRuntimeEvent(
-                  "NAVIGATE_APP_PARENT",
-                  "scope_toolbar",
-                )
-              }
-            >
-              ← 上级
-            </button>
-            <button
-              onClick={() =>
-                dispatchRuntimeEvent("SET_LAYOUT_LOCK", "scope_toolbar", {
-                  locked: !layoutLocked,
-                })
-              }
-            >
-              {layoutLocked ? "解锁布局" : "锁定布局"}
-            </button>
-            <button
-              onClick={() =>
-                dispatchRuntimeEvent("AUTO_LAYOUT", "scope_toolbar")
-              }
-            >
-              泳道布局
-            </button>
-            <button
-              disabled={!findNode(scopeNode, selectedAppNodeId)}
-              onClick={() =>
-                dispatchRuntimeEvent(
-                  "DUPLICATE_APP_NODE",
-                  "scope_toolbar",
-                )
-              }
-            >
-              复制节点
-            </button>
-            <button
-              disabled={!findNode(scopeNode, selectedAppNodeId)}
-              onClick={() =>
-                dispatchRuntimeEvent("DELETE_APP_NODE", "scope_toolbar")
-              }
-            >
-              删除节点
-            </button>
-            <button
-              onClick={() =>
-                dispatchRuntimeEvent("RESET_APP_GRAPH", "scope_toolbar")
-              }
-            >
-              重置节点图
-            </button>
-            <button
-              onClick={() =>
-                dispatchRuntimeEvent("FIT_SCOPE", "scope_toolbar")
-              }
-            >
-              适应
-            </button>
-            <button
-              onClick={() =>
-                dispatchRuntimeEvent("RESET_CAMERA", "scope_toolbar")
-              }
-            >
-              {Math.round(camera.scale * 100)}%
-            </button>
-            <button onClick={() => navigateToBusinessNode(businessRoot)}>
-              业务根
-            </button>
-            <button
-              onClick={() =>
-                dispatchRuntimeEvent(
-                  "ADD_BUSINESS_CHILD",
-                  "scope_toolbar",
-                )
-              }
-            >
-              ＋ 子意图
-            </button>
-          </div>
-        </div>
-      );
-    }
-    if (key === "current-container") {
-      return (
-        <div className="runtime-lod-summary current-container-preview">
-          <span>进入后显示一个显式的当前业务容器引用节点</span>
-          <small>
-            {businessScope.inputs.length} 输入 ·{" "}
-            {businessScope.children?.length ?? 0} 子意图 ·{" "}
-            {businessScope.outputs.length} 输出
-          </small>
-        </div>
-      );
-    }
-    if (key === "business-scope-reference") {
-      return (
-        <div className="business-scope-reference-card">
-          <header>
-            <span>{businessScope.kind.toUpperCase()}</span>
-            <strong>{businessScope.name}</strong>
-            <i aria-hidden="true" />
-          </header>
-          <p>{businessScope.description}</p>
-          <div className="business-scope-reference-interfaces">
-            <div>
-              <strong>业务输入</strong>
-              {businessScope.inputs.map((port) => (
-                <span key={port.id}>
-                  <i />
-                  {port.name}
-                </span>
-              ))}
-            </div>
-            <div>
-              <strong>业务输出</strong>
-              {businessScope.outputs.map((port) => (
-                <span key={port.id}>
-                  {port.name}
-                  <i />
-                </span>
-              ))}
-            </div>
-          </div>
-          <footer>
-            <span>{businessScope.inputs.length} in</span>
-            <span>{businessScope.children?.length ?? 0} children</span>
-            <span>{businessScope.outputs.length} out</span>
-          </footer>
-        </div>
-      );
-    }
-    if (key === "canvas-status") {
-      return (
-        <div className="canvas-status-surface">
-          <span><i className="data" />数据管道</span>
-          <span><i className="event" />事件管道</span>
-          <span>{deriveBusinessVisualEdges(businessScope).length} 条业务引用</span>
-          <span>双指平移/缩放 · Ctrl+滚轮 50%–200% · 拖端口连线 · 双击输入端口断开</span>
-        </div>
-      );
-    }
-    if (key === "properties") {
-      return (
-        <div className="properties-surface">
-          <div className="property-heading"><span>{contextualSubject.kind === "operator" ? "ƒ" : "◇"}</span><div><small>{contextualSubject.kind}</small><strong>{contextualSubject.name}</strong></div></div>
-          <label>节点 ID<input defaultValue={contextualSubject.id} key={contextualSubject.id} onBlur={(event) => event.target.value !== contextualSubject.id && renameBusinessNode(contextualSubject.id, event.target.value.trim())} /></label>
-          <label>名称<input value={contextualSubject.name} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, name: event.target.value }))} /></label>
-          <label>描述<textarea rows={3} value={contextualSubject.description} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, description: event.target.value }))} /></label>
-          {contextualSubject.kind === "operator" && <label>内置算子<select value={contextualSubject.operator ?? "identity"} onChange={(event) => updateDocumentNode(contextualSubject.id, (item) => ({ ...item, operator: event.target.value }))}><option value="identity">identity</option><option value="object">object</option><option value="array">array</option><option value="concat">concat</option></select></label>}
-          <div className="property-ports"><strong>输入</strong>{contextualSubject.inputs.map((port) => {
-            const reference = collectRefs(port.binding)[0];
-            const value = reference?.env
-              ? `env:${reference.portId}`
-              : reference?.nodeId
-                ? `ref:${reference.nodeId}:${reference.portId}`
-                : "";
-            return <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateInputBinding(contextualSubject.id, port.id, event.target.value)}><option value="">未绑定</option>{bindingOptionsFor(contextualSubject.id).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>;
-          })}</div>
-          <div className="property-ports outputs"><strong>输出</strong>{contextualSubject.outputs.map((port) => {
-            const reference = collectRefs(port.binding)[0];
-            const value = reference?.env
-              ? `env:${reference.portId}`
-              : reference?.nodeId
-                ? `ref:${reference.nodeId}:${reference.portId}`
-                : "";
-            return contextualSubject.kind === "composite"
-              ? <span className="binding-port-row" key={port.id}><i />{port.name}<select value={value} onChange={(event) => updateOutputBinding(contextualSubject.id, port.id, event.target.value)}><option value="">未映射</option>{outputBindingOptionsFor(contextualSubject).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></span>
-              : <span key={port.id}><i />{port.name}<small>{port.type}</small></span>;
-          })}</div>
-          {(["inputs", "outputs"] as const).map((direction) => (
-            <section className="port-schema-editor" key={direction}>
-              <header><strong>{direction === "inputs" ? "输入 Schema" : "输出 Schema"}</strong><button onClick={() => addPortSchema(contextualSubject, direction)}>＋ 新增</button></header>
-              {contextualSubject[direction].map((port, index) => (
-                <div className="port-schema-row" key={port.id}>
-                  <input aria-label="端口 ID" defaultValue={port.id} onBlur={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, id: event.target.value.trim() })} />
-                  <input aria-label="端口名称" value={port.name} onChange={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, name: event.target.value })} />
-                  <select aria-label="端口类型" value={port.type} onChange={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, type: event.target.value as typeof port.type })}><option value="any">any</option><option value="string">string</option><option value="number">number</option><option value="boolean">boolean</option><option value="object">object</option><option value="array">array</option></select>
-                  <select aria-label="端口通道" value={port.channel ?? "data"} onChange={(event) => editPortSchema(contextualSubject, direction, port.id, { ...port, channel: event.target.value as "data" | "event" })}><option value="data">data</option><option value="event">event</option></select>
-                  <button disabled={index === 0} onClick={() => movePortSchema(contextualSubject, direction, index, -1)}>↑</button>
-                  <button disabled={index === contextualSubject[direction].length - 1} onClick={() => movePortSchema(contextualSubject, direction, index, 1)}>↓</button>
-                  <button className="danger" onClick={() => editPortSchema(contextualSubject, direction, port.id, null)}>×</button>
-                </div>
-              ))}
-            </section>
-          ))}
-          <div className="property-actions"><button onClick={() => contextAddress ? duplicateBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button onClick={() => createLinkedBusinessNode(contextualSubject.id, contextAddress?.panelId)} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建链接实例</button><button className="danger" onClick={() => contextAddress ? deleteBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
-        </div>
-      );
-    }
-    if (key === "run-trace") {
-      return (
-        <div className="trace-surface">
-          <div className="run-state"><i className={runState} /><span><small>本地确定性执行</small><strong>{runState === "idle" ? "尚未运行" : runState === "running" ? "运行中" : runState === "success" ? "执行成功" : "执行失败"}</strong></span><button onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "run_trace")} disabled={runState === "running"}>重新运行</button></div>
-          <div className="run-input-grid">{businessRoot.inputs.map((port) => {
-            const structured = port.type === "object" || port.type === "array";
-            const rawValue = rootInput[port.id];
-            const textValue = typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue) ?? "";
-            return (
-              <label key={port.id}>
-                <span>{port.name}<small>{port.type}</small></span>
-                {structured ? (
-                  <textarea rows={2} placeholder='JSON，例如 ["角色A","角色B"]' value={textValue} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} />
-                ) : (
-                  <input value={textValue} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} />
-                )}
-              </label>
-            );
-          })}</div>
-          <div className="trace-list">{trace.length ? trace.map((item, index) => <div className={`trace-row ${item.status}`} key={`${item.id}-${item.path}`}><b>{String(index + 1).padStart(2, "0")}</b><span><strong>{item.name}</strong><small>{item.path}</small>{item.output !== undefined && <code>输出 {JSON.stringify(item.output)?.slice(0, 220)}</code>}{item.error && <code>错误 {item.error}</code>}</span><i>{item.status}{item.duration ? ` · ${item.duration}ms` : ""}</i></div>) : <div className="surface-empty">运行后显示每层输入、输出与耗时</div>}</div>
-        </div>
-      );
-    }
-    const Renderer = resolveRenderer(node);
-    return <Renderer node={node} document={documentState} scale={camera.scale} active={scopeNode.id === node.id} selected={selectedAppNodeId === node.id} summary={camera.scale < PROJECTION_LOD_THRESHOLD} emit={emit} />;
-  };
+  ) => renderNodeSurface(node, nodeSurfaceDeps, contextAddress);
 
-  const renderEdge = (edge: AggregatedEdge) => {
-    const source = findNode(scopeNode, edge.sourceNodeId);
-    const target = findNode(scopeNode, edge.targetNodeId);
-    if (!source || !target) return null;
-    const sourceSize = runtimeNodeRenderSize(source);
-    const targetSize = runtimeNodeRenderSize(target);
-    const sourceMinimized = nodeDisplayMode(source) === "minimized";
-    const targetMinimized = nodeDisplayMode(target) === "minimized";
-    const sourcePortIndex = Math.max(0, source.outputs.findIndex((port) => port.id === edge.sourcePortId));
-    const targetPortIndex = Math.max(0, target.inputs.findIndex((port) => port.id === edge.targetPortId));
-    const sx =
-      source.position.x + sourceSize.width + (sourceMinimized ? 0 : 6);
-    const sy = sourceMinimized
-      ? source.position.y + sourceSize.height / 2
-      : source.position.y + PORT_TOP + sourcePortIndex * PORT_ROW;
-    const tx = target.position.x - (targetMinimized ? 0 : 6);
-    const ty = targetMinimized
-      ? target.position.y + targetSize.height / 2
-      : target.position.y + PORT_TOP + targetPortIndex * PORT_ROW;
-    const bend = Math.max(70, Math.abs(tx - sx) * 0.42);
-    const selected = selectedEdgeId === edge.id;
-    return (
-      <g
-        className={`runtime-edge channel-${edge.channel} ${selected ? "selected" : ""} ${selectedAppNodeId ? (edge.sourceNodeId === selectedAppNodeId || edge.targetNodeId === selectedAppNodeId ? "edge-connected" : "edge-dim") : ""}`}
-        key={edge.id}
-        onPointerDown={(event) => {
-          event.stopPropagation();
-          setSelectedEdgeId(selected ? null : edge.id);
-        }}
-        onDoubleClick={(event) => {
-          event.stopPropagation();
-          edge.members.forEach((member) =>
-            updateInputBinding(member.targetNodeId, member.targetPortId, ""),
-          );
-          setSelectedEdgeId(null);
-          setToast(`已断开 ${edge.members.length} 条管道`);
-        }}
-      >
-        <path d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`} />
-        <circle cx={(sx + tx) / 2} cy={(sy + ty) / 2} r={selected ? 12 : 9} />
-        <text x={(sx + tx) / 2} y={(sy + ty) / 2 + 3}>{edge.count}</text>
-        {selected && <text className="edge-detail" x={(sx + tx) / 2} y={(sy + ty) / 2 + 28}>{edge.members.map((member) => `${member.sourcePortId}→${member.targetPortId}`).join(" · ")}</text>}
-      </g>
-    );
-  };
+  // renderEdge / renderScopeBoundaryEdge（SVG 连线渲染）已迁至
+  // ./editor/edge-renderer，此处仅组装 deps（见下方 edgeRendererDeps）。
 
-  const renderScopeBoundaryEdge = (edge: ScopeBoundaryEdge) => {
-    const source =
-      edge.sourceKind === "node" && edge.sourceId
-        ? scopeNode.children?.find((node) => node.id === edge.sourceId)
-        : undefined;
-    const target =
-      edge.targetKind === "node" && edge.targetId
-        ? scopeNode.children?.find((node) => node.id === edge.targetId)
-        : undefined;
-    if (edge.sourceKind === "node" && !source) return null;
-    if (edge.targetKind === "node" && !target) return null;
-    const sourceSize = source ? runtimeNodeRenderSize(source) : undefined;
-    const targetSize = target ? runtimeNodeRenderSize(target) : undefined;
-    const sourceIndex =
-      edge.sourceKind === "environment"
-        ? Math.max(
-            0,
-            scopeNode.inputs.findIndex(
-              (port) => port.id === edge.sourcePortId,
-            ),
-          )
-        : Math.max(
-            0,
-            source?.outputs.findIndex(
-              (port) => port.id === edge.sourcePortId,
-            ) ?? 0,
-          );
-    const targetIndex =
-      edge.targetKind === "container-output"
-        ? Math.max(
-            0,
-            scopeNode.outputs.findIndex(
-              (port) => port.id === edge.targetPortId,
-            ),
-          )
-        : Math.max(
-            0,
-            target?.inputs.findIndex(
-              (port) => port.id === edge.targetPortId,
-            ) ?? 0,
-          );
-    const sourceMinimized =
-      source && nodeDisplayMode(source) === "minimized";
-    const targetMinimized =
-      target && nodeDisplayMode(target) === "minimized";
-    const sx =
-      edge.sourceKind === "environment"
-        ? -10
-        : source!.position.x +
-          sourceSize!.width +
-          (sourceMinimized ? 0 : 6);
-    const sy =
-      edge.sourceKind === "environment"
-        ? PORT_TOP + sourceIndex * PORT_ROW
-        : sourceMinimized
-          ? source!.position.y + sourceSize!.height / 2
-          : source!.position.y + PORT_TOP + sourceIndex * PORT_ROW;
-    const tx =
-      edge.targetKind === "container-output"
-        ? worldSize.width + 10
-        : target!.position.x - (targetMinimized ? 0 : 6);
-    const ty =
-      edge.targetKind === "container-output"
-        ? PORT_TOP + targetIndex * PORT_ROW
-        : targetMinimized
-          ? target!.position.y + targetSize!.height / 2
-          : target!.position.y + PORT_TOP + targetIndex * PORT_ROW;
-    const bend = Math.max(70, Math.abs(tx - sx) * 0.42);
-    return (
-      <path
-        className={`runtime-boundary-edge channel-${edge.channel}`}
-        key={edge.id}
-        d={`M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`}
-      />
-    );
-  };
+  // ========================================================================
+  // 渲染前的最终标志计算（主 JSX 条件渲染矩阵的输入）
+  // ========================================================================
 
   const worldSize = scopeWorldSize;
+  // renderedWorldSize：实际铺给 DOM 的画布尺寸（最小化时缩成小块）。
   const renderedWorldSize = scopeMinimized ? MINIMIZED_NODE_SIZE : worldSize;
+  // 【条件④】focusedLeaf：已钻入深层（栈深 > 1）且当前作用域无子节点
+  // → 该叶子节点自己的实现内容会占满画布渲染（focused-runtime-content）。
   const focusedLeaf =
     navigationStack.length > 1 && !scopeNode.children?.length;
+  // 【条件⑤】canAddRuntimeChild：允许显示"＋ 添加子节点"按钮——
+  // 应用域 + 不是 current-container 渲染器 + 聚焦叶子，三者同时满足。
   const canAddRuntimeChild =
     !isBusinessScope &&
     scopeNode.implementation?.key !== "current-container" &&
     focusedLeaf;
+  // 导航条上的管道计数：业务域数业务引用边；应用域数节点绑定边 + 边界边。
   const derivedPipeCount = isBusinessScope
     ? businessVisualEdges.length
     : appEdges.length + scopeBoundaryEdges.length;
 
+  // SVG 连线渲染 deps（edge-renderer.tsx 的 EdgeRendererDeps）。
+  // 全部为渲染期只读值 + 事件回调，无 ref。
+  const edgeRendererDeps: EdgeRendererDeps = {
+    scopeNode,
+    worldSize,
+    selectedEdgeId,
+    selectedAppNodeId,
+    setSelectedEdgeId,
+    updateInputBinding,
+    setToast,
+  };
+
+  // ========================================================================
+  // 主 JSX
+  //   结构：<Workspace> 承载面板系统，freeCanvas 插槽传入当前作用域画布。
+  //   画布内 root-boundary 的条件渲染矩阵：
+  //     scopeMinimized        → 只渲染最小化块，其余全部隐藏
+  //     isBusinessScope       → renderBusinessScopeLayer()（业务节点全在其中）
+  //     !isBusinessScope      → 标题栏 + 边界端口 + SVG 连线 + NodeProjection 子节点
+  //     focusedLeaf           → 叶子节点内容面板
+  //     canAddRuntimeChild    → "＋ 添加子节点"按钮
+  //     !layoutLocked         → 容器缩放手柄
+  // ========================================================================
   return (
     <main className="everything-app">
       <input ref={fileInputRef} type="file" accept=".json,.intent-map.json,.pip" hidden onChange={importDocument} />
@@ -3405,6 +2142,7 @@ export default function Home() {
             style={{ width: renderedWorldSize.width, height: renderedWorldSize.height }}
             data-display-mode={scopeMinimized ? "minimized" : "expanded"}
           >
+            {/* 导航条：仅在"展开 + 已钻入子作用域"时显示（返回上级/面包屑/管道计数/缩放比） */}
             {!scopeMinimized && navigationStack.length > 1 && (
               <nav
                 className="scope-navigation-bar"
@@ -3459,6 +2197,7 @@ export default function Home() {
                 )}
               </nav>
             )}
+            {/* 作用域头部三态：最小化块（双击展开）/ 应用域标题栏（含最小化按钮）/ 业务域无标题栏 */}
             {scopeMinimized ? (
               <button
                 className="root-minimized-node"
@@ -3494,9 +2233,12 @@ export default function Home() {
                 </button>
               </div>
             ) : null}
+            {/* 业务域内容线：整棵业务节点画布（与应用域内容线互斥） */}
             {!scopeMinimized &&
-              isBusinessScope &&
-              renderBusinessScopeLayer()}
+              isBusinessScope && (
+                <BusinessScopeLayer {...businessScopeLayerDeps} />
+              )}
+            {/* 应用域装饰层：边界输入/输出端口 + 节点间管道与边界管道的 SVG 连线 */}
             {!scopeMinimized && !isBusinessScope && (
               <>
                 <div
@@ -3531,11 +2273,13 @@ export default function Home() {
                   className="runtime-edges"
                   viewBox={`0 0 ${worldSize.width} ${worldSize.height}`}
                 >
-                  {appEdges.map(renderEdge)}
-                  {scopeBoundaryEdges.map(renderScopeBoundaryEdge)}
+                  {appEdges.map((edge) => renderEdge(edge, edgeRendererDeps))}
+                  {scopeBoundaryEdges.map((edge) => renderScopeBoundaryEdge(edge, edgeRendererDeps))}
                 </svg>
               </>
             )}
+            {/* 应用域子节点列表：每个子节点渲染为可拖拽/缩放/进入的 NodeProjection */}
+            {/* eslint-disable-next-line react-hooks/refs -- renderNodeContent 是纯渲染分发；deps 中回调的 ref 访问只发生在事件回调里 */}
             {!scopeMinimized && !isBusinessScope && visibleNodes.map((node) => (
               <NodeProjection
                 key={node.id}
@@ -3558,6 +2302,7 @@ export default function Home() {
                 onDisplayModeToggle={toggleNodeDisplayMode}
               />
             ))}
+            {/* 聚焦叶子面板：已钻入深层且没有子节点时，把叶子节点自身的实现内容放大渲染 */}
             {!scopeMinimized &&
               !isBusinessScope &&
               navigationStack.length > 1 &&
@@ -3569,14 +2314,17 @@ export default function Home() {
                   height: Math.max(420, worldSize.height - 96),
                 }}
               >
+                {/* eslint-disable-next-line react-hooks/refs -- 同上：纯渲染调用，非渲染期 ref 读取 */}
                 {renderNodeContent(scopeNode)}
               </section>
             )}
+            {/* "＋ 添加子节点"按钮：仅 canAddRuntimeChild（应用域聚焦叶子、非容器渲染器）时出现 */}
             {!scopeMinimized &&
               !isBusinessScope &&
               canAddRuntimeChild && (
               <button className="runtime-add-child" onClick={addRuntimeChild}>＋ 添加子节点</button>
             )}
+            {/* 容器缩放手柄 + 三向/八向模式切换：布局锁定或最小化时隐藏 */}
             {!scopeMinimized && !layoutLocked && (
               <>
                 <span
@@ -3621,6 +2369,7 @@ export default function Home() {
             )}
           </div>
         </div>
+        {/* 全局轻提示：2.4s 自动消失，也可点击关闭 */}
         {toast && (
           <button
             type="button"
