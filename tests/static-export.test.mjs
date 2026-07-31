@@ -25,6 +25,9 @@ test("keeps editor sessions and capability boundaries explicit", async () => {
     viewModels,
     workspaceContainer,
     canvasContainer,
+    canvasController,
+    authoringController,
+    runtimeController,
   ] = await Promise.all([
     readFile(new URL("app/editor/intent-editor.tsx", root), "utf8"),
     readFile(new URL("app/editor/use-document-session.ts", root), "utf8"),
@@ -33,6 +36,9 @@ test("keeps editor sessions and capability boundaries explicit", async () => {
     readFile(new URL("app/editor/editor-view-models.ts", root), "utf8"),
     readFile(new URL("app/editor/editor-workspace-container.tsx", root), "utf8"),
     readFile(new URL("app/editor/scope-canvas-container.tsx", root), "utf8"),
+    readFile(new URL("app/editor/use-editor-canvas-controller.ts", root), "utf8"),
+    readFile(new URL("app/editor/use-editor-authoring-controller.ts", root), "utf8"),
+    readFile(new URL("app/editor/use-editor-runtime-controller.ts", root), "utf8"),
   ]);
   assert.match(intentEditor, /<EditorWorkspaceContainer/);
   assert.match(intentEditor, /<ScopeCanvasContainer/);
@@ -52,6 +58,19 @@ test("keeps editor sessions and capability boundaries explicit", async () => {
   assert.match(canvasContainer, /createBusinessLayerModel/);
   assert.match(canvasContainer, /createEdgeRendererModel/);
   assert.doesNotMatch(intentEditor, /createCanvasDerivedModel/);
+  assert.match(canvasController, /const navigationDeps: ScopeNavigationDeps/);
+  assert.match(canvasController, /useCanvasCameraSession/);
+  assert.match(canvasController, /useCanvasPointerGestures/);
+  assert.match(authoringController, /useAuthoringSchemaActions/);
+  assert.match(authoringController, /useApplicationNodeActions/);
+  assert.match(runtimeController, /createRuntimeCommandActions/);
+  assert.match(runtimeController, /useRuntimeCommandExecutor/);
+  assert.doesNotMatch(intentEditor, /useCanvasCameraSession/);
+  assert.doesNotMatch(intentEditor, /useCanvasProjectionActions/);
+  assert.doesNotMatch(intentEditor, /useCanvasPointerGestures/);
+  assert.doesNotMatch(intentEditor, /useAuthoringSchemaActions/);
+  assert.doesNotMatch(intentEditor, /useApplicationNodeActions/);
+  assert.doesNotMatch(intentEditor, /useRuntimeCommandExecutor/);
 });
 
 test("exports the everything-node application as a static page", async () => {

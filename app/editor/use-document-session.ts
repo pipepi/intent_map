@@ -142,3 +142,5 @@ export function useDocumentSession(setToast: (message: string) => void) {
     runtime,
   };
 }
+
+export type DocumentSession = ReturnType<typeof useDocumentSession>;

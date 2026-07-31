@@ -1,73 +1,20 @@
 "use client";
 
-import type { ComponentProps } from "react";
-
-import type { IntentNode } from "../runtime/model";
-import type { AggregatedEdge, ScopeBoundaryEdge } from "./bindings";
-import type { BusinessScopeLayerDeps } from "./business-scope-layer";
 import {
   createBusinessLayerModel,
   createCanvasDerivedModel,
   createEdgeRendererModel,
 } from "./editor-view-models";
 import { ScopeCanvas, type ScopeCanvasModel } from "./scope-canvas";
+import type { CanvasAuthoringCapability } from "./use-editor-authoring-controller";
+import type {
+  CanvasCapability,
+  NavigationCapability,
+  ScopeCapability,
+} from "./use-editor-canvas-controller";
+import type { EditorSelectionCapability } from "./use-editor-ui-session";
 
 type AppContent = ScopeCanvasModel["appContent"];
-type CanvasActions = ComponentProps<typeof ScopeCanvas>["actions"];
-
-export interface ScopeCapability {
-  scopeNode: IntentNode;
-  businessScope: IntentNode;
-  worldSize: { width: number; height: number };
-  minimized: boolean;
-  isBusiness: boolean;
-  layoutLocked: boolean;
-  navigationStack: ScopeCanvasModel["navigationStack"];
-  scopePath: string[];
-  activeCameraKey: string;
-  appEdges: AggregatedEdge[];
-  boundaryEdges: ScopeBoundaryEdge[];
-  businessPipeCount: number;
-  visibleNodes: IntentNode[];
-}
-
-export interface CanvasCapability {
-  camera: ScopeCanvasModel["camera"];
-  viewportRef: ComponentProps<typeof ScopeCanvas>["refs"]["viewport"];
-  onWheel: CanvasActions["onWheel"];
-  onViewportPointerDown: CanvasActions["onViewportPointerDown"];
-  onMoveStart: AppContent["onMoveStart"];
-  onResizeStart: AppContent["onResizeStart"];
-  onScopeResizeStart: ScopeCanvasModel["resizeControls"]["onResizeStart"];
-  onResizeModeToggle: AppContent["onResizeModeToggle"];
-  onDisplayModeToggle: AppContent["onDisplayModeToggle"];
-}
-
-export interface SelectionCapability {
-  selectedAppNodeId: string;
-  selectedBusinessNodeId: string;
-  onSelectAppNode: AppContent["onSelectAppNode"];
-  onSelectBusinessNode: AppContent["onSelectBusinessNode"];
-  setSelectedEdgeId: (id: string | null) => void;
-  selectedEdgeId: string | null;
-}
-
-export interface CanvasAuthoringCapability {
-  businessLayer: Omit<
-    BusinessScopeLayerDeps,
-    "scope" | "worldSize" | "scale" | "selectedNodeId" | "layoutLocked"
-  >;
-  updateInputBinding: AppContent["edgeRendererDeps"]["updateInputBinding"];
-  onEnterNode: AppContent["onEnterNode"];
-  onAddRuntimeChild: AppContent["onAddRuntimeChild"];
-}
-
-export interface NavigationCapability {
-  legendOpen: boolean;
-  onToggleLegend: CanvasActions["onToggleLegend"];
-  onNavigateParent: CanvasActions["onNavigateParent"];
-  onNavigateFrame: CanvasActions["onNavigateFrame"];
-}
 
 export interface CanvasFeedbackCapability {
   toast: string;
@@ -77,7 +24,7 @@ export interface CanvasFeedbackCapability {
 export interface ScopeCanvasContainerProps {
   scope: ScopeCapability;
   canvas: CanvasCapability;
-  selection: SelectionCapability;
+  selection: EditorSelectionCapability;
   authoring: CanvasAuthoringCapability;
   navigation: NavigationCapability;
   feedback: CanvasFeedbackCapability;

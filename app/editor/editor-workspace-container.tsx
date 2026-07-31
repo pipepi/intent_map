@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 
 import type { IntentDocumentV3 } from "../runtime/model";
 import { EditorWorkspace } from "./editor-workspace";
+import type { WorkspaceAuthoringCapability } from "./use-editor-authoring-controller";
 import { useWorkspaceViewActions } from "./use-workspace-view-actions";
 
 type WorkspaceProps = ComponentProps<typeof EditorWorkspace>;
@@ -13,12 +14,6 @@ export interface DocumentWorkspaceCapability {
   onImportDocument: WorkspaceProps["onImportDocument"];
   document: WorkspaceProps["document"];
   renderNodeContent: WorkspaceProps["renderNodeContent"];
-}
-
-export interface WorkspaceAuthoringCapability {
-  onUpdateInputBinding: WorkspaceProps["onUpdateInputBinding"];
-  onUpdateOutputBinding: WorkspaceProps["onUpdateOutputBinding"];
-  onAddBusinessChild: WorkspaceProps["onAddBusinessChild"];
 }
 
 export interface WorkspaceViewCapability {

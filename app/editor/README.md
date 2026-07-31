@@ -7,15 +7,12 @@
 ```text
 HomePage
 └── IntentEditor
-    ├── useDocumentHistory / useRuntimePipeline / useBusinessRunState
+    ├── useEditorUiSession
     ├── useDocumentSession
-    ├── useScopeSession
-    ├── useCanvasProjectionActions
-    ├── useCanvasCameraSession / useEditorShortcuts
-    ├── useCanvasPointerGestures / usePanelNavigationActions
-    ├── useAuthoringSchemaActions / useApplicationNodeActions
-    ├── useBusinessAuthoringSession / useNodeSurfaceController
-    ├── useRuntimeCommandExecutor
+    ├── useEditorCanvasController
+    ├── useEditorAuthoringController
+    ├── useEditorRuntimeController
+    ├── useNodeSurfaceController
     └── EditorWorkspaceContainer
         ├── EditorWorkspace
         └── ScopeCanvasContainer
@@ -29,12 +26,16 @@ HomePage
 ### 页面与组合根
 
 - `../page.tsx`：Next.js 客户端页面入口，只渲染 `IntentEditor`。
-- `intent-editor.tsx`：编辑器组合根，只创建局部 UI 状态、领域 session 和两个顶层容器。
+- `intent-editor.tsx`：编辑器组合根，只创建五个领域 session、节点 renderer 和两个顶层容器。
 
 ### 会话与控制器
 
+- `use-editor-ui-session.ts`：局部选择、搜索、legend、pending pipe 与 feedback 生命周期；业务选择通过 runtime adapter 绑定，不复制事实源。
 - `use-document-history.ts`：文档事实源、历史栈、dirty 状态和两类写入通道。
 - `use-document-session.ts`：组合历史、运行时管线、导航上下文、文档 IO、新建和宿主加载。
+- `use-editor-canvas-controller.ts`：组合 scope、camera、projection、navigation、pointer 和 auto-layout，并直接输出画布 capability。
+- `use-editor-authoring-controller.ts`：组合 Schema、Panel、应用节点和业务创作操作，按 Workspace、Canvas、NodeSurface 和 Command 输出能力。
+- `use-editor-runtime-controller.ts`：组合运行状态、快捷键、RuntimeCommand 映射和执行器。
 - `use-runtime-pipeline.ts`：事件批处理、运行时状态及命令生成。
 - `use-business-run-state.ts`：业务执行、取消、输入和 trace。
 - `use-scope-session.ts`：两棵树投影、当前作用域、导航栈、连线/校验派生及浏览上下文持久化。
@@ -73,7 +74,8 @@ HomePage
 - 含 ref 的工厂闭包只在事件或 effect 中执行。
 - 视图组件不直接修改文档，所有修改通过注入的 action 完成。
 - 新增 RuntimeCommand 时，必须同步扩充 `SupportedRuntimeCommand` 与执行 action 映射。
-- 优先为既有会话 hook 增加返回字段，不要把派生规则重新放回 `page.tsx`。
+- 领域 controller 可以组合既有小 hooks，但不得复制其算法或反向依赖视图容器。
+- 组合根只消费 capability，不得重新展开底层 refs、工厂 deps 或命令映射。
 
 ## 验证
 
