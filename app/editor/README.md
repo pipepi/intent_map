@@ -11,6 +11,7 @@ HomePage
     ├── useScopeSession
     ├── useCanvasProjectionActions
     ├── useCanvasCameraSession / useEditorShortcuts
+    ├── useCanvasPointerGestures / usePanelNavigationActions
     ├── useAuthoringSchemaActions / useApplicationNodeActions
     ├── useRuntimeCommandExecutor
     └── EditorWorkspace
@@ -35,6 +36,8 @@ HomePage
 - `use-canvas-projection-actions.ts`：节点与容器投影持久化、显示和缩放模式切换。
 - `use-canvas-camera-session.ts`：相机状态、作用域恢复/适应策略和相机相关 refs。
 - `use-editor-shortcuts.ts`：全局键盘命令与未保存文档的离开页面保护。
+- `use-canvas-pointer-gestures.ts`：触摸状态及平移、节点缩放、容器缩放手势接线。
+- `use-panel-navigation-actions.ts`：全局业务跳转与 Panel 内独立导航、选择。
 - `use-authoring-schema-actions.ts`：节点 ID、端口 schema 与输入/输出绑定操作。
 - `use-application-node-actions.ts`：应用节点新增、复制、删除和应用图重置。
 - `use-workspace-view-actions.ts`：Workspace/View 的更新与另存行为。

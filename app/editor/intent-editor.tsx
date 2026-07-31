@@ -46,17 +46,10 @@ import {
 } from "react";
 
 import {
-  ACTIVE_BUSINESS_SCOPE_REF_ID,
-  businessScopeAddress,
-  getBusinessRoot,
-  scopeCameraKey,
   serializeIntentDocument,
-  updatePanel,
   updateSurface,
-  type CameraState,
   type IntentDocumentV3,
   type IntentNode,
-  type ScopeAddress,
 } from "../runtime/model";
 import {
   downloadExport,
@@ -70,7 +63,6 @@ import {
 } from "../runtime/registry";
 // ---- 从本文件拆出的功能模块（app/editor/）----
 import {
-  findPath,
   freePanelContext,
   sampleDocument,
   updateNode,
@@ -91,17 +83,12 @@ import { useWorkspaceViewActions } from "./use-workspace-view-actions";
 import { useCanvasProjectionActions } from "./use-canvas-projection-actions";
 import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useCanvasCameraSession } from "./use-canvas-camera-session";
+import { usePanelNavigationActions } from "./use-panel-navigation-actions";
+import { useCanvasPointerGestures } from "./use-canvas-pointer-gestures";
 import {
   renderNodeSurface,
   type NodeSurfaceDeps,
 } from "./node-surfaces";
-import {
-  createMoveNodeStart,
-  createResizeNodeStart,
-  createResizeScopeCanvasStart,
-  createViewportPointerDownHandler,
-  type PointerGestureDeps,
-} from "./pointer-gestures";
 import {
   createAddBusinessChild,
   createCreateLinkedBusinessNode,
@@ -194,17 +181,6 @@ export function IntentEditor() {
   };
   // ---- Refs（不触发重渲染的可变引用）----
   const fileInputRef = useRef<HTMLInputElement>(null); // 隐藏的导入文件选择框
-  const touchPointersRef = useRef(             // 触屏活跃触点表（pointerId → 坐标，支持双指）
-    new Map<number, { x: number; y: number }>(),
-  );
-
-  // 一次触摸手势的起始快照：起始相机、触点中心、双指间距、是否允许单指平移
-  const touchGestureRef = useRef<{
-    startCamera: CameraState;
-    startCenter: { x: number; y: number };
-    startDistance?: number;
-    allowSinglePan: boolean;
-  } | null>(null);
   // ---- runtimeState 的三个常用字段别名（事件管线归约结果）----
   const businessScopeId = runtimeState.scopeId;         // 当前业务作用域节点 id
   const selectedBusinessNodeId = runtimeState.selectionId; // 业务域选中节点 id
@@ -357,11 +333,14 @@ export function IntentEditor() {
    * 视口平移（鼠标/触屏）、应用节点拖拽/缩放、作用域画布缩放。
    * 这里组装依赖并调用工厂创建处理器，签名与原闭包一致。
    */
-  const pointerGestureDeps: PointerGestureDeps = {
+  const {
+    onViewportPointerDown,
+    moveNodeStart,
+    resizeNodeStart,
+    resizeScopeCanvasStart,
+  } = useCanvasPointerGestures({
     viewportRef,
     cameraRef,
-    touchPointersRef,
-    touchGestureRef,
     layoutLocked,
     isBusinessScope,
     scopeNode,
@@ -374,15 +353,7 @@ export function IntentEditor() {
     setScopeCamera,
     storeNodeProjection,
     storeScopeCanvasProjection,
-  };
-  // eslint-disable-next-line react-hooks/refs -- 工厂仅创建手势闭包，ref 只在事件回调内访问
-  const onViewportPointerDown = createViewportPointerDownHandler(pointerGestureDeps);
-  // eslint-disable-next-line react-hooks/refs -- 同上
-  const moveNodeStart = createMoveNodeStart(pointerGestureDeps);
-  // eslint-disable-next-line react-hooks/refs -- 同上
-  const resizeNodeStart = createResizeNodeStart(pointerGestureDeps);
-  // eslint-disable-next-line react-hooks/refs -- 同上
-  const resizeScopeCanvasStart = createResizeScopeCanvasStart(pointerGestureDeps);
+  });
 
   /**
    * 泳道自动布局（薄封装）：泳道几何与堆叠算法在 ./editor/auto-layout 的
@@ -497,6 +468,21 @@ export function IntentEditor() {
     commitDocumentChange: commit,
     updateDocumentNode,
     setToast,
+  });
+
+  const {
+    navigateToBusinessNode,
+    selectPanelBusinessNode,
+    navigatePanelBusinessNode,
+  } = usePanelNavigationActions({
+    appRoot,
+    businessRoot,
+    fitOnNextScopeRef,
+    setScopeLegendOpen,
+    setNavigationStack,
+    setBusinessScopeId,
+    setSelectedBusinessNodeId,
+    updateViewDocument: view,
   });
 
   const {
@@ -636,91 +622,6 @@ export function IntentEditor() {
   /** 渲染器回调桥：把子渲染器发来的 RuntimeCommand 转投到事件管线。 */
   const emit = (command: RuntimeCommand) => {
     dispatchRuntimeEvent(command.type, command.source ?? "renderer", command.payload);
-  };
-
-  /**
-   * 从意图树直接跳转到任意业务节点：重建整条钻取栈
-   * （应用根 → 业务路径上的每一层），并定位/选中目标节点。
-   */
-  const navigateToBusinessNode = (node: IntentNode) => {
-    const path = findPath(businessRoot, node.id) ?? [businessRoot];
-    fitOnNextScopeRef.current = true;
-    setScopeLegendOpen(false);
-    setNavigationStack([
-      { domain: "app", nodeId: appRoot.id },
-      // 树导航直接进入业务域，不再压入容器渲染器技术层
-      ...path.map<ScopeAddress>((item) => ({
-        domain: "business",
-        nodeId: item.id,
-        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-      })),
-    ]);
-    setBusinessScopeId(node.id);
-    setSelectedBusinessNodeId(node.id);
-  };
-
-  /** 在指定面板内选中业务节点（只改该面板的 selection，不影响全局选中）。 */
-  const selectPanelBusinessNode = (panelId: string, nodeId: string) => {
-    view((active) =>
-      updatePanel(active, panelId, (panel) => ({
-        ...panel,
-        selection: {
-          nodeIds: [nodeId],
-          primaryNodeId: nodeId,
-          revision: panel.selection.revision + 1,
-        },
-      })),
-    );
-  };
-
-  /** 在指定面板的容器 surface 内跳转到业务节点：更新面板选中 + 重写该 surface 的钻取栈。 */
-  const navigatePanelBusinessNode = (
-    panelId: string,
-    containerSurfaceId: string,
-    node: IntentNode,
-  ) => {
-    view((active) => {
-      const root = getBusinessRoot(active);
-      const path = findPath(root, node.id);
-      if (!path) return active;
-      const selected = updatePanel(active, panelId, (panel) => ({
-        ...panel,
-        selection: {
-          nodeIds: [node.id],
-          primaryNodeId: node.id,
-          revision: panel.selection.revision + 1,
-        },
-      }));
-      return updateSurface(
-        selected,
-        panelId,
-        containerSurfaceId,
-        (surface) =>
-          surface.kind === "current-container"
-            ? (() => {
-                const targetScope = businessScopeAddress(node.id);
-                const targetKey = scopeCameraKey(targetScope);
-                return {
-                ...surface,
-                scope: targetScope,
-                navigationStack: path.map((item) => ({
-                  domain: "business" as const,
-                  nodeId: item.id,
-                  viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-                })),
-                projections: {
-                  ...surface.projections,
-                  [targetKey]: {
-                    camera: { scale: 1, x: 12, y: 12 },
-                    nodeLayouts:
-                      surface.projections[targetKey]?.nodeLayouts ?? {},
-                  },
-                },
-              };
-            })()
-            : surface,
-      );
-    });
   };
 
   /**
