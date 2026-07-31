@@ -16,8 +16,10 @@ HomePage
     ├── useAuthoringSchemaActions / useApplicationNodeActions
     ├── useBusinessAuthoringSession / useNodeSurfaceController
     ├── useRuntimeCommandExecutor
-    └── EditorWorkspace
-        └── ScopeCanvas
+    └── EditorWorkspaceContainer
+        ├── EditorWorkspace
+        └── ScopeCanvasContainer
+            └── ScopeCanvas
             ├── ScopeNavigationBar / ScopeHeader
             ├── BusinessScopeLayer | AppScopeContent
             ├── ContainerResizeControls
@@ -27,7 +29,7 @@ HomePage
 ### 页面与组合根
 
 - `../page.tsx`：Next.js 客户端页面入口，只渲染 `IntentEditor`。
-- `intent-editor.tsx`：编辑器组合根，连接文档、运行时、画布、创作动作和视图模型。
+- `intent-editor.tsx`：编辑器组合根，只创建局部 UI 状态、领域 session 和两个顶层容器。
 
 ### 会话与控制器
 
@@ -52,7 +54,9 @@ HomePage
 
 ### 视图层
 
+- `editor-workspace-container.tsx`：按文档、创作、View 和 feedback 能力接线 Workspace；唯一调用 `useWorkspaceViewActions` 的位置。
 - `editor-workspace.tsx`：文件输入和 `Workspace` 外壳。
+- `scope-canvas-container.tsx`：按作用域、画布、选择、创作、导航和 feedback 能力装配画布模型；唯一组合业务图层、连线和画布派生 adapter 的位置。
 - `scope-canvas.tsx`：viewport、相机变换和作用域条件渲染矩阵；仅接收 `model/actions/refs` 三组属性。
 - `canvas-layers.tsx`：应用画布的导航、头部、内容和容器缩放叶子组件。
 - `business-scope-layer.tsx`：业务图组件的接线适配。

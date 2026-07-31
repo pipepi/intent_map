@@ -17,12 +17,25 @@ const readApplicationSource = async () => {
 };
 
 test("keeps editor sessions and capability boundaries explicit", async () => {
-  const [documentSession, surfaceController, commandActions, viewModels] = await Promise.all([
+  const [
+    intentEditor,
+    documentSession,
+    surfaceController,
+    commandActions,
+    viewModels,
+    workspaceContainer,
+    canvasContainer,
+  ] = await Promise.all([
+    readFile(new URL("app/editor/intent-editor.tsx", root), "utf8"),
     readFile(new URL("app/editor/use-document-session.ts", root), "utf8"),
     readFile(new URL("app/editor/use-node-surface-controller.tsx", root), "utf8"),
     readFile(new URL("app/editor/runtime-command-actions.ts", root), "utf8"),
     readFile(new URL("app/editor/editor-view-models.ts", root), "utf8"),
+    readFile(new URL("app/editor/editor-workspace-container.tsx", root), "utf8"),
+    readFile(new URL("app/editor/scope-canvas-container.tsx", root), "utf8"),
   ]);
+  assert.match(intentEditor, /<EditorWorkspaceContainer/);
+  assert.match(intentEditor, /<ScopeCanvasContainer/);
   assert.match(documentSession, /commitDocumentChange/);
   assert.match(documentSession, /commitViewChange/);
   assert.match(documentSession, /createDocumentIO/);
@@ -33,6 +46,12 @@ test("keeps editor sessions and capability boundaries explicit", async () => {
   assert.match(commandActions, /RESET_CAMERA/);
   assert.match(viewModels, /createCanvasDerivedModel/);
   assert.match(viewModels, /createBusinessLayerModel/);
+  assert.match(workspaceContainer, /useWorkspaceViewActions/);
+  assert.doesNotMatch(intentEditor, /useWorkspaceViewActions/);
+  assert.match(canvasContainer, /createCanvasDerivedModel/);
+  assert.match(canvasContainer, /createBusinessLayerModel/);
+  assert.match(canvasContainer, /createEdgeRendererModel/);
+  assert.doesNotMatch(intentEditor, /createCanvasDerivedModel/);
 });
 
 test("exports the everything-node application as a static page", async () => {
