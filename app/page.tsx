@@ -39,7 +39,6 @@
  */
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -76,8 +75,6 @@ import {
 } from "./runtime/authoring";
 import {
   MINIMIZED_NODE_SIZE,
-  NodeProjection,
-  resizeDirectionsFor,
 } from "./runtime/node-renderer";
 import {
   type RuntimeCommand,
@@ -105,8 +102,6 @@ import {
 import {
   MAX_SCALE,
   MIN_SCALE,
-  PORT_ROW,
-  PORT_TOP,
 } from "./editor/constants";
 import {
   clone,
@@ -162,14 +157,18 @@ import {
   type PendingPipeState,
 } from "./editor/business-ops";
 import {
-  renderEdge,
-  renderScopeBoundaryEdge,
   type EdgeRendererDeps,
 } from "./editor/edge-renderer";
 import {
   BusinessScopeLayer,
   type BusinessScopeLayerDeps,
 } from "./editor/business-scope-layer";
+import {
+  AppScopeContent,
+  ContainerResizeControls,
+  ScopeHeader,
+  ScopeNavigationBar,
+} from "./editor/canvas-layers";
 import {
   createScopeCameraOps,
   type ScopeCameraDeps,
@@ -1778,228 +1777,64 @@ export default function Home() {
           >
             {/* 导航条：仅在"展开 + 已钻入子作用域"时显示（返回上级/面包屑/管道计数/缩放比） */}
             {!scopeMinimized && navigationStack.length > 1 && (
-              <nav
-                className="scope-navigation-bar"
-                aria-label="当前作用域导航"
-              >
-                <button onClick={navigateToParent}>← 返回上级</button>
-                <div className="scope-path">
-                  {scopePath.map((name, index) => (
-                    <Fragment key={`${navigationStack[index].domain}:${navigationStack[index].nodeId}`}>
-                      <button
-                        className={
-                          index === scopePath.length - 1
-                            ? "scope-path-current"
-                            : undefined
-                        }
-                        disabled={index === scopePath.length - 1}
-                        aria-current={
-                          index === scopePath.length - 1
-                            ? "page"
-                            : undefined
-                        }
-                        title={name}
-                        onClick={() => navigateToScopeFrame(index)}
-                      >
-                        {index === scopePath.length - 1 &&
-                        navigationStack[index].domain === "business"
-                          ? name
-                          : name}
-                      </button>
-                      {index < scopePath.length - 1 && <i>›</i>}
-                    </Fragment>
-                  ))}
-                </div>
-                <button
-                  className="scope-pipeline-trigger"
-                  title="本作用域内的数据/事件管道数量，点击查看图例"
-                  aria-expanded={scopeLegendOpen}
-                  onClick={() => setScopeLegendOpen((open) => !open)}
-                >
-                  {derivedPipeCount} 管道
-                </button>
-                <span>{Math.round(camera.scale * 100)}%</span>
-                {scopeLegendOpen && (
-                  <div className="scope-legend-popover">
-                    <span><i className="data" />数据管道</span>
-                    <span><i className="event" />事件管道</span>
-                    <small>Ctrl + 滚轮进入或返回</small>
-                    <small>双击展开 · 再双击进入 · Esc 返回</small>
-                    <small>Ctrl+Z 撤销 · Ctrl+S 导出 · Enter 进入选中</small>
-                    <small>◆ 核心节点</small>
-                  </div>
-                )}
-              </nav>
+              <ScopeNavigationBar
+                scopePath={scopePath}
+                navigationStack={navigationStack}
+                pipeCount={derivedPipeCount}
+                cameraScale={camera.scale}
+                legendOpen={scopeLegendOpen}
+                onToggleLegend={() => setScopeLegendOpen((open) => !open)}
+                onNavigateParent={navigateToParent}
+                onNavigateFrame={navigateToScopeFrame}
+              />
             )}
             {/* 作用域头部三态：最小化块（双击展开）/ 应用域标题栏（含最小化按钮）/ 业务域无标题栏 */}
-            {scopeMinimized ? (
-              <button
-                className="root-minimized-node"
-                style={{
-                  left: 0,
-                  top: 0,
-                }}
-                title="双击展开节点"
-                onPointerDown={(event) => event.stopPropagation()}
-                onDoubleClick={(event) => {
-                  event.stopPropagation();
-                  toggleNodeDisplayMode(scopeNode);
-                }}
-              >
-                {scopeNode.name}
-              </button>
-            ) : !isBusinessScope ? (
-              <div className="root-caption">
-                <span>{scopeNode.kind.toUpperCase()}</span>
-                <strong>{scopeNode.name}</strong>
-                <small>{scopeNode.description}</small>
-                <button
-                  className="node-display-toggle root-display-toggle"
-                  aria-label={`最小化「${scopeNode.name}」`}
-                  title="只显示节点名称"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleNodeDisplayMode(scopeNode);
-                  }}
-                >
-                  −
-                </button>
-              </div>
-            ) : null}
+            <ScopeHeader
+              minimized={scopeMinimized}
+              isBusinessScope={isBusinessScope}
+              scopeNode={scopeNode}
+              onToggleDisplayMode={toggleNodeDisplayMode}
+            />
             {/* 业务域内容线：整棵业务节点画布（与应用域内容线互斥） */}
             {!scopeMinimized &&
               isBusinessScope && (
                 <BusinessScopeLayer {...businessScopeLayerDeps} />
               )}
-            {/* 应用域装饰层：边界输入/输出端口 + 节点间管道与边界管道的 SVG 连线 */}
+            {/* 应用域内容线（与业务域互斥）：边界端口 + SVG 连线 + 子节点 + 聚焦叶子 + 添加子节点 */}
             {!scopeMinimized && !isBusinessScope && (
-              <>
-                <div
-                  className="scope-boundary-ports scope-boundary-inputs"
-                  aria-hidden="true"
-                >
-                  {scopeNode.inputs.map((port, index) => (
-                    <span
-                      key={port.id}
-                      style={{ top: PORT_TOP - 12 + index * PORT_ROW }}
-                    >
-                      <i />
-                      {port.name}
-                    </span>
-                  ))}
-                </div>
-                <div
-                  className="scope-boundary-ports scope-boundary-outputs"
-                  aria-hidden="true"
-                >
-                  {scopeNode.outputs.map((port, index) => (
-                    <span
-                      key={port.id}
-                      style={{ top: PORT_TOP - 12 + index * PORT_ROW }}
-                    >
-                      {port.name}
-                      <i />
-                    </span>
-                  ))}
-                </div>
-                <svg
-                  className="runtime-edges"
-                  viewBox={`0 0 ${worldSize.width} ${worldSize.height}`}
-                >
-                  {appEdges.map((edge) => renderEdge(edge, edgeRendererDeps))}
-                  {scopeBoundaryEdges.map((edge) => renderScopeBoundaryEdge(edge, edgeRendererDeps))}
-                </svg>
-              </>
-            )}
-            {/* 应用域子节点列表：每个子节点渲染为可拖拽/缩放/进入的 NodeProjection */}
-            {/* eslint-disable-next-line react-hooks/refs -- renderNodeContent 是纯渲染分发；deps 中回调的 ref 访问只发生在事件回调里 */}
-            {!scopeMinimized && !isBusinessScope && visibleNodes.map((node) => (
-              <NodeProjection
-                key={node.id}
-                node={node}
-                scale={camera.scale}
-                selected={selectedAppNodeId === node.id}
-                active={false}
+              <AppScopeContent
+                scopeNode={scopeNode}
+                worldSize={worldSize}
+                appEdges={appEdges}
+                scopeBoundaryEdges={scopeBoundaryEdges}
+                edgeRendererDeps={edgeRendererDeps}
+                visibleNodes={visibleNodes}
+                cameraScale={camera.scale}
+                selectedAppNodeId={selectedAppNodeId}
                 layoutLocked={layoutLocked}
-                content={renderNodeContent(node)}
-                onSelect={(nodeId) => {
-                  setSelectedAppNodeId(nodeId);
-                  if (nodeId === ACTIVE_BUSINESS_SCOPE_REF_ID) {
-                    setSelectedBusinessNodeId(businessScope.id);
-                  }
-                }}
-                onEnter={enterNode}
+                businessScopeId={businessScope.id}
+                renderNodeContent={renderNodeContent}
+                onSelectAppNode={setSelectedAppNodeId}
+                onSelectBusinessNode={setSelectedBusinessNodeId}
+                onEnterNode={enterNode}
                 onMoveStart={moveNodeStart}
                 onResizeStart={resizeNodeStart}
                 onResizeModeToggle={toggleNodeResizeMode}
                 onDisplayModeToggle={toggleNodeDisplayMode}
+                focusedLeaf={focusedLeaf}
+                canAddRuntimeChild={canAddRuntimeChild}
+                onAddRuntimeChild={addRuntimeChild}
               />
-            ))}
-            {/* 聚焦叶子面板：已钻入深层且没有子节点时，把叶子节点自身的实现内容放大渲染 */}
-            {!scopeMinimized &&
-              !isBusinessScope &&
-              navigationStack.length > 1 &&
-              !visibleNodes.length && (
-              <section
-                className="focused-runtime-content"
-                style={{
-                  width: Math.max(640, worldSize.width - 64),
-                  height: Math.max(420, worldSize.height - 96),
-                }}
-              >
-                {/* eslint-disable-next-line react-hooks/refs -- 同上：纯渲染调用，非渲染期 ref 读取 */}
-                {renderNodeContent(scopeNode)}
-              </section>
-            )}
-            {/* "＋ 添加子节点"按钮：仅 canAddRuntimeChild（应用域聚焦叶子、非容器渲染器）时出现 */}
-            {!scopeMinimized &&
-              !isBusinessScope &&
-              canAddRuntimeChild && (
-              <button className="runtime-add-child" onClick={addRuntimeChild}>＋ 添加子节点</button>
             )}
             {/* 容器缩放手柄 + 三向/八向模式切换：布局锁定或最小化时隐藏 */}
             {!scopeMinimized && !layoutLocked && (
-              <>
-                <span
-                  className={`container-resize-layer ${selectedAppNodeId === scopeNode.id ? "selected" : ""}`}
-                  aria-hidden="true"
-                >
-                  {resizeDirectionsFor(nodeResizeMode(scopeNode)).map(
-                    (direction) => (
-                      <span
-                        className={`resize-handle resize-${direction}`}
-                        key={direction}
-                        onPointerDown={(event) => {
-                          event.stopPropagation();
-                          resizeScopeCanvasStart(direction, event);
-                        }}
-                      />
-                    ),
-                  )}
-                </span>
-                <button
-                  className={`resize-mode-toggle container-mode-toggle ${nodeResizeMode(scopeNode)} ${selectedAppNodeId === scopeNode.id ? "selected" : ""}`}
-                  style={{
-                    left: worldSize.width - 40,
-                    top: worldSize.height + 8,
-                  }}
-                  aria-label={
-                    nodeResizeMode(scopeNode) === "simple"
-                      ? `将当前容器「${scopeNode.name}」切换为四边四角缩放`
-                      : `将当前容器「${scopeNode.name}」切换为右边、下边和右下角缩放`
-                  }
-                  title={
-                    nodeResizeMode(scopeNode) === "simple"
-                      ? "当前容器：右边、下边、右下角 · 点击切换为八向"
-                      : "当前容器：四边四角 · 点击切换为三向"
-                  }
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => toggleNodeResizeMode(scopeNode)}
-                >
-                  {nodeResizeMode(scopeNode) === "simple" ? "┘" : "⤢"}
-                </button>
-              </>
+              <ContainerResizeControls
+                scopeNode={scopeNode}
+                worldSize={worldSize}
+                selected={selectedAppNodeId === scopeNode.id}
+                onResizeStart={resizeScopeCanvasStart}
+                onResizeModeToggle={toggleNodeResizeMode}
+              />
             )}
           </div>
         </div>

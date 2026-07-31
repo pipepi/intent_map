@@ -24,6 +24,7 @@ deps 组装与主 JSX 骨架；可独立测试/复用的逻辑全部下沉到本
 | `scope-navigation.ts` | 265 | 导航族 createScopeNavigationOps：返回上级/面包屑/进入节点/最近节点/滚轮手势 | 组合工厂 |
 | `document-io.ts` | 175 | 文档 IO 族 createDocumentIO：applyLoadedDocument/exportPip/loadPipBytes/importDocument | 组合工厂 |
 | `business-run.ts` | 120 | 业务运行族 createBusinessRun：run（根输入 JSON 解析 + 拓扑执行 + 轨迹合并）/ stop（取消标记） | 组合工厂 |
+| `canvas-layers.tsx` | 398 | 画布图层组件：ScopeNavigationBar / ScopeHeader / AppScopeContent / ContainerResizeControls | React 组件 |
 
 ## 两种复用模式
 
@@ -84,17 +85,27 @@ deps 中若引用组件后段才声明的函数（如 `updateInputBinding`），
 updateInputBinding: (nodeId, portId, value) => updateInputBinding(nodeId, portId, value),
 ```
 
-## page.tsx 剩余结构（约 2020 行）
+## page.tsx 剩余结构（约 1860 行）
 
 | 区段 | 说明 |
 |---|---|
 | 状态声明 | useState/useRef 集中区（含 actionRefs 快捷键动作表、exportDocument） |
-| 当前作用域派生 | 主 JSX 六个条件渲染标志（scopeMinimized/isBusinessScope/navigationStack 等） |
+| 当前作用域派生 | 主 JSX 条件渲染标志（scopeMinimized/isBusinessScope/navigationStack 等） |
 | 布局投影持久化 | 位置/尺寸写入 surface.projections |
 | 各族 deps 组装 | scopeCamera/scopeNavigation/documentIO/businessRun 等 + 工厂调用 |
 | 撤销/重做 | history/future 双栈 |
 | 面板导航与绑定更新 | emit、selectPanelBusinessNode、updateInputBinding/updateOutputBinding |
-| deps 组装 + 主 JSX | nodeSurfaceDeps/pointerGestureDeps/businessOpsDeps/edgeRendererDeps/businessScopeLayerDeps |
+| 主 JSX 骨架 | 条件渲染矩阵已组件化：5 个守卫条件各对应一个图层组件（见下） |
+
+主 JSX 现在的条件矩阵（每个分支一行守卫 + 一个组件）：
+
+```tsx
+{!scopeMinimized && navigationStack.length > 1 && <ScopeNavigationBar … />}
+<ScopeHeader … />                       {/* 内部处理三态 */}
+{!scopeMinimized && isBusinessScope && <BusinessScopeLayer … />}
+{!scopeMinimized && !isBusinessScope && <AppScopeContent … />}
+{!scopeMinimized && !layoutLocked && <ContainerResizeControls … />}
+```
 
 ## 后续可选拆分（收益递减，按需进行）
 
