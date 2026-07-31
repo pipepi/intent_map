@@ -130,7 +130,11 @@ import {
   createDocumentIO,
   type DocumentIODeps,
 } from "./editor/document-io";
-import { executeBusinessNode, type Trace } from "./editor/executor";
+import {
+  createBusinessRun,
+  type BusinessRunDeps,
+} from "./editor/business-run";
+import { type Trace } from "./editor/executor";
 import {
   renderNodeSurface,
   type NodeSurfaceDeps,
@@ -1265,59 +1269,20 @@ export default function Home() {
     setDirty(true);
   };
 
-  // ---- 业务执行 ----
-
-  /**
-   * 运行整棵业务树：根输入中 object/array 类型的值先按 JSON 解析，
-   * 然后交给 executeBusinessNode 拓扑执行，轨迹实时写入 trace 状态。
-   */
-  const run = async () => {
-    setRunState("running");
-    setTrace([]);
-    cancelRunRef.current = false;
-    try {
-      await executeBusinessNode(
-        businessRoot,
-        Object.fromEntries(
-          businessRoot.inputs.map((port) => {
-            const raw = rootInput[port.id];
-            const trimmed = typeof raw === "string" ? raw.trim() : "";
-            if (
-              (port.type === "object" || port.type === "array") &&
-              trimmed &&
-              (trimmed.startsWith("{") || trimmed.startsWith("["))
-            ) {
-              try {
-                return [port.id, JSON.parse(trimmed)] as const;
-              } catch {
-                throw new Error(`根输入「${port.name}」不是有效的 JSON：${trimmed.slice(0, 40)}`);
-              }
-            }
-            return [port.id, raw] as const;
-          }),
-        ),
-        businessRoot.name,
-        (next) =>
-          setTrace((items) => {
-            const existing = items.findIndex((item) => item.id === next.id && item.path === next.path);
-            if (existing < 0) return [...items, next];
-            return items.map((item, index) => (index === existing ? next : item));
-          }),
-        () => cancelRunRef.current,
-      );
-      setRunState("success");
-    } catch (error) {
-      if (error instanceof Error && error.message !== "cancelled")
-        setToast(error.message);
-      setRunState(error instanceof Error && error.message === "cancelled" ? "idle" : "failed");
-    }
+  // ---- 业务执行（已拆到 ./editor/business-run.ts）----
+  // run：根输入 object/array 按 JSON 解析后交 executeBusinessNode 拓扑执行，
+  // 轨迹实时合并写入 trace 状态；stop：置取消标记，执行器逐轮检查。
+  const businessRunDeps: BusinessRunDeps = {
+    businessRoot,
+    rootInput,
+    cancelRunRef,
+    setRunState,
+    setTrace,
+    setToast,
   };
-
-  /** 停止运行：置取消标记，执行器下一轮调度时抛出 cancelled。 */
-  const stop = () => {
-    cancelRunRef.current = true;
-    setRunState("idle");
-  };
+  /* eslint-disable react-hooks/refs -- 工厂模式：deps 含 cancelRunRef，但 run/stop 仅在事件回调中读写，渲染期不解引用 */
+  const { run, stop } = createBusinessRun(businessRunDeps);
+  /* eslint-enable react-hooks/refs */
 
   // 每次渲染都把最新动作与状态写入 ref，供键盘快捷键 effect 读取
   //（这样键盘 effect 无需把这些值列入依赖、反复解绑重挂）。
