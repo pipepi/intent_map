@@ -22,6 +22,7 @@ deps 组装与主 JSX 骨架；可独立测试/复用的逻辑全部下沉到本
 | `business-scope-layer.tsx` | 113 | 业务作用域图层组件 BusinessScopeLayer（BusinessGraphProjection 的接线适配） | React 组件 |
 | `scope-camera.ts` | 190 | 相机族 createScopeCameraOps：设置/适应视图/可见性判断/居中（组合工厂） | 组合工厂 |
 | `scope-navigation.ts` | 265 | 导航族 createScopeNavigationOps：返回上级/面包屑/进入节点/最近节点/滚轮手势 | 组合工厂 |
+| `document-io.ts` | 175 | 文档 IO 族 createDocumentIO：applyLoadedDocument/exportPip/loadPipBytes/importDocument | 组合工厂 |
 
 ## 两种复用模式
 
@@ -82,23 +83,23 @@ deps 中若引用组件后段才声明的函数（如 `updateInputBinding`），
 updateInputBinding: (nodeId, portId, value) => updateInputBinding(nodeId, portId, value),
 ```
 
-## page.tsx 剩余结构（约 2130 行）
+## page.tsx 剩余结构（约 2060 行）
 
 | 区段 | 说明 |
 |---|---|
-| 状态声明 | useState/useRef 集中区（含 actionRefs 快捷键动作表） |
+| 状态声明 | useState/useRef 集中区（含 actionRefs 快捷键动作表、exportDocument） |
 | 当前作用域派生 | 主 JSX 六个条件渲染标志（scopeMinimized/isBusinessScope/navigationStack 等） |
 | 布局投影持久化 | 位置/尺寸写入 surface.projections |
-| 相机/导航 deps 组装 | scopeCameraDeps / scopeNavigationDeps + 工厂调用 |
+| 相机/导航/文档 IO deps 组装 | scopeCameraDeps / scopeNavigationDeps / documentIODeps + 工厂调用 |
 | 撤销/重做 | history/future 双栈 |
-| 文档加载/导入/导出 | v3 JSON 与 .pip 种子 |
+| 业务运行与面板导航 | run/stop、emit、selectPanelBusinessNode、绑定更新 |
 | deps 组装 + 主 JSX | nodeSurfaceDeps/pointerGestureDeps/businessOpsDeps/edgeRendererDeps/businessScopeLayerDeps |
 
 ## 后续可选拆分（收益递减，按需进行）
 
 - 布局投影持久化（约 300 行：storeNodeProjection/storeScopeCanvasProjection 等）：
   多个 useCallback 与状态 setter 交织，收益一般
-- 文档导入/导出族（约 130 行）：applyLoadedDocument/exportPip 等，低风险
+- 业务运行族（约 130 行：run/stop + 执行器接线）：低风险
 
 ## 验证基线
 

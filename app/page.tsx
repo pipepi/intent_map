@@ -45,7 +45,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
 } from "react";
 
 import {
@@ -54,7 +53,6 @@ import {
   createApplicationDocument,
   getContainerSurface,
   getBusinessRoot,
-  loadIntentDocument,
   nodeDisplayMode,
   scopeCameraKey,
   serializeIntentDocument,
@@ -84,12 +82,6 @@ import {
 import {
   type RuntimeCommand,
 } from "./runtime/registry";
-import {
-  DEFAULT_PIP_LOADER_SOURCE,
-  decodePip,
-  encodePip,
-  runPipLoader,
-} from "./runtime/pip";
 import {
   defaultNodeProjectionLayout,
   projectIntentTree,
@@ -134,8 +126,11 @@ import {
 } from "./editor/bindings";
 import { collectValidationIssues } from "./editor/validation";
 import { computeLaneAutoLayout } from "./editor/auto-layout";
+import {
+  createDocumentIO,
+  type DocumentIODeps,
+} from "./editor/document-io";
 import { executeBusinessNode, type Trace } from "./editor/executor";
-import { downloadBytes } from "./editor/download";
 import {
   renderNodeSurface,
   type NodeSurfaceDeps,
@@ -995,87 +990,22 @@ export default function Home() {
   };
 
   // ========================================================================
-  // 文档加载 / 导入 / 导出（v3 JSON 与 .pip 种子两种格式）
+  // 文档加载 / 导入 / 导出（已拆到 ./editor/document-io.ts）
+  //   applyLoadedDocument / exportPip / loadPipBytes / importDocument；
+  //   下方 Rust 宿主引导 effect 复用 loadPipBytes 与 applyLoadedDocument。
   // ========================================================================
 
-  /** 应用一份已加载的文档：进历史、还原持久化的浏览位置、清脏标记。 */
-  const applyLoadedDocument = (loaded: IntentDocumentV3) => {
-    const restored = freePanelContext(loaded);
-    setHistory((items) => [...items, documentState]);
-    setDocumentState(loaded);
-    dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
-      scopeId: restored.scopeId,
-      selectionId: restored.selectionId,
-    });
-    setNavigationStack(restored.navigationStack);
-    setDirty(false);
+  const documentIODeps: DocumentIODeps = {
+    documentState,
+    setDocumentState,
+    setHistory,
+    dispatchRuntimeEvent,
+    setNavigationStack,
+    setDirty,
+    setToast,
   };
-
-  /** 导出 .pip 种子：把文档序列化后与加载器源码、清单一起打包下载。 */
-  const exportPip = async () => {
-    try {
-      const bytes = await encodePip({
-        manifest: {
-          packageId: "intent-map.document",
-          name: "Intent Map",
-          packageVersion: "0.1.0",
-          rootNodeId: documentState.rootIntent.id,
-          loaderAbi: "pip-loader/1",
-          requiredCapabilities: [],
-          createdAt: new Date().toISOString(),
-          contentType: "application/vnd.intent-map.pip",
-        },
-        loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-        rootTreeText: serializeIntentDocument(documentState),
-        assets: [],
-      });
-      downloadBytes("intent-map.pip", bytes, "application/vnd.intent-map.pip");
-      setDirty(false);
-      setToast("PIP 种子已导出");
-    } catch (error) {
-      setToast(error instanceof Error ? `PIP 导出失败：${error.message}` : "PIP 导出失败");
-    }
-  };
-
-  /**
-   * 解码 .pip 字节并运行其中的 Loader：SHA-256 只能校验完整性，
-   * requireConfirmation=true（用户手动导入）时先弹确认框，
-   * 然后在隔离 Worker 中执行 Loader 得到文档。
-   */
-  const loadPipBytes = async (bytes: ArrayBuffer, requireConfirmation: boolean) => {
-    const pip = await decodePip(bytes);
-    if (
-      requireConfirmation &&
-      !window.confirm(
-        `“${pip.manifest.name}”包含 JavaScript Loader。SHA-256 只能验证完整性，不能证明发布者可信。是否在隔离 Worker 中运行？`,
-      )
-    ) {
-      throw new Error("用户取消运行 PIP Loader");
-    }
-    const parsed = await runPipLoader(
-      pip.loaderSource,
-      pip.manifest,
-      pip.rootTreeText,
-    );
-    return loadIntentDocument(parsed);
-  };
-
-  /** 文件导入入口：按扩展名分派 .pip（走 Loader）或 .json（直接解析）。 */
-  const importDocument = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const loaded = file.name.toLowerCase().endsWith(".pip")
-        ? await loadPipBytes(await file.arrayBuffer(), true)
-        : loadIntentDocument(JSON.parse(await file.text()) as unknown);
-      applyLoadedDocument(loaded);
-      setToast("文档已在临时状态校验并加载");
-    } catch (error) {
-      setToast(error instanceof Error ? `导入失败：${error.message}` : "导入失败");
-    } finally {
-      event.target.value = "";
-    }
-  };
+  const { applyLoadedDocument, exportPip, loadPipBytes, importDocument } =
+    createDocumentIO(documentIODeps);
 
   /** Rust 宿主引导：URL 带 ?token= 时从宿主接口拉取 .pip 种子并加载（仅启动时一次）。 */
   useEffect(() => {
