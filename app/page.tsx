@@ -46,7 +46,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 
 import {
@@ -81,7 +80,6 @@ import {
   MINIMIZED_NODE_SIZE,
   NodeProjection,
   resizeDirectionsFor,
-  runtimeNodeRenderSize,
 } from "./runtime/node-renderer";
 import {
   type RuntimeCommand,
@@ -93,15 +91,11 @@ import {
   runPipLoader,
 } from "./runtime/pip";
 import {
-  scaleForWheelGesture,
-} from "./runtime/camera";
-import {
   defaultNodeProjectionLayout,
   projectIntentTree,
 } from "./runtime/projection";
 import { Workspace } from "./runtime/workspace";
 import {
-  businessNodeSize,
   deriveBusinessVisualEdges,
 } from "./runtime/business-canvas";
 import {
@@ -117,7 +111,6 @@ import {
 } from "./runtime/pipeline";
 // ---- 从本文件拆出的功能模块（app/editor/）----
 import {
-  FIT_VIEW_PADDING,
   MAX_SCALE,
   MIN_SCALE,
   PORT_ROW,
@@ -178,6 +171,14 @@ import {
   BusinessScopeLayer,
   type BusinessScopeLayerDeps,
 } from "./editor/business-scope-layer";
+import {
+  createScopeCameraOps,
+  type ScopeCameraDeps,
+} from "./editor/scope-camera";
+import {
+  createScopeNavigationOps,
+  type ScopeNavigationDeps,
+} from "./editor/scope-navigation";
 
 // ============================================================================
 // 画布交互常量 → ./editor/constants
@@ -254,6 +255,10 @@ export default function Home() {
     undo: () => void;
     redo: () => void;
     enterNode: (node: IntentNode) => void;
+    navigateToParent: () => void;
+    fitScope: () => void;
+    centerScopeAtScale: (scale: number) => CameraState | undefined;
+    setScopeCamera: (next: CameraState, persist?: boolean) => void;
     deleteAppNode: () => void;
     documentState: IntentDocumentV3;
     visibleNodes: IntentNode[];
@@ -262,6 +267,7 @@ export default function Home() {
     businessScope: IntentNode;
     selectedAppNodeId: string;
     selectedBusinessNodeId: string;
+    navigationStackLength: number;
   } | null>(null);
   const cameraRef = useRef(camera);            // 相机最新值（拖拽手势闭包中读取，避免过期）
   const lastEnterAtRef = useRef(0);            // 上次进入节点时间戳（280ms 内防抖，防双击误触发两次）
@@ -683,147 +689,32 @@ export default function Home() {
   );
 
   /**
-   * 设置相机：立即更新 state 与 ref（ref 供手势闭包读取）；
-   * persist=true 时同时持久化到当前作用域的投影（下次进入该作用域可恢复视角）。
+   * 作用域相机族（已拆到 ./editor/scope-camera.ts）：
+   * setScopeCamera / cameraKeepsScopeVisible / fitScope / centerScopeAtScale。
+   * deps 每次渲染组装、直接调用工厂（与 pointer-gestures/business-ops 一致）。
+   * 函数身份不固定——消费方要么走 actionRefs（键盘快捷键），
+   * 要么是有意只按作用域键重跑的 effect（已带 exhaustive-deps 豁免）。
    */
-  const setScopeCamera = useCallback(
-    (next: CameraState, persist = false) => {
-      cameraRef.current = next;
-      setCamera(next);
-      if (persist) {
-        setDocumentState((active) =>
-          updateSurface(
-            active,
-            "panel-free-layout",
-            "free-layout-container",
-            (surface) =>
-              surface.kind === "current-container"
-                ? {
-                    ...surface,
-                    projections: {
-                      ...surface.projections,
-                      [activeCameraKey]: {
-                        camera: next,
-                        nodeLayouts:
-                          surface.projections[activeCameraKey]?.nodeLayouts ??
-                          {},
-                      },
-                    },
-                  }
-                : surface,
-          ),
-        );
-      }
-    },
-    [activeCameraKey],
-  );
-
-  /**
-   * 计算"适应视图"相机：让世界内容恰好填满视口。
-   * 业务域按子节点包围盒（四周留 ~200px 余量）计算，应用域按整块画布尺寸计算，
-   * 缩放限制在 MIN_SCALE–MAX_SCALE，并水平和垂直居中。
-   */
-  const calculateFitCamera = useCallback((): CameraState | undefined => {
-    const viewport = viewportRef.current;
-    if (!viewport) return undefined;
-    const world = (() => {
-      // 业务画布按内容包围盒适配，避免大片留白。
-      if (isBusinessScope && visibleNodes.length) {
-        const rawLeft = Math.min(...visibleNodes.map((n) => n.position.x));
-        const left = Math.max(0, rawLeft - 200);
-        const top = Math.min(...visibleNodes.map((n) => n.position.y));
-        const rawRight = Math.max(...visibleNodes.map((n) => n.position.x + businessNodeSize(n).width));
-        const right = Math.min(scopeNode.canvasSize?.width ?? rawRight, rawRight + 200);
-        const bottom = Math.max(...visibleNodes.map((n) => n.position.y + businessNodeSize(n).height));
-        return {
-          width: right - left + 160,
-          height: bottom - top + 160,
-          offsetX: left - 80,
-          offsetY: top - 80,
-        };
-      }
-      return { width: scopeWorldSize.width, height: scopeWorldSize.height, offsetX: 0, offsetY: 0 };
-    })();
-    const availableWidth = Math.max(
-      1,
-      viewport.clientWidth - FIT_VIEW_PADDING * 2,
-    );
-    const availableHeight = Math.max(
-      1,
-      viewport.clientHeight - FIT_VIEW_PADDING * 2,
-    );
-    const scale = Math.max(
-      MIN_SCALE,
-      Math.min(
-        MAX_SCALE,
-        Math.min(
-          availableWidth / world.width,
-          availableHeight / world.height,
-        ),
-      ),
-    );
-    return {
-      scale,
-      x: (viewport.clientWidth - world.width * scale) / 2 - world.offsetX * scale,
-      y: (viewport.clientHeight - world.height * scale) / 2 - world.offsetY * scale,
-    };
-  }, [scopeWorldSize, isBusinessScope, visibleNodes]);
-
-  /** 判断给定相机下作用域是否仍有 ≥96×96 像素可见（用于决定能否恢复旧相机）。 */
-  const cameraKeepsScopeVisible = useCallback(
-    (candidate: CameraState) => {
-      const viewport = viewportRef.current;
-      if (!viewport) return false;
-      const scale = Math.max(
-        MIN_SCALE,
-        Math.min(MAX_SCALE, candidate.scale),
-      );
-      const left = candidate.x;
-      const top = candidate.y;
-      const right = left + scopeWorldSize.width * scale;
-      const bottom = top + scopeWorldSize.height * scale;
-      const visibleWidth =
-        Math.min(viewport.clientWidth, right) - Math.max(0, left);
-      const visibleHeight =
-        Math.min(viewport.clientHeight, bottom) - Math.max(0, top);
-      return visibleWidth >= 96 && visibleHeight >= 96;
-    },
-    [scopeWorldSize],
-  );
-
-  /** 执行"适应视图"并持久化相机。 */
-  const fitScope = useCallback(() => {
-    const next = calculateFitCamera();
-    if (next) setScopeCamera(next, true);
-  }, [calculateFitCamera, setScopeCamera]);
-
-  /**
-   * 计算"以指定缩放居中"的相机：内容比视口大时贴左上（留 padding），
-   * 否则居中显示。用于"重置为 100%"（数字键 0 / 进入新作用域时）。
-   */
-  const centerScopeAtScale = useCallback(
-    (scale: number): CameraState | undefined => {
-      const viewport = viewportRef.current;
-      if (!viewport) return undefined;
-      const safeScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
-      const scaledWidth = scopeWorldSize.width * safeScale;
-      const scaledHeight = scopeWorldSize.height * safeScale;
-      const centeredX = (viewport.clientWidth - scaledWidth) / 2;
-      const centeredY = (viewport.clientHeight - scaledHeight) / 2;
-      return {
-        scale: safeScale,
-        x:
-          scaledWidth > viewport.clientWidth - FIT_VIEW_PADDING * 2
-            ? FIT_VIEW_PADDING
-            : centeredX,
-        y:
-          scaledHeight > viewport.clientHeight - FIT_VIEW_PADDING * 2
-            ? FIT_VIEW_PADDING
-            : centeredY,
-      };
-    },
-    [scopeWorldSize],
-  );
+  const scopeCameraDeps: ScopeCameraDeps = {
+    viewportRef,
+    cameraRef,
+    setCamera,
+    setDocumentState,
+    activeCameraKey,
+    scopeWorldSize,
+    isBusinessScope,
+    visibleNodes,
+    scopeNode,
+  };
+  /* eslint-disable react-hooks/refs -- 工厂模式：deps 含 ref，但返回的闭包仅在事件/effect 回调中读取，渲染期不解引用 */
+  const cameraOps = createScopeCameraOps(scopeCameraDeps);
+  /* eslint-enable react-hooks/refs */
+  const {
+    setScopeCamera,
+    cameraKeepsScopeVisible,
+    fitScope,
+    centerScopeAtScale,
+  } = cameraOps;
 
   /**
    * 作用域切换时的相机恢复策略（下一帧执行，优先级从高到低）：
@@ -881,40 +772,35 @@ export default function Home() {
   // 作用域导航（钻取路径栈的压入/弹出）
   // ========================================================================
 
-  /** 返回上级：弹栈一层；若回到业务域，同步业务作用域与选中节点。 */
-  const navigateToParent = useCallback(() => {
-    setNavigationStack((path) => {
-      if (path.length <= 1) return path;
-      const next = path.slice(0, -1);
-      const parent = next.at(-1);
-      if (parent?.domain === "business") {
-        setBusinessScopeId(parent.nodeId);
-        setSelectedBusinessNodeId(scopeNode.id);
-      }
-      return next;
-    });
-  }, [scopeNode.id, setBusinessScopeId, setSelectedBusinessNodeId]);
-
-  /** 面包屑跳转：截断栈到第 index 层，并按目标域同步选中状态、标记适应视图。 */
-  const navigateToScopeFrame = useCallback(
-    (index: number) => {
-      fitOnNextScopeRef.current = true;
-      setScopeLegendOpen(false);
-      setNavigationStack((path) => {
-        if (index < 0 || index >= path.length - 1) return path;
-        const next = path.slice(0, index + 1);
-        const target = next.at(-1);
-        if (target?.domain === "business") {
-          setBusinessScopeId(target.nodeId);
-          setSelectedBusinessNodeId(target.nodeId);
-        } else if (target) {
-          setSelectedAppNodeId(target.nodeId);
-        }
-        return next;
-      });
-    },
-    [setBusinessScopeId, setSelectedBusinessNodeId],
-  );
+  /**
+   * 作用域导航族（已拆到 ./editor/scope-navigation.ts）：
+   * navigateToParent / navigateToScopeFrame / enterNode / onWheel。
+   * 同样每次渲染组装 deps 并直接调用工厂；enterNode 等身份不固定，
+   * 消费方走 actionRefs 或每次渲染重新组装的 deps 对象（既有模式）。
+   */
+  const scopeNavigationDeps: ScopeNavigationDeps = {
+    viewportRef,
+    cameraRef,
+    lastEnterAtRef,
+    resetScaleOnNextScopeRef,
+    fitOnNextScopeRef,
+    navigationStackLength: navigationStack.length,
+    scopeNodeId: scopeNode.id,
+    isBusinessScope,
+    businessScope,
+    visibleNodes,
+    setNavigationStack,
+    setBusinessScopeId,
+    setSelectedBusinessNodeId,
+    setSelectedAppNodeId,
+    setScopeLegendOpen,
+    setToast,
+    setScopeCamera,
+  };
+  /* eslint-disable react-hooks/refs -- 工厂模式：deps 含 ref，但返回的闭包仅在事件回调中读取，渲染期不解引用 */
+  const navOps = createScopeNavigationOps(scopeNavigationDeps);
+  /* eslint-enable react-hooks/refs */
+  const { navigateToParent, navigateToScopeFrame, enterNode, onWheel } = navOps;
 
   /**
    * 全局键盘快捷键：
@@ -928,9 +814,6 @@ export default function Home() {
    */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && navigationStack.length > 1) {
-        navigateToParent();
-      }
       const actions = actionRefs.current;
       const editingTarget = event.target as HTMLElement | null;
       const isEditing = !!(
@@ -941,6 +824,10 @@ export default function Home() {
           editingTarget.isContentEditable)
       );
       if (actions) {
+        if (event.key === "Escape" && actions.navigationStackLength > 1) {
+          actions.navigateToParent();
+          return;
+        }
         const key = event.key.toLowerCase();
         if (!isEditing && (event.ctrlKey || event.metaKey) && key === "z") {
           event.preventDefault();
@@ -982,26 +869,23 @@ export default function Home() {
           }
           return;
         }
-      }
-      if (event.key === "Home") {
-        event.preventDefault();
-        fitScope();
-      }
-      if (event.key === "0") {
-        event.preventDefault();
-        const centered = centerScopeAtScale(1);
-        if (centered) setScopeCamera(centered, true);
+        if (event.key === "Home") {
+          event.preventDefault();
+          actions.fitScope();
+          return;
+        }
+        if (event.key === "0") {
+          event.preventDefault();
+          const centered = actions.centerScopeAtScale(1);
+          if (centered) actions.setScopeCamera(centered, true);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [
-    fitScope,
-    centerScopeAtScale,
-    navigateToParent,
-    navigationStack.length,
-    setScopeCamera,
-  ]);
+    // 所有动作与状态经 actionRefs 读取，监听器只在挂载时绑定一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 有未导出修改时，关闭/刷新页面前弹出浏览器确认提示。 */
   useEffect(() => {
@@ -1012,158 +896,8 @@ export default function Home() {
     return () => window.removeEventListener("beforeunload", warning);
   }, [dirty]);
 
-  /**
-   * 进入节点（双击/Enter/Ctrl+滚轮放大触发），280ms 防抖。按节点类型分四种：
-   *   1. current-container 渲染器 → 解引用直接进入业务画布，跳过占位层；
-   *   2. 业务作用域引用节点（ACTIVE_BUSINESS_SCOPE_REF_ID）→ 进入业务域；
-   *   3. 已在业务域中           → 压入业务子作用域；
-   *   4. 普通应用节点           → 压入应用子作用域。
-   * resetScale=true 时进入后重置为 100% 缩放（滚轮放大进入的场景）。
-   */
-  const enterNode = (node: IntentNode, resetScale = false) => {
-    // eslint-disable-next-line react-hooks/purity -- enterNode 仅在事件回调中执行（双击/导航），performance.now() 用于 280ms 防连击去抖；lint 因其被装入 deps 对象而误判为渲染期调用
-    const now = performance.now();
-    if (now - lastEnterAtRef.current < 280) return;
-    lastEnterAtRef.current = now;
-    if (resetScale) resetScaleOnNextScopeRef.current = true;
-    fitOnNextScopeRef.current = true;
-    setScopeLegendOpen(false);
-    if (node.implementation?.key === "current-container") {
-      // 双击“当前容器渲染器”直接解引用进入业务画布，跳过引用占位层。
-      const directAddress: ScopeAddress = {
-        domain: "business",
-        nodeId: businessScope.id,
-        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-      };
-      setNavigationStack((path) => [...path, directAddress]);
-      setBusinessScopeId(businessScope.id);
-      setSelectedBusinessNodeId(businessScope.id);
-      return;
-    }
-    if (node.id === ACTIVE_BUSINESS_SCOPE_REF_ID) {
-      const address: ScopeAddress = {
-        domain: "business",
-        nodeId: businessScope.id,
-        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-      };
-      setNavigationStack((path) => [...path, address]);
-      setBusinessScopeId(businessScope.id);
-      setSelectedBusinessNodeId(businessScope.id);
-      return;
-    }
-    if (isBusinessScope) {
-      const address: ScopeAddress = {
-        domain: "business",
-        nodeId: node.id,
-        viaReferenceId: ACTIVE_BUSINESS_SCOPE_REF_ID,
-      };
-      setNavigationStack((path) => [...path, address]);
-      setBusinessScopeId(node.id);
-      setSelectedBusinessNodeId(node.id);
-      return;
-    }
-    const address: ScopeAddress = { domain: "app", nodeId: node.id };
-    setNavigationStack((path) => [...path, address]);
-    setSelectedAppNodeId(node.id);
-  };
-
-  /** 找出屏幕坐标 (clientX, clientY) 在世界坐标系下中心距离最近的子节点。 */
-  const nearestNode = (clientX: number, clientY: number) => {
-    const viewport = viewportRef.current;
-    if (!viewport || !visibleNodes.length) return undefined;
-    const rect = viewport.getBoundingClientRect();
-    const x = (clientX - rect.left - cameraRef.current.x) / cameraRef.current.scale;
-    const y = (clientY - rect.top - cameraRef.current.y) / cameraRef.current.scale;
-    return visibleNodes.reduce<IntentNode | undefined>((closest, node) => {
-      if (!closest) return node;
-      const size = isBusinessScope
-        ? businessNodeSize(node)
-        : runtimeNodeRenderSize(node);
-      const closestSize = isBusinessScope
-        ? businessNodeSize(closest)
-        : runtimeNodeRenderSize(closest);
-      const distance = (node.position.x + size.width / 2 - x) ** 2 + (node.position.y + size.height / 2 - y) ** 2;
-      const closestDistance = (closest.position.x + closestSize.width / 2 - x) ** 2 + (closest.position.y + closestSize.height / 2 - y) ** 2;
-      return distance < closestDistance ? node : closest;
-    }, undefined);
-  };
-
-  /**
-   * 滚轮交互（"缩放即导航"设计）：
-   *   普通滚轮            → 平移画布（兼容行/页/像素三种 deltaMode）；
-   *   Ctrl+滚轮           → 以指针为锚点缩放；
-   *   放大到 MAX_SCALE 再滚 → 进入指针下最近的节点（没有更深节点时提示）；
-   *   缩小到 MIN_SCALE 再滚 → 返回上级作用域（已在根则提示）。
-   */
-  const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    // event.preventDefault();
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const rect = viewport.getBoundingClientRect();
-    const old = cameraRef.current;
-    if (!event.ctrlKey) {
-      const deltaUnit =
-        event.deltaMode === 1
-          ? 16
-          : event.deltaMode === 2
-            ? Math.max(rect.width, rect.height)
-            : 1;
-      setScopeCamera(
-        {
-          ...old,
-          x: old.x - event.deltaX * deltaUnit,
-          y: old.y - event.deltaY * deltaUnit,
-        },
-        true,
-      );
-      return;
-    }
-    const direction = event.deltaY < 0 ? 1 : -1;
-    const nextScale = scaleForWheelGesture(
-      old.scale,
-      event.deltaY,
-      MIN_SCALE,
-      MAX_SCALE,
-    );
-    if (direction > 0 && nextScale >= MAX_SCALE) {
-      const target = nearestNode(event.clientX, event.clientY);
-      if (target) {
-        enterNode(target, true);
-        setToast(`进入「${target.name}」`);
-        return;
-      }
-      setToast("当前叶子没有更深层节点，可使用“添加子节点”扩展");
-    }
-    if (
-      direction < 0 &&
-      nextScale <= MIN_SCALE &&
-      navigationStack.length > 1
-    ) {
-      resetScaleOnNextScopeRef.current = true;
-      navigateToParent();
-      setToast("返回上级节点");
-      return;
-    }
-    if (
-      direction < 0 &&
-      nextScale <= MIN_SCALE &&
-      navigationStack.length === 1
-    ) {
-      setToast("已到达全屏应用根节点");
-    }
-    const pointerX = event.clientX - rect.left;
-    const pointerY = event.clientY - rect.top;
-    const worldX = (pointerX - old.x) / old.scale;
-    const worldY = (pointerY - old.y) / old.scale;
-    setScopeCamera(
-      {
-        scale: nextScale,
-        x: pointerX - worldX * nextScale,
-        y: pointerY - worldY * nextScale,
-      },
-      true,
-    );
-  };
+  // enterNode / nearestNode / onWheel 的实现已迁至 ./editor/scope-navigation.ts，
+  // 由上方 navOps 解构提供，签名保持不变。
 
   /**
    * 指针交互手势（已拆到 ./editor/pointer-gestures.ts）：
@@ -1661,6 +1395,10 @@ export default function Home() {
     undo,
     redo,
     enterNode,
+    navigateToParent,
+    fitScope,
+    centerScopeAtScale,
+    setScopeCamera,
     deleteAppNode,
     documentState,
     visibleNodes,
@@ -1669,6 +1407,7 @@ export default function Home() {
     businessScope,
     selectedAppNodeId,
     selectedBusinessNodeId,
+    navigationStackLength: navigationStack.length,
   };
 
   /** 新建文档：有未导出修改时先确认；重置为示例文档并还原浏览位置。 */

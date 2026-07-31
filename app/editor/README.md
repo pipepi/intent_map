@@ -20,6 +20,8 @@ deps 组装与主 JSX 骨架；可独立测试/复用的逻辑全部下沉到本
 | `edge-renderer.tsx` | 202 | SVG 连线渲染：聚合管道边 renderEdge、边界虚拟边 renderScopeBoundaryEdge | deps 注入 |
 | `auto-layout.ts` | 93 | 泳道自动布局 computeLaneAutoLayout（runtime/interface/output 三泳道贪婪堆叠） | 纯函数 |
 | `business-scope-layer.tsx` | 113 | 业务作用域图层组件 BusinessScopeLayer（BusinessGraphProjection 的接线适配） | React 组件 |
+| `scope-camera.ts` | 190 | 相机族 createScopeCameraOps：设置/适应视图/可见性判断/居中（组合工厂） | 组合工厂 |
+| `scope-navigation.ts` | 265 | 导航族 createScopeNavigationOps：返回上级/面包屑/进入节点/最近节点/滚轮手势 | 组合工厂 |
 
 ## 两种复用模式
 
@@ -57,6 +59,20 @@ const publishModule = createPublishModule(businessOpsDeps);
 <BusinessScopeLayer {...businessScopeLayerDeps} />
 ```
 
+### 4. 组合工厂（scope-camera / scope-navigation）
+
+一组互相调用的操作由单个工厂一次创建并整体返回，内部自由组合：
+
+```tsx
+const cameraOps = createScopeCameraOps(scopeCameraDeps);
+const { setScopeCamera, fitScope, centerScopeAtScale } = cameraOps;
+```
+
+**不要用 useMemo 固定 ops 身份**——React Compiler 会对"返回多个闭包的 memo"
+报 `Compilation Skipped`。消费方按既有模式处理：事件回调直接用（每次渲染
+重新组装没问题），effect 则经 `actionRefs` 读取（键盘监听器因此只挂载一次，
+不再随函数身份反复解绑重挂）。
+
 ### TDZ 规避
 
 deps 中若引用组件后段才声明的函数（如 `updateInputBinding`），
@@ -66,23 +82,23 @@ deps 中若引用组件后段才声明的函数（如 `updateInputBinding`），
 updateInputBinding: (nodeId, portId, value) => updateInputBinding(nodeId, portId, value),
 ```
 
-## page.tsx 剩余结构（约 2390 行）
+## page.tsx 剩余结构（约 2130 行）
 
 | 区段 | 说明 |
 |---|---|
-| 状态声明 | useState/useRef 集中区 |
+| 状态声明 | useState/useRef 集中区（含 actionRefs 快捷键动作表） |
 | 当前作用域派生 | 主 JSX 六个条件渲染标志（scopeMinimized/isBusinessScope/navigationStack 等） |
 | 布局投影持久化 | 位置/尺寸写入 surface.projections |
-| 作用域导航 | 钻取栈压入/弹出、相机定位、滚轮手势 |
+| 相机/导航 deps 组装 | scopeCameraDeps / scopeNavigationDeps + 工厂调用 |
 | 撤销/重做 | history/future 双栈 |
 | 文档加载/导入/导出 | v3 JSON 与 .pip 种子 |
 | deps 组装 + 主 JSX | nodeSurfaceDeps/pointerGestureDeps/businessOpsDeps/edgeRendererDeps/businessScopeLayerDeps |
 
 ## 后续可选拆分（收益递减，按需进行）
 
-- 作用域导航族（约 400 行：`centerScopeAtScale`/`navigateToScopeFrame`/`onWheel`）：
-  相机 + 导航栈 + 滚轮手势耦合最深，风险最高，建议有导航相关需求变更时再做
-- 布局投影持久化（约 300 行）：多个 effect 与状态 setter 交织，收益一般
+- 布局投影持久化（约 300 行：storeNodeProjection/storeScopeCanvasProjection 等）：
+  多个 useCallback 与状态 setter 交织，收益一般
+- 文档导入/导出族（约 130 行）：applyLoadedDocument/exportPip 等，低风险
 
 ## 验证基线
 
@@ -90,9 +106,12 @@ updateInputBinding: (nodeId, portId, value) => updateInputBinding(nodeId, portId
 
 ```bash
 ./node_modules/.bin/tsc --noEmit -p tsconfig.json        # 0 错误
-./node_modules/.bin/eslint app/page.tsx app/editor/       # 恰好 2 errors + 3 warnings（项目既有问题）
+./node_modules/.bin/eslint app/page.tsx app/editor/       # 恰好 2 errors + 1 warning（项目既有问题）
 ./node_modules/.bin/esbuild app/page.tsx --loader:.tsx=tsx --jsx=transform --outfile=/dev/null
 ```
 
 既有问题清单（不要新增，也暂不修）：setState-in-effect ×1、
-渲染期写 actionRefs ×1、exhaustive-deps ×2、未使用的 eslint-disable ×1。
+渲染期写 actionRefs ×1、未使用的 eslint-disable ×1。
+
+历史注记：曾有的两条 exhaustive-deps 警告（calculateFitCamera 漏 scopeNode、
+键盘 effect 漏 exportDocument）已在导航族拆分中随 actionRefs 改造消除。
