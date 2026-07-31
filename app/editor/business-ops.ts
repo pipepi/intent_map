@@ -64,10 +64,10 @@ export type BusinessOpsDeps = {
   selectedBusinessNode: IntentNode;
   // ---- 文档与历史 ----
   documentState: IntentDocumentV3;
-  setDocumentState: Dispatch<SetStateAction<IntentDocumentV3>>;
-  setHistory: Dispatch<SetStateAction<IntentDocumentV3[]>>;
-  setFuture: Dispatch<SetStateAction<IntentDocumentV3[]>>;
-  setDirty: (dirty: boolean) => void;
+  /** 函数式直写（不进撤销历史、不标脏）：拖拽过程中的逐步改写 */
+  updateDocument: (updater: (active: IntentDocumentV3) => IntentDocumentV3) => void;
+  /** 撤销检查点（pointerup 时把拖拽前文档压栈，见 use-document-history） */
+  checkpoint: () => void;
   setToast: (text: string) => void;
   setPendingPipe: Dispatch<SetStateAction<PendingPipeState>>;
   // ---- 动作 ----
@@ -402,11 +402,8 @@ export const createMoveBusinessNodeStart =
       layoutLocked,
       businessScope,
       cameraRef,
-      documentState,
-      setDocumentState,
-      setHistory,
-      setFuture,
-      setDirty,
+      updateDocument,
+      checkpoint,
       dispatchRuntimeEvent,
       storeNodeProjection,
     } = deps;
@@ -437,7 +434,7 @@ export const createMoveBusinessNodeStart =
         size,
         bounds,
       );
-      setDocumentState((active) =>
+      updateDocument((active) =>
         storeNodeProjection(active, { ...node, position }),
       );
     };
@@ -446,9 +443,7 @@ export const createMoveBusinessNodeStart =
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
       if (!dragged) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
+      checkpoint();
       dispatchRuntimeEvent("DOCUMENT_CHANGED", "current_container");
     };
     target.addEventListener("pointermove", move);
@@ -469,11 +464,8 @@ export const createResizeBusinessNodeStart =
       layoutLocked,
       businessScope,
       cameraRef,
-      documentState,
-      setDocumentState,
-      setHistory,
-      setFuture,
-      setDirty,
+      updateDocument,
+      checkpoint,
       dispatchRuntimeEvent,
       storeNodeProjection,
     } = deps;
@@ -502,7 +494,7 @@ export const createResizeBusinessNodeStart =
         pointerScale,
         bounds,
       );
-      setDocumentState((active) =>
+      updateDocument((active) =>
         storeNodeProjection(active, {
           ...node,
           position: geometry.position,
@@ -515,9 +507,7 @@ export const createResizeBusinessNodeStart =
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
       if (!dragged) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
+      checkpoint();
       dispatchRuntimeEvent("DOCUMENT_CHANGED", "current_container");
     };
     target.addEventListener("pointermove", move);

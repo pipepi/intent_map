@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
+const readApplicationSource = async () => {
+  const editorDirectory = new URL("app/editor/", root);
+  const editorFiles = (await readdir(editorDirectory))
+    .filter((name) => /\.tsx?$/.test(name))
+    .sort();
+  const sources = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    ...editorFiles.map((name) => readFile(new URL(name, editorDirectory), "utf8")),
+  ]);
+  return sources.join("\n");
+};
+
 test("exports the everything-node application as a static page", async () => {
   const html = await readFile(new URL("out/index.html", root), "utf8");
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
   const exportRuntime = await readFile(
     new URL("app/runtime/export.ts", root),
     "utf8",
@@ -63,7 +75,7 @@ test("implements panel selection and both surface binding dimensions", async () 
 });
 
 test("supports root camera navigation, layout editing, and semantic LOD", async () => {
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
   const workspace = await readFile(
     new URL("app/runtime/workspace.tsx", root),
     "utf8",
@@ -183,7 +195,7 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /top: 0/);
   assert.match(page, /Display-mode changes intentionally refit the same scope/);
   assert.match(page, /window\.setTimeout\(\(\) => setToast\(""\), 2400\)/);
-  assert.match(page, /aria-label=\{`关闭提示：\$\{toast\}`\}/);
+  assert.match(page, /aria-label=\{`关闭提示：\$\{model\.toast\}`\}/);
   assert.match(page, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(page, /data-display-mode/);
   assert.match(page, /resizeScopeCanvasStart/);
@@ -242,7 +254,7 @@ test("builds distributable PIP assets from a clean and coherent static export", 
 });
 
 test("derives and aggregates root pipes without persisting edges", async () => {
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
   const model = await readFile(new URL("app/runtime/model.ts", root), "utf8");
   const pipelines = await readFile(
     new URL("app/runtime/panel-pipelines.ts", root),
@@ -252,14 +264,14 @@ test("derives and aggregates root pipes without persisting edges", async () => {
   assert.match(page, /deriveNodeBindingEdges\(scopeNode\)/);
   assert.match(pipelines, /export const deriveNodeBindingEdges/);
   assert.match(pipelines, /deriveNodeBindingEdges\(root\)/);
-  assert.match(page, /const aggregateEdges/);
+  assert.match(page, /export const aggregateEdges/);
   assert.match(page, /selectedEdgeId/);
   assert.match(page, /edge\.members\.map/);
   assert.match(model, /\.filter\(\(\[key\]\) => key !== "edges"\)/);
 });
 
 test("keeps workbench controls, pipe anchors, and surface focus visually aligned", async () => {
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
   const workspace = await readFile(
     new URL("app/runtime/workspace.tsx", root),
     "utf8",
@@ -339,7 +351,7 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
   assert.match(page, /const selectPanelBusinessNode/);
   assert.match(
     page,
-    /renderTree\(contextualBusinessRoot,\s*0,\s*treeContext\)/,
+    /renderTree\(contextualBusinessRoot,\s*0,\s*treeContext,\s*deps\)/,
   );
   assert.match(
     page,
@@ -384,7 +396,7 @@ test("keeps workbench controls, pipe anchors, and surface focus visually aligned
 });
 
 test("routes interface commands through the state node and event clock", async () => {
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
 
   assert.match(page, /processEventBatch\(pendingEvents, runtimeState, tick\)/);
   assert.match(page, /dispatchRuntimeEvent\("SELECT_NODE"/);
@@ -394,12 +406,12 @@ test("routes interface commands through the state node and event clock", async (
   assert.match(page, /dispatchRuntimeEvent\(\s*"NAVIGATE_APP_PARENT"/);
   assert.match(page, /dispatchRuntimeEvent\(\s*"FIT_SCOPE"/);
   assert.match(page, /dispatchRuntimeEvent\(\s*"RESET_CAMERA"/);
-  assert.match(page, /lastCommands\.forEach/);
+  assert.match(page, /actions\[command\.type\]\(\)/);
   assert.match(page, /runtime-mini-trace/);
 });
 
 test("protects core composition and preserves business editing", async () => {
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
   const css = await readFile(new URL("app/globals.css", root), "utf8");
   const businessGeometry = await readFile(
     new URL("app/runtime/business-canvas.ts", root),
@@ -447,8 +459,12 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(businessGeometry, /sourceSize!\.width \+\s*\(sourceMinimized \? 0 : BUSINESS_PORT_DOT_OFFSET\)/);
   assert.match(page, /ACTIVE_BUSINESS_SCOPE_REF_ID/);
   assert.match(page, /key === "business-scope-reference"/);
-  assert.match(page, /isBusinessScope &&\s*renderBusinessScopeLayer\(\)/);
-  assert.match(page, /!isBusinessScope && visibleNodes\.map/);
+  assert.match(
+    page,
+    /!scopeMinimized && isBusinessScope &&[\s\S]*?<BusinessScopeLayer/,
+  );
+  assert.match(page, /!scopeMinimized && !isBusinessScope &&[\s\S]*?<AppScopeContent/);
+  assert.match(page, /visibleNodes\.map\(\(node\) =>/);
   assert.match(page, /navigationStack\.length > 1/);
   assert.match(css, /\.business-node-ports i::before/);
   assert.match(css, /\.business-node-ports i\s*\{[\s\S]*overflow:\s*visible;/);
@@ -470,7 +486,7 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(css, /\.business-node\s*\{[\s\S]*display:\s*block;/);
   assert.match(
     page,
-    /const moveBusinessNodeStart = \([\s\S]*?event\.stopPropagation\(\);[\s\S]*?if \(layoutLocked/,
+    /export const createMoveBusinessNodeStart =[\s\S]*?event\.stopPropagation\(\);[\s\S]*?if \(layoutLocked/,
   );
   assert.match(page, /key === "current-container"/);
   assert.doesNotMatch(page, /renderBusinessCanvas/);
@@ -494,18 +510,18 @@ test("protects core composition and preserves business editing", async () => {
 });
 
 test("keeps node movement and automatic lanes inside the active root", async () => {
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
 
   assert.match(page, /bounds\.width - size\.width - 20/);
   assert.match(page, /bounds\.height - size\.height - 20/);
   assert.match(page, /interface: \[500, 950, 1400\]/);
-  assert.match(page, /laneHeights\[lane\]\.indexOf/);
-  assert.match(page, /height: Math\.max\(1500, maximumBottom\)/);
+  assert.match(page, /heights\.indexOf\(Math\.min\(\.\.\.heights\)\)/);
+  assert.match(page, /height: Math\.max\(CANVAS_MIN_HEIGHT, maximumBottom\)/);
 });
 
 test("keeps scope changes visible and separates the reference from business content", async () => {
   const [page, css, businessProjection] = await Promise.all([
-    readFile(new URL("app/page.tsx", root), "utf8"),
+    readApplicationSource(),
     readFile(new URL("app/globals.css", root), "utf8"),
     readFile(
       new URL("app/runtime/business-graph-projection.tsx", root),
@@ -557,7 +573,7 @@ test("copies all deployment assets into the static output", async () => {
 
 test("keeps server-only request APIs out of the application shell", async () => {
   const layout = await readFile(new URL("app/layout.tsx", root), "utf8");
-  const page = await readFile(new URL("app/page.tsx", root), "utf8");
+  const page = await readApplicationSource();
 
   assert.doesNotMatch(layout, /next\/headers|headers\(\)/);
   assert.doesNotMatch(page, /next\/headers|headers\(\)/);

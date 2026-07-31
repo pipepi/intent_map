@@ -8,11 +8,7 @@
 // RefObject/MutableRefObject 定义耦合。
 // ============================================================================
 
-import type {
-  Dispatch,
-  SetStateAction,
-  PointerEvent as ReactPointerEvent,
-} from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
   CameraState,
   IntentDocumentV3,
@@ -59,10 +55,10 @@ export type PointerGestureDeps = {
   visibleNodes: IntentNode[];
   // ---- 文档与历史 ----
   documentState: IntentDocumentV3;
-  setDocumentState: Dispatch<SetStateAction<IntentDocumentV3>>;
-  setHistory: Dispatch<SetStateAction<IntentDocumentV3[]>>;
-  setFuture: Dispatch<SetStateAction<IntentDocumentV3[]>>;
-  setDirty: (dirty: boolean) => void;
+  /** 函数式直写（不进撤销历史、不标脏）：手势过程中的逐步改写 */
+  updateDocument: (updater: (active: IntentDocumentV3) => IntentDocumentV3) => void;
+  /** 撤销检查点（pointerup 时把拖拽前文档压栈，见 use-document-history） */
+  checkpoint: () => void;
   // ---- 动作 ----
   dispatchRuntimeEvent: (
     type: string,
@@ -229,11 +225,8 @@ export const createMoveNodeStart =
       layoutLocked,
       scopeNode,
       cameraRef,
-      documentState,
-      setDocumentState,
-      setHistory,
-      setFuture,
-      setDirty,
+      updateDocument,
+      checkpoint,
       dispatchRuntimeEvent,
       storeNodeProjection,
     } = deps;
@@ -250,7 +243,7 @@ export const createMoveNodeStart =
         x: Math.max(20, Math.min(bounds.width - size.width - 20, start.x + (moveEvent.clientX - origin.x) / cameraRef.current.scale)),
         y: Math.max(56, Math.min(bounds.height - size.height - 20, start.y + (moveEvent.clientY - origin.y) / cameraRef.current.scale)),
       };
-      setDocumentState((active) =>
+      updateDocument((active) =>
         storeNodeProjection(active, { ...node, position: latest }),
       );
     };
@@ -258,9 +251,7 @@ export const createMoveNodeStart =
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       if (latest.x === start.x && latest.y === start.y) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
+      checkpoint();
       dispatchRuntimeEvent("DOCUMENT_CHANGED", "node-move");
     };
     target.addEventListener("pointermove", move);
@@ -283,11 +274,8 @@ export const createResizeNodeStart =
       layoutLocked,
       scopeNode,
       cameraRef,
-      documentState,
-      setDocumentState,
-      setHistory,
-      setFuture,
-      setDirty,
+      updateDocument,
+      checkpoint,
       dispatchRuntimeEvent,
       storeNodeProjection,
     } = deps;
@@ -319,7 +307,7 @@ export const createResizeNodeStart =
         y = Math.max(56, startPosition.y + startSize.height - height);
         height = startPosition.y + startSize.height - y;
       }
-      setDocumentState((active) =>
+      updateDocument((active) =>
         storeNodeProjection(active, {
           ...node,
           position: { x, y },
@@ -331,9 +319,7 @@ export const createResizeNodeStart =
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       if (!dragged) return;
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
+      checkpoint();
       dispatchRuntimeEvent("DOCUMENT_CHANGED", "node-resize");
     };
     target.addEventListener("pointermove", move);
@@ -356,11 +342,8 @@ export const createResizeScopeCanvasStart =
       scopeWorldSize,
       visibleNodes,
       cameraRef,
-      documentState,
-      setDocumentState,
-      setHistory,
-      setFuture,
-      setDirty,
+      updateDocument,
+      checkpoint,
       dispatchRuntimeEvent,
       setScopeCamera,
       storeScopeCanvasProjection,
@@ -423,7 +406,7 @@ export const createResizeScopeCanvasStart =
         );
       }
 
-      setDocumentState((active) =>
+      updateDocument((active) =>
         storeScopeCanvasProjection(active, scopeNode, { width, height }),
       );
       setScopeCamera({
@@ -441,9 +424,7 @@ export const createResizeScopeCanvasStart =
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
-      setHistory((items) => [...items.slice(-29), documentState]);
-      setFuture([]);
-      setDirty(true);
+      checkpoint();
       setScopeCamera(cameraRef.current, true);
       dispatchRuntimeEvent("DOCUMENT_CHANGED", "scope-canvas-resize");
     };

@@ -41,11 +41,11 @@ import { downloadBytes } from "./download";
 export interface DocumentIODeps {
   /** 当前文档（applyLoadedDocument 进历史、exportPip 序列化用） */
   documentState: IntentDocumentV3;
-  setDocumentState: (next: IntentDocumentV3) => void;
-  /** 撤销栈（applyLoadedDocument 把当前文档压入） */
-  setHistory: (
-    updater: (items: IntentDocumentV3[]) => IntentDocumentV3[],
-  ) => void;
+  /**
+   * 加载一份文档（useDocumentHistory.loadDocument）：把当前文档压入撤销栈
+   * （不截断上限）、替换文档并清脏——忠实还原原 applyLoadedDocument 语义。
+   */
+  loadDocument: (next: IntentDocumentV3) => void;
   /** 运行时事件派发（DOCUMENT_LOADED） */
   dispatchRuntimeEvent: (
     type: string,
@@ -54,7 +54,8 @@ export interface DocumentIODeps {
   ) => void;
   /** 导航栈（还原持久化的浏览位置） */
   setNavigationStack: (next: ScopeAddress[]) => void;
-  setDirty: (dirty: boolean) => void;
+  /** 标记文档为干净（导出成功后） */
+  markClean: () => void;
   setToast: (message: string) => void;
 }
 
@@ -72,24 +73,21 @@ export interface DocumentIOOps {
 export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
   const {
     documentState,
-    setDocumentState,
-    setHistory,
+    loadDocument,
     dispatchRuntimeEvent,
     setNavigationStack,
-    setDirty,
+    markClean,
     setToast,
   } = deps;
 
   const applyLoadedDocument = (loaded: IntentDocumentV3) => {
     const restored = freePanelContext(loaded);
-    setHistory((items) => [...items, documentState]);
-    setDocumentState(loaded);
+    loadDocument(loaded);
     dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
       scopeId: restored.scopeId,
       selectionId: restored.selectionId,
     });
     setNavigationStack(restored.navigationStack);
-    setDirty(false);
   };
 
   const exportPip = async () => {
@@ -110,7 +108,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
         assets: [],
       });
       downloadBytes("intent-map.pip", bytes, "application/vnd.intent-map.pip");
-      setDirty(false);
+      markClean();
       setToast("PIP 种子已导出");
     } catch (error) {
       setToast(error instanceof Error ? `PIP 导出失败：${error.message}` : "PIP 导出失败");
