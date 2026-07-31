@@ -10,6 +10,7 @@ HomePage
     ├── useDocumentHistory / useRuntimePipeline / useBusinessRunState
     ├── useScopeSession
     ├── useCanvasProjectionActions
+    ├── useCanvasCameraSession / useEditorShortcuts
     ├── useAuthoringSchemaActions / useApplicationNodeActions
     ├── useRuntimeCommandExecutor
     └── EditorWorkspace
@@ -32,6 +33,8 @@ HomePage
 - `use-business-run-state.ts`：业务执行、取消、输入和 trace。
 - `use-scope-session.ts`：两棵树投影、当前作用域、导航栈、连线/校验派生及浏览上下文持久化。
 - `use-canvas-projection-actions.ts`：节点与容器投影持久化、显示和缩放模式切换。
+- `use-canvas-camera-session.ts`：相机状态、作用域恢复/适应策略和相机相关 refs。
+- `use-editor-shortcuts.ts`：全局键盘命令与未保存文档的离开页面保护。
 - `use-authoring-schema-actions.ts`：节点 ID、端口 schema 与输入/输出绑定操作。
 - `use-application-node-actions.ts`：应用节点新增、复制、删除和应用图重置。
 - `use-workspace-view-actions.ts`：Workspace/View 的更新与另存行为。

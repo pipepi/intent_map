@@ -49,7 +49,6 @@ import {
   ACTIVE_BUSINESS_SCOPE_REF_ID,
   businessScopeAddress,
   getBusinessRoot,
-  getContainerSurface,
   scopeCameraKey,
   serializeIntentDocument,
   updatePanel,
@@ -71,11 +70,6 @@ import {
 } from "../runtime/registry";
 // ---- 从本文件拆出的功能模块（app/editor/）----
 import {
-  MAX_SCALE,
-  MIN_SCALE,
-} from "./constants";
-import {
-  findNode,
   findPath,
   freePanelContext,
   sampleDocument,
@@ -95,6 +89,8 @@ import { useAuthoringSchemaActions } from "./use-authoring-schema-actions";
 import { useApplicationNodeActions } from "./use-application-node-actions";
 import { useWorkspaceViewActions } from "./use-workspace-view-actions";
 import { useCanvasProjectionActions } from "./use-canvas-projection-actions";
+import { useEditorShortcuts } from "./use-editor-shortcuts";
+import { useCanvasCameraSession } from "./use-canvas-camera-session";
 import {
   renderNodeSurface,
   type NodeSurfaceDeps,
@@ -127,10 +123,6 @@ import {
 import type { BusinessScopeLayerDeps } from "./business-scope-layer";
 import { EditorWorkspace } from "./editor-workspace";
 import { ScopeCanvas } from "./scope-canvas";
-import {
-  createScopeCameraOps,
-  type ScopeCameraDeps,
-} from "./scope-camera";
 import {
   createScopeNavigationOps,
   type ScopeNavigationDeps,
@@ -165,7 +157,6 @@ export function IntentEditor() {
   } = useDocumentHistory();
   // ---- 画布视图状态 ----
   const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container"); // 应用域选中节点
-  const [camera, setCamera] = useState<CameraState>({ scale: 0.5, x: 12, y: 12 }); // 平移 x/y + 缩放 scale
   const [search, setSearch] = useState("");          // 意图树搜索关键字
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null); // 选中的聚合管道边
   const [scopeLegendOpen, setScopeLegendOpen] = useState(false);             // 管道图例弹层
@@ -202,31 +193,7 @@ export function IntentEditor() {
     return result;
   };
   // ---- Refs（不触发重渲染的可变引用）----
-  const viewportRef = useRef<HTMLDivElement>(null);   // 画布视口 DOM（测尺寸/坐标换算）
   const fileInputRef = useRef<HTMLInputElement>(null); // 隐藏的导入文件选择框
-  // 快捷键处理器通过该 ref 访问最新的动作与状态，避免键盘 effect 反复重挂
-  const actionRefs = useRef<{
-    undo: () => void;
-    redo: () => void;
-    enterNode: (node: IntentNode) => void;
-    navigateToParent: () => void;
-    fitScope: () => void;
-    centerScopeAtScale: (scale: number) => CameraState | undefined;
-    setScopeCamera: (next: CameraState, persist?: boolean) => void;
-    deleteAppNode: () => void;
-    documentState: IntentDocumentV3;
-    visibleNodes: IntentNode[];
-    isBusinessScope: boolean;
-    scopeNode: IntentNode;
-    businessScope: IntentNode;
-    selectedAppNodeId: string;
-    selectedBusinessNodeId: string;
-    navigationStackLength: number;
-  } | null>(null);
-  const cameraRef = useRef(camera);            // 相机最新值（拖拽手势闭包中读取，避免过期）
-  const lastEnterAtRef = useRef(0);            // 上次进入节点时间戳（280ms 内防抖，防双击误触发两次）
-  const fitOnNextScopeRef = useRef(false);     // 切换作用域后：下一帧自动"适应视图"
-  const resetScaleOnNextScopeRef = useRef(false); // 切换作用域后：下一帧重置为 100% 居中
   const touchPointersRef = useRef(             // 触屏活跃触点表（pointerId → 坐标，支持双指）
     new Map<number, { x: number; y: number }>(),
   );
@@ -270,6 +237,27 @@ export function IntentEditor() {
     selectedBusinessNodeId,
     layoutLocked,
     updateDocument,
+  });
+
+  const {
+    camera,
+    viewportRef,
+    cameraRef,
+    lastEnterAtRef,
+    fitOnNextScopeRef,
+    resetScaleOnNextScopeRef,
+    setScopeCamera,
+    fitScope,
+    centerScopeAtScale,
+  } = useCanvasCameraSession({
+    documentState,
+    updateDocument,
+    activeCameraKey,
+    scopeWorldSize,
+    isBusinessScope,
+    visibleNodes,
+    scopeNode,
+    scopeMinimized,
   });
 
   /**
@@ -320,79 +308,6 @@ export function IntentEditor() {
     [commit, documentState],
   );
 
-  /**
-   * 作用域相机族（已拆到 ./editor/scope-camera.ts）：
-   * setScopeCamera / cameraKeepsScopeVisible / fitScope / centerScopeAtScale。
-   * deps 每次渲染组装、直接调用工厂（与 pointer-gestures/business-ops 一致）。
-   * 函数身份不固定——消费方要么走 actionRefs（键盘快捷键），
-   * 要么是有意只按作用域键重跑的 effect（已带 exhaustive-deps 豁免）。
-   */
-  const scopeCameraDeps: ScopeCameraDeps = {
-    viewportRef,
-    cameraRef,
-    setCamera,
-    setDocumentState: updateDocument,
-    activeCameraKey,
-    scopeWorldSize,
-    isBusinessScope,
-    visibleNodes,
-    scopeNode,
-  };
-  /* eslint-disable react-hooks/refs -- 工厂模式：deps 含 ref，但返回的闭包仅在事件/effect 回调中读取，渲染期不解引用 */
-  const cameraOps = createScopeCameraOps(scopeCameraDeps);
-  /* eslint-enable react-hooks/refs */
-  const {
-    setScopeCamera,
-    cameraKeepsScopeVisible,
-    fitScope,
-    centerScopeAtScale,
-  } = cameraOps;
-
-  /**
-   * 作用域切换时的相机恢复策略（下一帧执行，优先级从高到低）：
-   *   1. resetScaleOnNextScopeRef → 重置为 100% 居中（如 Ctrl+滚轮进入/返回）；
-   *   2. fitOnNextScopeRef       → 自动适应视图；
-   *   3. 有持久化相机且仍可见     → 恢复上次的视角；
-   *   4. 兜底                    → 适应视图。
-   */
-  useEffect(() => {
-    const saved = getContainerSurface(
-      documentState,
-      "panel-free-layout",
-      "free-layout-container",
-    )?.projections[activeCameraKey]?.camera;
-    const frame = window.requestAnimationFrame(() => {
-      if (resetScaleOnNextScopeRef.current) {
-        resetScaleOnNextScopeRef.current = false;
-        fitOnNextScopeRef.current = false;
-        const centered = centerScopeAtScale(1);
-        if (centered) setScopeCamera(centered, true);
-      } else if (fitOnNextScopeRef.current) {
-        fitOnNextScopeRef.current = false;
-        fitScope();
-      } else if (saved && cameraKeepsScopeVisible(saved)) {
-        setScopeCamera({
-          scale: Math.max(MIN_SCALE, Math.min(MAX_SCALE, saved.scale)),
-          x: saved.x,
-          y: saved.y,
-        });
-      } else {
-        fitScope();
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-    // Scope identity is the intentional trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCameraKey]);
-
-  /** 显示模式切换（最小化⇄展开）后重新适应视图：世界尺寸变了，相机需要重算。 */
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(fitScope);
-    return () => window.cancelAnimationFrame(frame);
-    // Display-mode changes intentionally refit the same scope to its new boundary.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeMinimized]);
-
   /** toast 轻提示 2.4 秒后自动消失。 */
   useEffect(() => {
     if (!toast) return;
@@ -433,100 +348,6 @@ export function IntentEditor() {
   const navOps = createScopeNavigationOps(scopeNavigationDeps);
   /* eslint-enable react-hooks/refs */
   const { navigateToParent, navigateToScopeFrame, enterNode, onWheel } = navOps;
-
-  /**
-   * 全局键盘快捷键：
-   *   Esc            返回上级作用域
-   *   Ctrl/Cmd+Z     撤销（+Shift 重做）；Ctrl/Cmd+Y 重做
-   *   Ctrl/Cmd+S     导出文档
-   *   Enter          进入当前选中节点
-   *   Delete/Backspace  删除选中的应用节点（业务域不响应）
-   *   Home           适应视图；数字 0 重置为 100% 居中
-   * 输入框/文本域/可编辑元素聚焦时，编辑类快捷键自动失效。
-   */
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const actions = actionRefs.current;
-      const editingTarget = event.target as HTMLElement | null;
-      const isEditing = !!(
-        editingTarget &&
-        (editingTarget.tagName === "INPUT" ||
-          editingTarget.tagName === "TEXTAREA" ||
-          editingTarget.tagName === "SELECT" ||
-          editingTarget.isContentEditable)
-      );
-      if (actions) {
-        if (event.key === "Escape" && actions.navigationStackLength > 1) {
-          actions.navigateToParent();
-          return;
-        }
-        const key = event.key.toLowerCase();
-        if (!isEditing && (event.ctrlKey || event.metaKey) && key === "z") {
-          event.preventDefault();
-          if (event.shiftKey) actions.redo();
-          else actions.undo();
-          return;
-        }
-        if (!isEditing && (event.ctrlKey || event.metaKey) && key === "y") {
-          event.preventDefault();
-          actions.redo();
-          return;
-        }
-        if ((event.ctrlKey || event.metaKey) && key === "s") {
-          event.preventDefault();
-          void exportDocument(actions.documentState);
-          return;
-        }
-        if (!isEditing && event.key === "Enter") {
-          const pool = actions.isBusinessScope
-            ? (actions.businessScope.children ?? [])
-            : actions.visibleNodes;
-          const selected = pool.find(
-            (node) =>
-              node.id ===
-              (actions.isBusinessScope
-                ? actions.selectedBusinessNodeId
-                : actions.selectedAppNodeId),
-          );
-          if (selected) actions.enterNode(selected);
-          return;
-        }
-        if (!isEditing && (event.key === "Delete" || event.key === "Backspace")) {
-          if (
-            !actions.isBusinessScope &&
-            findNode(actions.scopeNode, actions.selectedAppNodeId)
-          ) {
-            event.preventDefault();
-            actions.deleteAppNode();
-          }
-          return;
-        }
-        if (event.key === "Home") {
-          event.preventDefault();
-          actions.fitScope();
-          return;
-        }
-        if (event.key === "0") {
-          event.preventDefault();
-          const centered = actions.centerScopeAtScale(1);
-          if (centered) actions.setScopeCamera(centered, true);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // 所有动作与状态经 actionRefs 读取，监听器只在挂载时绑定一次。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /** 有未导出修改时，关闭/刷新页面前弹出浏览器确认提示。 */
-  useEffect(() => {
-    const warning = (event: BeforeUnloadEvent) => {
-      if (dirty) event.preventDefault();
-    };
-    window.addEventListener("beforeunload", warning);
-    return () => window.removeEventListener("beforeunload", warning);
-  }, [dirty]);
 
   // enterNode / nearestNode / onWheel 的实现已迁至 ./editor/scope-navigation.ts，
   // 由上方 navOps 解构提供，签名保持不变。
@@ -746,26 +567,25 @@ export function IntentEditor() {
   const { runState, trace, rootInput, setRootInput, run, stop } =
     useBusinessRunState({ businessRoot, setToast });
 
-  // 每次提交后把最新动作与状态写入 ref，键盘监听器因此只需挂载一次。
-  useEffect(() => {
-    actionRefs.current = {
-      undo,
-      redo,
-      enterNode,
-      navigateToParent,
-      fitScope,
-      centerScopeAtScale,
-      setScopeCamera,
-      deleteAppNode,
-      documentState,
-      visibleNodes,
-      isBusinessScope,
-      scopeNode,
-      businessScope,
-      selectedAppNodeId,
-      selectedBusinessNodeId,
-      navigationStackLength: navigationStack.length,
-    };
+  useEditorShortcuts({
+    dirty,
+    undo,
+    redo,
+    exportDocument,
+    enterNode,
+    navigateToParent,
+    fitScope,
+    centerScopeAtScale,
+    setScopeCamera,
+    deleteAppNode,
+    documentState,
+    visibleNodes,
+    isBusinessScope,
+    scopeNode,
+    businessScope,
+    selectedAppNodeId,
+    selectedBusinessNodeId,
+    navigationStackLength: navigationStack.length,
   });
 
   /** 新建文档：有未导出修改时先确认；重置为示例文档并还原浏览位置。 */
