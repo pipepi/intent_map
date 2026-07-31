@@ -17,10 +17,11 @@ const readApplicationSource = async () => {
 };
 
 test("keeps editor sessions and capability boundaries explicit", async () => {
-  const [documentSession, surfaceController, commandActions] = await Promise.all([
+  const [documentSession, surfaceController, commandActions, viewModels] = await Promise.all([
     readFile(new URL("app/editor/use-document-session.ts", root), "utf8"),
     readFile(new URL("app/editor/use-node-surface-controller.tsx", root), "utf8"),
     readFile(new URL("app/editor/runtime-command-actions.ts", root), "utf8"),
+    readFile(new URL("app/editor/editor-view-models.ts", root), "utf8"),
   ]);
   assert.match(documentSession, /commitDocumentChange/);
   assert.match(documentSession, /commitViewChange/);
@@ -30,6 +31,8 @@ test("keeps editor sessions and capability boundaries explicit", async () => {
   assert.match(surfaceController, /authoring: Fields</);
   assert.match(commandActions, /RuntimeCommandActions/);
   assert.match(commandActions, /RESET_CAMERA/);
+  assert.match(viewModels, /createCanvasDerivedModel/);
+  assert.match(viewModels, /createBusinessLayerModel/);
 });
 
 test("exports the everything-node application as a static page", async () => {
@@ -205,7 +208,7 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
   assert.match(page, /toggleDisplayMode/);
   assert.match(page, /scopeMinimized/);
   assert.match(page, /renderedWorldSize/);
-  assert.match(page, /scopeMinimized \? MINIMIZED_NODE_SIZE : worldSize/);
+  assert.match(page, /scopeMinimized \? MINIMIZED_NODE_SIZE : scopeWorldSize/);
   assert.match(page, /className="root-minimized-node"/);
   assert.match(page, /left: 0/);
   assert.match(page, /top: 0/);

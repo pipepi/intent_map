@@ -47,6 +47,7 @@ HomePage
 - `use-business-authoring-session.ts`：按节点、几何、管道和模块分组业务操作。
 - `use-node-surface-controller.tsx`：以 `EditorCapabilities` 分组节点面板所需能力。
 - `runtime-command-actions.ts`：按 document/canvas/authoring/runtime/navigation 生成完整命令映射。
+- `editor-view-models.ts`：纯函数生成业务图层、边渲染和画布派生模型。
 - `use-runtime-command-executor.ts`：受支持命令的完整类型映射和批次执行。
 
 ### 视图层

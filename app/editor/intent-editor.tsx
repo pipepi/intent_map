@@ -40,9 +40,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  MINIMIZED_NODE_SIZE,
-} from "../runtime/node-renderer";
-import {
   type RuntimeCommand,
 } from "../runtime/registry";
 // ---- 从本文件拆出的功能模块（app/editor/）----
@@ -62,15 +59,16 @@ import { useAutoLayoutAction } from "./use-auto-layout-action";
 import { createRuntimeCommandActions } from "./runtime-command-actions";
 import { useDocumentSession } from "./use-document-session";
 import { useNodeSurfaceController } from "./use-node-surface-controller";
-import type { BusinessOpsDeps, PendingPipeState } from "./business-ops";
+import type { PendingPipeState } from "./business-ops";
 import { useBusinessAuthoringSession } from "./use-business-authoring-session";
-import {
-  type EdgeRendererDeps,
-} from "./edge-renderer";
-import type { BusinessScopeLayerDeps } from "./business-scope-layer";
 import { EditorWorkspace } from "./editor-workspace";
 import { ScopeCanvas } from "./scope-canvas";
 import type { ScopeNavigationDeps } from "./scope-navigation";
+import {
+  createBusinessLayerModel,
+  createCanvasDerivedModel,
+  createEdgeRendererModel,
+} from "./editor-view-models";
 
 // ============================================================================
 // 画布交互常量 → ./editor/constants
@@ -332,32 +330,19 @@ export function IntentEditor() {
     dispatchRuntimeEvent,
   });
 
-  const businessOpsDeps: BusinessOpsDeps = {
-    viewportRef,
-    cameraRef,
-    layoutLocked,
-    businessRoot,
-    businessScope,
-    selectedBusinessNode,
-    documentState,
-    updateDocument,
-    checkpoint,
-    setToast,
-    setPendingPipe,
-    commit: commitDocumentChange,
-    updateDocumentNode,
-    updateDocumentNodeView,
-    storeNodeProjection,
-    setSelectedBusinessNodeId,
-    dispatchRuntimeEvent,
-    selectPanelBusinessNode: (panelId, nodeId) =>
-      selectPanelBusinessNode(panelId, nodeId),
-    updateInputBinding: (nodeId, portId, value) =>
-      updateInputBinding(nodeId, portId, value),
-    updateOutputBinding: (nodeId, portId, value) =>
-      updateOutputBinding(nodeId, portId, value),
-  };
-  const businessAuthoring = useBusinessAuthoringSession(businessOpsDeps);
+  const businessAuthoring = useBusinessAuthoringSession({
+    refs: { viewportRef, cameraRef },
+    scope: { layoutLocked, businessRoot, businessScope, selectedBusinessNode },
+    document: {
+      documentState, updateDocument, checkpoint,
+      commit: commitDocumentChange, updateDocumentNode, updateDocumentNodeView,
+      storeNodeProjection,
+    },
+    selection: { setSelectedBusinessNodeId, selectPanelBusinessNode },
+    bindings: { updateInputBinding, updateOutputBinding },
+    runtime: { dispatchRuntimeEvent },
+    feedback: { setToast, setPendingPipe },
+  });
 
   // ---- 业务执行（已拆到 ./editor/use-business-run-state.ts）----
   const { runState, trace, rootInput, setRootInput, run, stop } =
@@ -428,7 +413,7 @@ export function IntentEditor() {
    * 整棵业务画布委托给 BusinessGraphProjection；这里把页面级状态与动作
    * 打包成 BusinessScopeLayerDeps 传入（选中/进入/拖拽/缩放/连线/断开/添加）。
    */
-  const businessScopeLayerDeps: BusinessScopeLayerDeps = {
+  const businessScopeLayerDeps = createBusinessLayerModel({
     scope: businessScope,
     worldSize: scopeWorldSize,
     scale: camera.scale,
@@ -446,7 +431,7 @@ export function IntentEditor() {
     setToast,
     startPipeDrag: businessAuthoring.pipes.startDrag,
     addChild: businessAuthoring.nodes.addChild,
-  };
+  });
 
   /**
    * 节点内容渲染器分发（已拆到 ./editor/node-surfaces.tsx）：
@@ -493,27 +478,25 @@ export function IntentEditor() {
   // 渲染前的最终标志计算（主 JSX 条件渲染矩阵的输入）
   // ========================================================================
 
-  const worldSize = scopeWorldSize;
-  // renderedWorldSize：实际铺给 DOM 的画布尺寸（最小化时缩成小块）。
-  const renderedWorldSize = scopeMinimized ? MINIMIZED_NODE_SIZE : worldSize;
-  // 【条件④】focusedLeaf：已钻入深层（栈深 > 1）且当前作用域无子节点
-  // → 该叶子节点自己的实现内容会占满画布渲染（focused-runtime-content）。
-  const focusedLeaf =
-    navigationStack.length > 1 && !scopeNode.children?.length;
-  // 【条件⑤】canAddRuntimeChild：允许显示"＋ 添加子节点"按钮——
-  // 应用域 + 不是 current-container 渲染器 + 聚焦叶子，三者同时满足。
-  const canAddRuntimeChild =
-    !isBusinessScope &&
-    scopeNode.implementation?.key !== "current-container" &&
-    focusedLeaf;
-  // 导航条上的管道计数：业务域数业务引用边；应用域数节点绑定边 + 边界边。
-  const derivedPipeCount = isBusinessScope
-    ? businessVisualEdges.length
-    : appEdges.length + scopeBoundaryEdges.length;
+  const {
+    worldSize,
+    renderedWorldSize,
+    focusedLeaf,
+    canAddRuntimeChild,
+    derivedPipeCount,
+  } = createCanvasDerivedModel({
+    scopeWorldSize,
+    scopeMinimized,
+    navigationDepth: navigationStack.length,
+    scopeNode,
+    isBusinessScope,
+    businessPipeCount: businessVisualEdges.length,
+    appPipeCount: appEdges.length + scopeBoundaryEdges.length,
+  });
 
   // SVG 连线渲染 deps（edge-renderer.tsx 的 EdgeRendererDeps）。
   // 全部为渲染期只读值 + 事件回调，无 ref。
-  const edgeRendererDeps: EdgeRendererDeps = {
+  const edgeRendererDeps = createEdgeRendererModel({
     scopeNode,
     worldSize,
     selectedEdgeId,
@@ -521,7 +504,7 @@ export function IntentEditor() {
     setSelectedEdgeId,
     updateInputBinding,
     setToast,
-  };
+  });
   const workspaceViewActions = useWorkspaceViewActions({
     updateViewDocument: view,
     setToast,

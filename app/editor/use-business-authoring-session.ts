@@ -15,7 +15,26 @@ import {
   type BusinessOpsDeps,
 } from "./business-ops";
 
-export function useBusinessAuthoringSession(deps: BusinessOpsDeps) {
+export interface BusinessAuthoringSessionDeps {
+  refs: Pick<BusinessOpsDeps, "viewportRef" | "cameraRef">;
+  scope: Pick<BusinessOpsDeps, "layoutLocked" | "businessRoot" | "businessScope" | "selectedBusinessNode">;
+  document: Pick<BusinessOpsDeps, "documentState" | "updateDocument" | "checkpoint" | "commit" | "updateDocumentNode" | "updateDocumentNodeView" | "storeNodeProjection">;
+  selection: Pick<BusinessOpsDeps, "setSelectedBusinessNodeId" | "selectPanelBusinessNode">;
+  bindings: Pick<BusinessOpsDeps, "updateInputBinding" | "updateOutputBinding">;
+  runtime: Pick<BusinessOpsDeps, "dispatchRuntimeEvent">;
+  feedback: Pick<BusinessOpsDeps, "setToast" | "setPendingPipe">;
+}
+
+export function useBusinessAuthoringSession(groups: BusinessAuthoringSessionDeps) {
+  const deps: BusinessOpsDeps = {
+    ...groups.refs,
+    ...groups.scope,
+    ...groups.document,
+    ...groups.selection,
+    ...groups.bindings,
+    ...groups.runtime,
+    ...groups.feedback,
+  };
   const publish = createPublishModule(deps);
   const insert = createInsertModule(deps);
   const addChild = createAddBusinessChild(deps);
