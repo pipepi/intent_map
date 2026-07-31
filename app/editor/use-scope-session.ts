@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 import {
   getBusinessRoot,
@@ -17,7 +17,7 @@ import { deriveBusinessVisualEdges } from "../runtime/business-canvas";
 import { deriveNodeBindingEdges } from "../runtime/panel-pipelines";
 import { aggregateEdges, deriveScopeBoundaryEdges } from "./bindings";
 import { collectValidationIssues } from "./validation";
-import { findNode, freePanelContext, nodeSize, sampleDocument } from "./tree-utils";
+import { findNode, nodeSize } from "./tree-utils";
 
 export interface UseScopeSessionOptions {
   documentState: IntentDocumentV3;
@@ -25,6 +25,7 @@ export interface UseScopeSessionOptions {
   selectedBusinessNodeId: string;
   layoutLocked: boolean;
   updateDocument: (updater: (active: IntentDocumentV3) => IntentDocumentV3) => void;
+  navigationStack: ScopeAddress[];
 }
 
 export function useScopeSession({
@@ -33,10 +34,8 @@ export function useScopeSession({
   selectedBusinessNodeId,
   layoutLocked,
   updateDocument,
+  navigationStack,
 }: UseScopeSessionOptions) {
-  const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>(() =>
-    freePanelContext(sampleDocument()).navigationStack,
-  );
 
   const freeContainer = getContainerSurface(
     documentState,
@@ -166,7 +165,6 @@ export function useScopeSession({
 
   return {
     navigationStack,
-    setNavigationStack,
     freeContainer,
     appRoot,
     businessRoot,

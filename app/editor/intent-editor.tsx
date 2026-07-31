@@ -38,23 +38,7 @@
  * ============================================================================
  */
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-
-import {
-  serializeIntentDocument,
-  updateSurface,
-  type IntentDocumentV3,
-  type IntentNode,
-} from "../runtime/model";
-import {
-  downloadExport,
-  prepareDocumentExport,
-} from "../runtime/export";
+import { useEffect, useState } from "react";
 import {
   MINIMIZED_NODE_SIZE,
 } from "../runtime/node-renderer";
@@ -62,19 +46,7 @@ import {
   type RuntimeCommand,
 } from "../runtime/registry";
 // ---- 从本文件拆出的功能模块（app/editor/）----
-import {
-  freePanelContext,
-  sampleDocument,
-  updateNode,
-} from "./tree-utils";
-import { computeLaneAutoLayout } from "./auto-layout";
-import {
-  createDocumentIO,
-  type DocumentIODeps,
-} from "./document-io";
-import { useRuntimePipeline } from "./use-runtime-pipeline";
 import { useBusinessRunState } from "./use-business-run-state";
-import { useDocumentHistory } from "./use-document-history";
 import { useScopeSession } from "./use-scope-session";
 import { useRuntimeCommandExecutor } from "./use-runtime-command-executor";
 import { useAuthoringSchemaActions } from "./use-authoring-schema-actions";
@@ -85,35 +57,20 @@ import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useCanvasCameraSession } from "./use-canvas-camera-session";
 import { usePanelNavigationActions } from "./use-panel-navigation-actions";
 import { useCanvasPointerGestures } from "./use-canvas-pointer-gestures";
-import {
-  renderNodeSurface,
-  type NodeSurfaceDeps,
-} from "./node-surfaces";
-import {
-  createAddBusinessChild,
-  createCreateLinkedBusinessNode,
-  createDeleteBusinessNode,
-  createDuplicateBusinessNode,
-  createInsertModule,
-  createMoveBusinessNodeStart,
-  createPublishModule,
-  createResizeBusinessNodeStart,
-  createStartPipeDrag,
-  createToggleBusinessDisplayMode,
-  createToggleBusinessResizeMode,
-  type BusinessOpsDeps,
-  type PendingPipeState,
-} from "./business-ops";
+import { useScopeNavigationSession } from "./use-scope-navigation-session";
+import { useAutoLayoutAction } from "./use-auto-layout-action";
+import { createRuntimeCommandActions } from "./runtime-command-actions";
+import { useDocumentSession } from "./use-document-session";
+import { useNodeSurfaceController } from "./use-node-surface-controller";
+import type { BusinessOpsDeps, PendingPipeState } from "./business-ops";
+import { useBusinessAuthoringSession } from "./use-business-authoring-session";
 import {
   type EdgeRendererDeps,
 } from "./edge-renderer";
 import type { BusinessScopeLayerDeps } from "./business-scope-layer";
 import { EditorWorkspace } from "./editor-workspace";
 import { ScopeCanvas } from "./scope-canvas";
-import {
-  createScopeNavigationOps,
-  type ScopeNavigationDeps,
-} from "./scope-navigation";
+import type { ScopeNavigationDeps } from "./scope-navigation";
 
 // ============================================================================
 // 画布交互常量 → ./editor/constants
@@ -125,23 +82,6 @@ import {
 // ============================================================================
 
 export function IntentEditor() {
-  // ---- 文档与历史（已拆到 ./editor/use-document-history.ts）----
-  // documentState 是唯一事实源；history/future/dirty 与 commit/undo/redo 等
-  // 写操作收进一个 useReducer，事务性不变量（压栈截断/清重做/标脏）只有一份。
-  const {
-    documentState,
-    history,
-    future,
-    dirty,
-    commit: commitDocument,
-    view,
-    updateDocument,
-    checkpoint,
-    undo,
-    redo,
-    loadDocument,
-    markClean,
-  } = useDocumentHistory();
   // ---- 画布视图状态 ----
   const [selectedAppNodeId, setSelectedAppNodeId] = useState("current_container"); // 应用域选中节点
   const [search, setSearch] = useState("");          // 意图树搜索关键字
@@ -150,11 +90,29 @@ export function IntentEditor() {
   // 正在拖拽中的连线（从端口拉出、尚未落点），null = 未在连线
   const [pendingPipe, setPendingPipe] = useState<PendingPipeState>(null);
   const [toast, setToast] = useState("");            // 轻提示文案（2.4s 自动消失）
-  // ---- 业务执行状态（已拆到 ./editor/use-business-run-state.ts）----
-  // runState / trace / rootInput / cancelRunRef 与 run/stop 均由该 Hook 提供，
-  // 在下方 businessRoot 派生之后调用（见"业务执行"注释处）。
-  // ---- 事件管线（已拆到 ./editor/use-runtime-pipeline.ts）----
-  // runtimeState 是事件处理器归约出的运行时状态：当前业务作用域、选中、布局锁等。
+  const documentSession = useDocumentSession(setToast);
+  const {
+    model: { document: documentState, history, future, dirty, navigationStack },
+    writes: {
+      commitDocumentChange,
+      commitViewChange,
+      updateNode: updateDocumentNode,
+      updateTransient: updateDocument,
+      checkpoint,
+      rawCommit: commitDocument,
+      rawView: view,
+    },
+    io: {
+      fileInputRef,
+      exportDocument,
+      exportPip,
+      importDocument,
+      newDocument,
+    },
+    historyActions: { undo, redo },
+    setNavigationStack,
+    runtime,
+  } = documentSession;
   const {
     runtimeState,
     pipelineTrace,
@@ -164,23 +122,7 @@ export function IntentEditor() {
     dispatchRuntimeEvent,
     setBusinessScopeId,
     setSelectedBusinessNodeId,
-  } = useRuntimePipeline({ setDocumentState: updateDocument, setToast });
-  /** 导出当前文档为 v3 JSON 文件（带 SHA-256 校验），导出成功后清除 dirty 标记。 */
-  const exportDocument = async (source: IntentDocumentV3 = documentState) => {
-    const result = await prepareDocumentExport(serializeIntentDocument(source));
-    if (!result.ok) {
-      setToast(`导出失败：${result.error}`);
-      return result;
-    }
-    downloadExport(result);
-    markClean();
-    setToast(
-      `已导出 ${result.filename} · ${result.byteLength} bytes · SHA-256 ${result.sha256.slice(0, 12)}…`,
-    );
-    return result;
-  };
-  // ---- Refs（不触发重渲染的可变引用）----
-  const fileInputRef = useRef<HTMLInputElement>(null); // 隐藏的导入文件选择框
+  } = runtime;
   // ---- runtimeState 的三个常用字段别名（事件管线归约结果）----
   const businessScopeId = runtimeState.scopeId;         // 当前业务作用域节点 id
   const selectedBusinessNodeId = runtimeState.selectionId; // 业务域选中节点 id
@@ -190,8 +132,6 @@ export function IntentEditor() {
   // 由 useRuntimePipeline 提供（上方解构），语义与签名不变。
 
   const {
-    navigationStack,
-    setNavigationStack,
     appRoot,
     businessRoot,
     isBusinessScope,
@@ -213,6 +153,7 @@ export function IntentEditor() {
     selectedBusinessNodeId,
     layoutLocked,
     updateDocument,
+    navigationStack,
   });
 
   const {
@@ -236,28 +177,6 @@ export function IntentEditor() {
     scopeMinimized,
   });
 
-  /**
-   * 两条文档提交通道（状态部分由 useDocumentHistory 提供，这里补发事件）：
-   *   commit     结构性修改——进历史栈（可撤销）、标脏、广播 DOCUMENT_CHANGED；
-   *   commitView 纯视图修改（布局/相机/显示模式）——不进历史，只标脏。
-   */
-  const commit = useCallback(
-    (next: IntentDocumentV3) => {
-      commitDocument(next);
-      dispatchRuntimeEvent("DOCUMENT_CHANGED", "document-store");
-    },
-    [commitDocument, dispatchRuntimeEvent],
-  );
-
-  /** commitView：见上方 commit 注释——视图修改不污染撤销历史。 */
-  const commitView = useCallback(
-    (next: IntentDocumentV3) => {
-      view(next);
-      dispatchRuntimeEvent("DOCUMENT_CHANGED", "document-store");
-    },
-    [view, dispatchRuntimeEvent],
-  );
-
   const {
     storeNodeProjection,
     storeScopeCanvasProjection,
@@ -269,20 +188,9 @@ export function IntentEditor() {
     cameraRef,
     appRoot,
     documentState,
-    commitViewChange: commitView,
+    commitViewChange,
     setSelectedAppNodeId,
   });
-
-  /** 结构级节点更新（增删改/绑定等）：走 commit，进撤销历史。 */
-  const updateDocumentNode = useCallback(
-    (id: string, updater: (node: IntentNode) => IntentNode) => {
-      commit({
-        ...documentState,
-        rootIntent: updateNode(documentState.rootIntent, id, updater),
-      });
-    },
-    [commit, documentState],
-  );
 
   /** toast 轻提示 2.4 秒后自动消失。 */
   useEffect(() => {
@@ -320,9 +228,7 @@ export function IntentEditor() {
     setToast,
     setScopeCamera,
   };
-  /* eslint-disable react-hooks/refs -- 工厂模式：deps 含 ref，但返回的闭包仅在事件回调中读取，渲染期不解引用 */
-  const navOps = createScopeNavigationOps(scopeNavigationDeps);
-  /* eslint-enable react-hooks/refs */
+  const navOps = useScopeNavigationSession(scopeNavigationDeps);
   const { navigateToParent, navigateToScopeFrame, enterNode, onWheel } = navOps;
 
   // enterNode / nearestNode / onWheel 的实现已迁至 ./editor/scope-navigation.ts，
@@ -360,91 +266,15 @@ export function IntentEditor() {
    * computeLaneAutoLayout（纯函数）中；此处只负责把结果写入 surface
    * 投影并触发适应视图。
    */
-  const autoLayout = () => {
-    const { nodeLayouts, canvasLayout } = computeLaneAutoLayout(
-      scopeNode,
-      scopeWorldSize.width,
-    );
-    commitView(
-      updateSurface(
-        documentState,
-        "panel-free-layout",
-        "free-layout-container",
-        (surface) => {
-          if (surface.kind !== "current-container") return surface;
-          const projection = surface.projections[activeCameraKey] ?? {
-            camera: cameraRef.current,
-            nodeLayouts: {},
-          };
-          return {
-            ...surface,
-            projections: {
-              ...surface.projections,
-              [activeCameraKey]: {
-                ...projection,
-                nodeLayouts: {
-                  ...projection.nodeLayouts,
-                  ...nodeLayouts,
-                  [scopeNode.id]: canvasLayout,
-                },
-              },
-            },
-          };
-        },
-      ),
-    );
-    setTimeout(fitScope, 0);
-  };
-
-  // ========================================================================
-  // 撤销 / 重做（undo / redo 由 useDocumentHistory 提供，见组件顶部解构）
-  // ========================================================================
-
-  // ========================================================================
-  // 文档加载 / 导入 / 导出（已拆到 ./editor/document-io.ts）
-  //   applyLoadedDocument / exportPip / loadPipBytes / importDocument；
-  //   下方 Rust 宿主引导 effect 复用 loadPipBytes 与 applyLoadedDocument。
-  // ========================================================================
-
-  const documentIODeps: DocumentIODeps = {
+  const autoLayout = useAutoLayoutAction({
     documentState,
-    loadDocument,
-    dispatchRuntimeEvent,
-    setNavigationStack,
-    markClean,
-    setToast,
-  };
-  const { applyLoadedDocument, exportPip, loadPipBytes, importDocument } =
-    createDocumentIO(documentIODeps);
-
-  /** Rust 宿主引导：URL 带 ?token= 时从宿主接口拉取 .pip 种子并加载（仅启动时一次）。 */
-  useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("token");
-    if (!token) return;
-    let cancelled = false;
-    void fetch(`/__pip/package?token=${encodeURIComponent(token)}`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Host 返回 ${response.status}`);
-        return response.arrayBuffer();
-      })
-      .then((bytes) => loadPipBytes(bytes, false))
-      .then((loaded) => {
-        if (!cancelled) {
-          applyLoadedDocument(loaded);
-          setToast("已从 Rust 种皮加载 PIP 内树");
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setToast(error instanceof Error ? `种皮加载失败：${error.message}` : "种皮加载失败");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Rust seed bootstraps once from the immutable URL token.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    scopeNode,
+    scopeWorldSize,
+    activeCameraKey,
+    cameraRef,
+    commitViewChange,
+    fitScope,
+  });
 
   // ========================================================================
   // 模块发布与业务节点增删改（已拆到 ./editor/business-ops.ts）
@@ -465,7 +295,7 @@ export function IntentEditor() {
   } = useAuthoringSchemaActions({
     documentState,
     businessRoot,
-    commitDocumentChange: commit,
+    commitDocumentChange,
     updateDocumentNode,
     setToast,
   });
@@ -514,7 +344,7 @@ export function IntentEditor() {
     checkpoint,
     setToast,
     setPendingPipe,
-    commit,
+    commit: commitDocumentChange,
     updateDocumentNode,
     updateDocumentNodeView,
     storeNodeProjection,
@@ -527,27 +357,7 @@ export function IntentEditor() {
     updateOutputBinding: (nodeId, portId, value) =>
       updateOutputBinding(nodeId, portId, value),
   };
-  /* eslint-disable react-hooks/refs -- 工厂模式：businessOpsDeps 包含 ref，但下列工厂仅在事件回调中读取，渲染期不解引用 */
-  const publishModule = createPublishModule(businessOpsDeps);
-  const insertModule = createInsertModule(businessOpsDeps);
-  const addBusinessChild = createAddBusinessChild(businessOpsDeps);
-  const duplicateBusinessNode = createDuplicateBusinessNode(businessOpsDeps);
-  const createLinkedBusinessNode = createCreateLinkedBusinessNode(businessOpsDeps);
-  const deleteBusinessNode = createDeleteBusinessNode(businessOpsDeps);
-  const startPipeDrag = createStartPipeDrag(businessOpsDeps);
-  const moveBusinessNodeStart = createMoveBusinessNodeStart(businessOpsDeps);
-  const resizeBusinessNodeStart = createResizeBusinessNodeStart(businessOpsDeps);
-  const toggleBusinessResizeMode = createToggleBusinessResizeMode(businessOpsDeps);
-  const toggleBusinessDisplayMode = createToggleBusinessDisplayMode(businessOpsDeps);
-  /* eslint-enable react-hooks/refs */
-
-  /** 复制当前选中的业务节点（深复制含后代）。 */
-  const duplicateSelected = () =>
-    duplicateBusinessNode(selectedBusinessNode.id);
-
-  /** 删除当前选中的业务节点。 */
-  const deleteSelected = () =>
-    deleteBusinessNode(selectedBusinessNode.id);
+  const businessAuthoring = useBusinessAuthoringSession(businessOpsDeps);
 
   // ---- 业务执行（已拆到 ./editor/use-business-run-state.ts）----
   const { runState, trace, rootInput, setRootInput, run, stop } =
@@ -574,50 +384,39 @@ export function IntentEditor() {
     navigationStackLength: navigationStack.length,
   });
 
-  /** 新建文档：有未导出修改时先确认；重置为示例文档并还原浏览位置。 */
-  const newDocument = () => {
-    if (
-      dirty &&
-      !window.confirm("当前文档有未导出的修改，确定要新建并丢弃这些修改吗？")
-    )
-      return;
-    const next = sampleDocument();
-    const restored = freePanelContext(next);
-    loadDocument(next, true);
-    setNavigationStack(restored.navigationStack);
-    dispatchRuntimeEvent("DOCUMENT_LOADED", "document_loader", {
-      scopeId: restored.scopeId,
-      selectionId: restored.selectionId,
-    });
-  };
-
-  useRuntimeCommandExecutor(lastCommands, {
-    NEW_DOCUMENT: newDocument,
-    IMPORT_REQUEST: () => fileInputRef.current?.click(),
-    EXPORT_DOCUMENT: async () => {
-      await exportDocument(documentState);
+  /* eslint-disable react-hooks/refs -- Command callbacks capture refs but execute only after runtime events. */
+  const commandActions = createRuntimeCommandActions({
+    document: {
+      current: documentState,
+      newDocument,
+      requestImport: () => fileInputRef.current?.click(),
+      exportDocument,
+      undo,
+      redo,
     },
-    UNDO: undo,
-    REDO: redo,
-    AUTO_LAYOUT: autoLayout,
-    PUBLISH_MODULE: publishModule,
-    RUN_BUSINESS: run,
-    STOP_BUSINESS: stop,
-    ADD_BUSINESS_CHILD: () => addBusinessChild(),
-    DUPLICATE_NODE: duplicateSelected,
-    DELETE_NODE: deleteSelected,
-    DUPLICATE_APP_NODE: duplicateAppNode,
-    DELETE_APP_NODE: deleteAppNode,
-    RESET_APP_GRAPH: resetApplicationGraph,
-    NAVIGATE_APP_PARENT: () => {
-      if (navigationStack.length > 1) navigateToParent();
+    canvas: {
+      autoLayout,
+      fitScope,
+      centerScopeAtScale,
+      setScopeCamera,
     },
-    FIT_SCOPE: fitScope,
-    RESET_CAMERA: () => {
-      const centered = centerScopeAtScale(1);
-      if (centered) setScopeCamera(centered, true);
+    authoring: {
+      publishModule: businessAuthoring.modules.publish,
+      addBusinessChild: () => businessAuthoring.nodes.addChild(),
+      duplicateSelected: businessAuthoring.nodes.duplicateSelected,
+      deleteSelected: businessAuthoring.nodes.removeSelected,
+      duplicateAppNode,
+      deleteAppNode,
+      resetApplicationGraph,
+    },
+    runtime: { run, stop },
+    navigation: {
+      canNavigateParent: navigationStack.length > 1,
+      navigateToParent,
     },
   });
+  /* eslint-enable react-hooks/refs */
+  useRuntimeCommandExecutor(lastCommands, commandActions);
 
   /** 渲染器回调桥：把子渲染器发来的 RuntimeCommand 转投到事件管线。 */
   const emit = (command: RuntimeCommand) => {
@@ -638,15 +437,15 @@ export function IntentEditor() {
     pendingPipe,
     selectNode: setSelectedBusinessNodeId,
     enterNode,
-    moveNodeStart: moveBusinessNodeStart,
-    resizeNodeStart: resizeBusinessNodeStart,
-    toggleResizeMode: toggleBusinessResizeMode,
-    toggleDisplayMode: toggleBusinessDisplayMode,
+    moveNodeStart: businessAuthoring.geometry.moveStart,
+    resizeNodeStart: businessAuthoring.geometry.resizeStart,
+    toggleResizeMode: businessAuthoring.geometry.toggleResizeMode,
+    toggleDisplayMode: businessAuthoring.geometry.toggleDisplayMode,
     updateInputBinding,
     updateOutputBinding,
     setToast,
-    startPipeDrag,
-    addChild: addBusinessChild,
+    startPipeDrag: businessAuthoring.pipes.startDrag,
+    addChild: businessAuthoring.nodes.addChild,
   };
 
   /**
@@ -654,60 +453,38 @@ export function IntentEditor() {
    * 16 个内置面板分支 + 注册表兜底渲染器；这里把组件状态与动作
    * 打包成 NodeSurfaceDeps 传入。
    */
-  const nodeSurfaceDeps: NodeSurfaceDeps = {
-    documentState,
-    appRoot,
-    businessRoot,
-    businessScope,
-    scopeNode,
-    selectedBusinessNode,
-    selectedBusinessNodeId,
-    selectedAppNodeId,
-    validationIssues,
-    runtimeState,
-    eventTick,
-    pendingEvents,
-    pipelineTrace,
-    lastCommands,
-    runState,
-    trace,
-    rootInput,
-    setRootInput,
-    history,
-    future,
-    dirty,
-    layoutLocked,
-    camera,
-    search,
-    setSearch,
-    navigationStack,
-    setToast,
-    dispatchRuntimeEvent,
-    exportDocument,
-    exportPip,
-    emit,
-    navigateToBusinessNode,
-    navigatePanelBusinessNode,
-    selectPanelBusinessNode,
-    setSelectedBusinessNodeId,
-    renameBusinessNode,
-    updateDocumentNode,
-    bindingOptionsFor,
-    updateInputBinding,
-    outputBindingOptionsFor,
-    updateOutputBinding,
-    editPortSchema,
-    addPortSchema,
-    movePortSchema,
-    duplicateBusinessNode,
-    createLinkedBusinessNode,
-    deleteBusinessNode,
-    insertModule,
-  };
-  const renderNodeContent = (
-    node: IntentNode,
-    contextAddress?: { panelId: string; surfaceId: string },
-  ) => renderNodeSurface(node, nodeSurfaceDeps, contextAddress);
+  const renderNodeContent = useNodeSurfaceController({
+    document: {
+      documentState, history, future, dirty, exportDocument, exportPip,
+      updateDocumentNode,
+    },
+    scope: {
+      appRoot, businessRoot, businessScope, scopeNode, validationIssues,
+      layoutLocked, camera, navigationStack,
+    },
+    selection: {
+      selectedBusinessNode, selectedBusinessNodeId, selectedAppNodeId,
+      setSelectedBusinessNodeId,
+    },
+    authoring: {
+      renameBusinessNode, bindingOptionsFor, updateInputBinding,
+      outputBindingOptionsFor, updateOutputBinding, editPortSchema,
+      addPortSchema, movePortSchema,
+      duplicateBusinessNode: businessAuthoring.nodes.duplicate,
+      createLinkedBusinessNode: businessAuthoring.nodes.createLinked,
+      deleteBusinessNode: businessAuthoring.nodes.remove,
+      insertModule: businessAuthoring.modules.insert,
+    },
+    navigation: {
+      navigateToBusinessNode, navigatePanelBusinessNode, selectPanelBusinessNode,
+    },
+    runtime: {
+      runtimeState, eventTick, pendingEvents, pipelineTrace, lastCommands,
+      runState, trace, rootInput, setRootInput, dispatchRuntimeEvent, emit,
+    },
+    workspace: { search, setSearch },
+    feedback: { setToast },
+  });
 
   // renderEdge / renderScopeBoundaryEdge（SVG 连线渲染）已迁至
   // ./editor/edge-renderer，此处仅组装 deps（见下方 edgeRendererDeps）。
@@ -770,7 +547,7 @@ export function IntentEditor() {
         onUpdateInputBinding={updateInputBinding}
         onUpdateOutputBinding={updateOutputBinding}
         onAddBusinessChild={(scopeId) =>
-          addBusinessChild(scopeId, false)
+          businessAuthoring.nodes.addChild(scopeId, false)
         }
         onFeedback={setToast}
         onWorkspaceChange={workspaceViewActions.onWorkspaceChange}

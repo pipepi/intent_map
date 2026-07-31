@@ -8,11 +8,13 @@
 HomePage
 └── IntentEditor
     ├── useDocumentHistory / useRuntimePipeline / useBusinessRunState
+    ├── useDocumentSession
     ├── useScopeSession
     ├── useCanvasProjectionActions
     ├── useCanvasCameraSession / useEditorShortcuts
     ├── useCanvasPointerGestures / usePanelNavigationActions
     ├── useAuthoringSchemaActions / useApplicationNodeActions
+    ├── useBusinessAuthoringSession / useNodeSurfaceController
     ├── useRuntimeCommandExecutor
     └── EditorWorkspace
         └── ScopeCanvas
@@ -30,6 +32,7 @@ HomePage
 ### 会话与控制器
 
 - `use-document-history.ts`：文档事实源、历史栈、dirty 状态和两类写入通道。
+- `use-document-session.ts`：组合历史、运行时管线、导航上下文、文档 IO、新建和宿主加载。
 - `use-runtime-pipeline.ts`：事件批处理、运行时状态及命令生成。
 - `use-business-run-state.ts`：业务执行、取消、输入和 trace。
 - `use-scope-session.ts`：两棵树投影、当前作用域、导航栈、连线/校验派生及浏览上下文持久化。
@@ -41,6 +44,9 @@ HomePage
 - `use-authoring-schema-actions.ts`：节点 ID、端口 schema 与输入/输出绑定操作。
 - `use-application-node-actions.ts`：应用节点新增、复制、删除和应用图重置。
 - `use-workspace-view-actions.ts`：Workspace/View 的更新与另存行为。
+- `use-business-authoring-session.ts`：按节点、几何、管道和模块分组业务操作。
+- `use-node-surface-controller.tsx`：以 `EditorCapabilities` 分组节点面板所需能力。
+- `runtime-command-actions.ts`：按 document/canvas/authoring/runtime/navigation 生成完整命令映射。
 - `use-runtime-command-executor.ts`：受支持命令的完整类型映射和批次执行。
 
 ### 视图层

@@ -16,6 +16,22 @@ const readApplicationSource = async () => {
   return sources.join("\n");
 };
 
+test("keeps editor sessions and capability boundaries explicit", async () => {
+  const [documentSession, surfaceController, commandActions] = await Promise.all([
+    readFile(new URL("app/editor/use-document-session.ts", root), "utf8"),
+    readFile(new URL("app/editor/use-node-surface-controller.tsx", root), "utf8"),
+    readFile(new URL("app/editor/runtime-command-actions.ts", root), "utf8"),
+  ]);
+  assert.match(documentSession, /commitDocumentChange/);
+  assert.match(documentSession, /commitViewChange/);
+  assert.match(documentSession, /createDocumentIO/);
+  assert.match(surfaceController, /interface EditorCapabilities/);
+  assert.match(surfaceController, /document: Fields</);
+  assert.match(surfaceController, /authoring: Fields</);
+  assert.match(commandActions, /RuntimeCommandActions/);
+  assert.match(commandActions, /RESET_CAMERA/);
+});
+
 test("exports the everything-node application as a static page", async () => {
   const html = await readFile(new URL("out/index.html", root), "utf8");
   const page = await readApplicationSource();
@@ -183,10 +199,10 @@ test("supports root camera navigation, layout editing, and semantic LOD", async 
     /className=\{`resize-mode-toggle business-mode-toggle[\s\S]*?onDoubleClick=\{\(event\) => event\.stopPropagation\(\)\}[\s\S]*?event\.stopPropagation\(\);[\s\S]*?onResizeModeToggle\(node\)/,
   );
   assert.match(page, /container-mode-toggle/);
-  assert.match(page, /toggleBusinessResizeMode/);
+  assert.match(page, /toggleResizeMode/);
   assert.match(page, /toggleNodeResizeMode/);
   assert.match(page, /toggleNodeDisplayMode/);
-  assert.match(page, /toggleBusinessDisplayMode/);
+  assert.match(page, /toggleDisplayMode/);
   assert.match(page, /scopeMinimized/);
   assert.match(page, /renderedWorldSize/);
   assert.match(page, /scopeMinimized \? MINIMIZED_NODE_SIZE : worldSize/);
@@ -433,8 +449,8 @@ test("protects core composition and preserves business editing", async () => {
   assert.match(page, /bindingOptionsFor/);
   assert.match(page, /updateInputBinding/);
   assert.match(page, /updateOutputBinding/);
-  assert.match(page, /moveBusinessNodeStart/);
-  assert.match(page, /resizeBusinessNodeStart/);
+  assert.match(page, /createMoveBusinessNodeStart/);
+  assert.match(page, /createResizeBusinessNodeStart/);
   assert.match(page, /getBoundingClientRect\(\)\.width \/ world\.offsetWidth/);
   assert.match(businessGeometry, /BUSINESS_PORT_TOP = 66/);
   assert.match(businessGeometry, /BUSINESS_PORT_ROW = 28/);
