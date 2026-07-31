@@ -9,6 +9,8 @@ HomePage
 └── IntentEditor
     ├── useDocumentHistory / useRuntimePipeline / useBusinessRunState
     ├── useScopeSession
+    ├── useCanvasProjectionActions
+    ├── useAuthoringSchemaActions / useApplicationNodeActions
     ├── useRuntimeCommandExecutor
     └── EditorWorkspace
         └── ScopeCanvas
@@ -29,6 +31,10 @@ HomePage
 - `use-runtime-pipeline.ts`：事件批处理、运行时状态及命令生成。
 - `use-business-run-state.ts`：业务执行、取消、输入和 trace。
 - `use-scope-session.ts`：两棵树投影、当前作用域、导航栈、连线/校验派生及浏览上下文持久化。
+- `use-canvas-projection-actions.ts`：节点与容器投影持久化、显示和缩放模式切换。
+- `use-authoring-schema-actions.ts`：节点 ID、端口 schema 与输入/输出绑定操作。
+- `use-application-node-actions.ts`：应用节点新增、复制、删除和应用图重置。
+- `use-workspace-view-actions.ts`：Workspace/View 的更新与另存行为。
 - `use-runtime-command-executor.ts`：受支持命令的完整类型映射和批次执行。
 
 ### 视图层

@@ -48,52 +48,37 @@ import {
 import {
   ACTIVE_BUSINESS_SCOPE_REF_ID,
   businessScopeAddress,
-  createApplicationDocument,
   getBusinessRoot,
   getContainerSurface,
-  nodeDisplayMode,
   scopeCameraKey,
   serializeIntentDocument,
   updatePanel,
   updateSurface,
   type CameraState,
-  type Expression,
   type IntentDocumentV3,
   type IntentNode,
   type ScopeAddress,
-  type WorkspaceState,
 } from "../runtime/model";
 import {
   downloadExport,
   prepareDocumentExport,
 } from "../runtime/export";
 import {
-  renameIntentNodeId,
-  updateIntentPortSchema,
-} from "../runtime/authoring";
-import {
   MINIMIZED_NODE_SIZE,
 } from "../runtime/node-renderer";
 import {
   type RuntimeCommand,
 } from "../runtime/registry";
-import {
-  defaultNodeProjectionLayout,
-} from "../runtime/projection";
 // ---- 从本文件拆出的功能模块（app/editor/）----
 import {
   MAX_SCALE,
   MIN_SCALE,
 } from "./constants";
 import {
-  clone,
   findNode,
   findPath,
   freePanelContext,
-  nodeResizeMode,
-  removeNode,
   sampleDocument,
-  uid,
   updateNode,
 } from "./tree-utils";
 import { computeLaneAutoLayout } from "./auto-layout";
@@ -106,6 +91,10 @@ import { useBusinessRunState } from "./use-business-run-state";
 import { useDocumentHistory } from "./use-document-history";
 import { useScopeSession } from "./use-scope-session";
 import { useRuntimeCommandExecutor } from "./use-runtime-command-executor";
+import { useAuthoringSchemaActions } from "./use-authoring-schema-actions";
+import { useApplicationNodeActions } from "./use-application-node-actions";
+import { useWorkspaceViewActions } from "./use-workspace-view-actions";
+import { useCanvasProjectionActions } from "./use-canvas-projection-actions";
 import {
   renderNodeSurface,
   type NodeSurfaceDeps,
@@ -305,89 +294,20 @@ export function IntentEditor() {
     [view, dispatchRuntimeEvent],
   );
 
-  // ========================================================================
-  // 布局投影持久化（位置/尺寸改动写入 surface.projections，按作用域键存储）
-  // ========================================================================
-
-  /** 把单个节点的布局（位置/尺寸/显示模式等）持久化到当前作用域的投影表。 */
-  const storeNodeProjection = useCallback(
-    (document: IntentDocumentV3, node: IntentNode) =>
-      updateSurface(
-        document,
-        "panel-free-layout",
-        "free-layout-container",
-        (surface) => {
-          if (surface.kind !== "current-container") return surface;
-          const projection = surface.projections[activeCameraKey] ?? {
-            camera: cameraRef.current,
-            nodeLayouts: {},
-          };
-          return {
-            ...surface,
-            projections: {
-              ...surface.projections,
-              [activeCameraKey]: {
-                ...projection,
-                nodeLayouts: {
-                  ...projection.nodeLayouts,
-                  [node.id]: defaultNodeProjectionLayout(node),
-                },
-              },
-            },
-          };
-        },
-      ),
-    [activeCameraKey],
-  );
-
-  /** 持久化当前作用域画布本身的尺寸（容器 frame 从原点起算）。 */
-  const storeScopeCanvasProjection = useCallback(
-    (
-      document: IntentDocumentV3,
-      scope: IntentNode,
-      size: { width: number; height: number },
-    ) =>
-      updateSurface(
-        document,
-        "panel-free-layout",
-        "free-layout-container",
-        (surface) => {
-          if (surface.kind !== "current-container") return surface;
-          const projection = surface.projections[activeCameraKey] ?? {
-            camera: cameraRef.current,
-            nodeLayouts: {},
-          };
-          const fallback = defaultNodeProjectionLayout(scope);
-          return {
-            ...surface,
-            projections: {
-              ...surface.projections,
-              [activeCameraKey]: {
-                ...projection,
-                nodeLayouts: {
-                  ...projection.nodeLayouts,
-                  [scope.id]: {
-                    ...fallback,
-                    frame: { x: 0, y: 0, ...size },
-                  },
-                },
-              },
-            },
-          };
-        },
-      ),
-    [activeCameraKey],
-  );
-
-  /** 视图级节点更新（显示模式/缩放模式等）：走 commitView，不进撤销历史。 */
-  const updateDocumentNodeView = useCallback(
-    (id: string, updater: (node: IntentNode) => IntentNode) => {
-      const current = findNode(appRoot, id);
-      if (!current) return;
-      commitView(storeNodeProjection(documentState, updater(current)));
-    },
-    [appRoot, commitView, documentState, storeNodeProjection],
-  );
+  const {
+    storeNodeProjection,
+    storeScopeCanvasProjection,
+    updateDocumentNodeView,
+    toggleNodeResizeMode,
+    toggleNodeDisplayMode,
+  } = useCanvasProjectionActions({
+    activeCameraKey,
+    cameraRef,
+    appRoot,
+    documentState,
+    commitViewChange: commitView,
+    setSelectedAppNodeId,
+  });
 
   /** 结构级节点更新（增删改/绑定等）：走 commit，进撤销历史。 */
   const updateDocumentNode = useCallback(
@@ -398,31 +318,6 @@ export function IntentEditor() {
       });
     },
     [commit, documentState],
-  );
-
-  /** 切换节点缩放模式：simple（三向）⇄ full（八向）。 */
-  const toggleNodeResizeMode = useCallback(
-    (node: IntentNode) => {
-      updateDocumentNodeView(node.id, (item) => ({
-        ...item,
-        resizeMode: nodeResizeMode(item) === "simple" ? "full" : "simple",
-      }));
-      setSelectedAppNodeId(node.id);
-    },
-    [updateDocumentNodeView],
-  );
-
-  /** 切换节点显示模式：expanded ⇄ minimized（折叠为只显示名字的小块）。 */
-  const toggleNodeDisplayMode = useCallback(
-    (node: IntentNode) => {
-      updateDocumentNodeView(node.id, (item) => ({
-        ...item,
-        displayMode:
-          nodeDisplayMode(item) === "expanded" ? "minimized" : "expanded",
-      }));
-      setSelectedAppNodeId(node.id);
-    },
-    [updateDocumentNodeView],
   );
 
   /**
@@ -766,6 +661,40 @@ export function IntentEditor() {
   //   在组件后段才声明，用箭头函数惰性转发避免 TDZ 引用错误。
   // ========================================================================
 
+  const {
+    renameBusinessNode,
+    editPortSchema,
+    addPortSchema,
+    movePortSchema,
+    bindingOptionsFor,
+    updateInputBinding,
+    outputBindingOptionsFor,
+    updateOutputBinding,
+  } = useAuthoringSchemaActions({
+    documentState,
+    businessRoot,
+    commitDocumentChange: commit,
+    updateDocumentNode,
+    setToast,
+  });
+
+  const {
+    addRuntimeChild,
+    duplicateAppNode,
+    deleteAppNode,
+    resetApplicationGraph,
+  } = useApplicationNodeActions({
+    documentState,
+    scopeNode,
+    businessRoot,
+    selectedAppNodeId,
+    updateDocumentNode,
+    commitDocument,
+    setNavigationStack,
+    setSelectedAppNodeId,
+    dispatchRuntimeEvent,
+  });
+
   const businessOpsDeps: BusinessOpsDeps = {
     viewportRef,
     cameraRef,
@@ -805,31 +734,6 @@ export function IntentEditor() {
   const toggleBusinessDisplayMode = createToggleBusinessDisplayMode(businessOpsDeps);
   /* eslint-enable react-hooks/refs */
 
-  /**
-   * 向当前应用叶子作用域添加运行时子节点（composite 空容器）。
-   * 只在 canAddRuntimeChild 为 true 时有入口（见主 JSX 渲染标志区）。
-   */
-  const addRuntimeChild = () => {
-    const node: IntentNode = {
-      id: uid("node"),
-      name: "新子节点",
-      description: "当前叶子节点内部的新管道节点。",
-      kind: "composite",
-      inputs: [],
-      outputs: [],
-      children: [],
-      position: { x: 180, y: 150 },
-      size: { width: 280, height: 180 },
-      resizeMode: "simple",
-      displayMode: "minimized",
-    };
-    updateDocumentNode(scopeNode.id, (scope) => ({
-      ...scope,
-      children: [...(scope.children ?? []), node],
-      canvasSize: scope.canvasSize ?? { width: 1000, height: 700 },
-    }));
-  };
-
   /** 复制当前选中的业务节点（深复制含后代）。 */
   const duplicateSelected = () =>
     duplicateBusinessNode(selectedBusinessNode.id);
@@ -837,153 +741,6 @@ export function IntentEditor() {
   /** 删除当前选中的业务节点。 */
   const deleteSelected = () =>
     deleteBusinessNode(selectedBusinessNode.id);
-
-  /** 重命名节点 ID：同步更新 businessRootId、树内引用以及所有面板的 selection。 */
-  const renameBusinessNode = (nodeId: string, nextId: string) => {
-    const result = renameIntentNodeId(documentState.rootIntent, nodeId, nextId);
-    if (!result.ok) {
-      setToast(`修改失败：${result.error}`);
-      return;
-    }
-    commit({
-      ...documentState,
-      businessRootId:
-        documentState.businessRootId === nodeId ? nextId : documentState.businessRootId,
-      rootIntent: result.value,
-      workspaceState: {
-        ...documentState.workspaceState,
-        panels: documentState.workspaceState.panels.map((panel) => ({
-          ...panel,
-          selection: {
-            ...panel.selection,
-            nodeIds: panel.selection.nodeIds.map((id) => id === nodeId ? nextId : id),
-            primaryNodeId:
-              panel.selection.primaryNodeId === nodeId
-                ? nextId
-                : panel.selection.primaryNodeId,
-          },
-        })),
-      },
-    });
-    setToast(`节点 ID 已更新为 ${nextId}`);
-  };
-
-  // ---- 端口 Schema 编辑（属性面板的"输入/输出 Schema"区）----
-
-  /** 修改/删除端口（next=null 表示删除）；有外部引用时校验会阻止并提示引用方。 */
-  const editPortSchema = (
-    node: IntentNode,
-    direction: "inputs" | "outputs",
-    portId: string,
-    next: IntentNode["inputs"][number] | null,
-  ) => {
-    const result = updateIntentPortSchema(
-      documentState.rootIntent,
-      node.id,
-      direction,
-      portId,
-      next,
-    );
-    if (!result.ok) {
-      setToast(
-        `端口修改失败：${result.error}${
-          result.references?.length ? `（${result.references.join("、")}）` : ""
-        }`,
-      );
-      return;
-    }
-    commit({ ...documentState, rootIntent: result.value });
-    setToast(next ? `端口「${next.name}」已更新` : `端口「${portId}」已删除`);
-  };
-
-  /** 新增端口（默认 any 类型、data 通道）。 */
-  const addPortSchema = (
-    node: IntentNode,
-    direction: "inputs" | "outputs",
-  ) => {
-    const port = {
-      id: uid(direction === "inputs" ? "input" : "output"),
-      name: direction === "inputs" ? "新输入" : "新输出",
-      type: "any" as const,
-      channel: "data" as const,
-    };
-    updateDocumentNode(node.id, (item) => ({
-      ...item,
-      [direction]: [...item[direction], port],
-    }));
-    setToast(`已新增${direction === "inputs" ? "输入" : "输出"}端口`);
-  };
-
-  /** 端口上移/下移（与相邻端口交换位置，影响边界端口的纵向排列顺序）。 */
-  const movePortSchema = (
-    node: IntentNode,
-    direction: "inputs" | "outputs",
-    index: number,
-    offset: -1 | 1,
-  ) => {
-    const nextIndex = index + offset;
-    if (nextIndex < 0 || nextIndex >= node[direction].length) return;
-    updateDocumentNode(node.id, (item) => {
-      const ports = [...item[direction]];
-      [ports[index], ports[nextIndex]] = [ports[nextIndex], ports[index]];
-      return { ...item, [direction]: ports };
-    });
-  };
-
-  // ---- 应用节点操作 ----
-
-  /** 复制选中的应用节点（副本不再是核心节点，可自由删除）。 */
-  const duplicateAppNode = () => {
-    const selected = findNode(scopeNode, selectedAppNodeId);
-    if (!selected || selected.id === scopeNode.id) return;
-    const duplicate: IntentNode = {
-      ...clone(selected),
-      id: uid("view"),
-      name: `${selected.name} · 副本`,
-      position: {
-        x: selected.position.x + 42,
-        y: selected.position.y + 42,
-      },
-      implementation: selected.implementation
-        ? { ...selected.implementation, core: false }
-        : undefined,
-    };
-    updateDocumentNode(scopeNode.id, (scope) => ({
-      ...scope,
-      children: [...(scope.children ?? []), duplicate],
-    }));
-    setSelectedAppNodeId(duplicate.id);
-  };
-
-  /** 删除选中的应用节点；核心节点（编辑器自身 UI）需二次确认。 */
-  const deleteAppNode = () => {
-    const selected = findNode(scopeNode, selectedAppNodeId);
-    if (!selected || selected.id === scopeNode.id) return;
-    if (
-      selected.implementation?.core &&
-      !window.confirm(`「${selected.name}」是核心节点。确认删除？可通过“重置应用节点图”恢复。`)
-    ) {
-      return;
-    }
-    updateDocumentNode(scopeNode.id, (scope) => removeNode(scope, selected.id));
-    setSelectedAppNodeId(scopeNode.children?.[0]?.id ?? scopeNode.id);
-  };
-
-  /** 重置应用节点图：按当前业务树重新生成应用文档（业务意图与模块快照保留）。 */
-  const resetApplicationGraph = () => {
-    if (!window.confirm("重置全部应用节点布局和系统绑定？业务意图与模块快照会保留。")) return;
-    const reset = createApplicationDocument(clone(businessRoot), clone(documentState.publishedModules));
-    const restored = freePanelContext(reset);
-    // 与旧三行（截断压栈 + 清重做 + 写文档 + 标脏）等价，但事件发 DOCUMENT_LOADED
-    // 而非 DOCUMENT_CHANGED，所以直接用 hook 的 commitDocument 而非 commit 包装。
-    commitDocument(reset);
-    setNavigationStack(restored.navigationStack);
-    setSelectedAppNodeId("current_container");
-    dispatchRuntimeEvent("DOCUMENT_LOADED", "application_root", {
-      scopeId: restored.scopeId,
-      selectionId: restored.selectionId,
-    });
-  };
 
   // ---- 业务执行（已拆到 ./editor/use-business-run-state.ts）----
   const { runState, trace, rootInput, setRootInput, run, stop } =
@@ -1146,97 +903,6 @@ export function IntentEditor() {
     });
   };
 
-  /** 节点的父作用域（绑定候选列表以"同层兄弟 + 父容器输入"为来源）。 */
-  const parentScopeFor = (nodeId: string) =>
-    findPath(businessRoot, nodeId)?.at(-2) ?? businessRoot;
-
-  /** 输入端口的绑定候选：父容器环境输入（env:）+ 同层兄弟节点的输出（ref:）。 */
-  const bindingOptionsFor = (nodeId: string) => {
-    const parent = parentScopeFor(nodeId);
-    return [
-      ...parent.inputs.map((input) => ({
-        value: `env:${input.id}`,
-        label: `环境 · ${input.name}`,
-      })),
-      ...(parent.children ?? [])
-        .filter((child) => child.id !== nodeId)
-        .flatMap((child) =>
-          child.outputs.map((output) => ({
-            value: `ref:${child.id}:${output.id}`,
-            label: `${child.name} · ${output.name}`,
-          })),
-        ),
-    ];
-  };
-
-  /**
-   * 更新输入端口绑定：value 为空 = 断开；"env:portId" = 绑环境输入；
-   * "ref:nodeId:portId" = 绑上游节点输出。
-   */
-  const updateInputBinding = (
-    nodeId: string,
-    portId: string,
-    value: string,
-  ) => {
-    let binding: Expression | undefined;
-    if (value.startsWith("env:")) {
-      binding = { kind: "ref", portId: value.slice(4), env: true };
-    } else if (value.startsWith("ref:")) {
-      const [, nodeIdValue, portIdValue] = value.split(":");
-      binding = {
-        kind: "ref",
-        nodeId: nodeIdValue,
-        portId: portIdValue,
-      };
-    }
-    updateDocumentNode(nodeId, (node) => ({
-      ...node,
-      inputs: node.inputs.map((input) =>
-        input.id === portId ? { ...input, binding } : input,
-      ),
-    }));
-    setToast(binding ? "管道已连接或改绑" : "管道已断开");
-  };
-
-  /** 容器输出端口的映射候选：容器自身环境输入 + 内部子节点的输出。 */
-  const outputBindingOptionsFor = (node: IntentNode) => [
-    ...node.inputs.map((input) => ({
-      value: `env:${input.id}`,
-      label: `输入 · ${input.name}`,
-    })),
-    ...(node.children ?? []).flatMap((child) =>
-      child.outputs.map((output) => ({
-        value: `ref:${child.id}:${output.id}`,
-        label: `${child.name} · ${output.name}`,
-      })),
-    ),
-  ];
-
-  /** 更新容器输出端口的映射（格式同 updateInputBinding；空值 = 断开映射）。 */
-  const updateOutputBinding = (
-    nodeId: string,
-    portId: string,
-    value: string,
-  ) => {
-    let binding: Expression | undefined;
-    if (value.startsWith("env:")) {
-      binding = { kind: "ref", portId: value.slice(4), env: true };
-    } else if (value.startsWith("ref:")) {
-      const [, nodeIdValue, portIdValue] = value.split(":");
-      binding = {
-        kind: "ref",
-        nodeId: nodeIdValue,
-        portId: portIdValue,
-      };
-    }
-    updateDocumentNode(nodeId, (node) => ({
-      ...node,
-      outputs: node.outputs.map((output) =>
-        output.id === portId ? { ...output, binding } : output,
-      ),
-    }));
-  };
-
   /**
    * 业务作用域图层（已拆到 ./editor/business-scope-layer.tsx）：
    * 整棵业务画布委托给 BusinessGraphProjection；这里把页面级状态与动作
@@ -1358,6 +1024,10 @@ export function IntentEditor() {
     updateInputBinding,
     setToast,
   };
+  const workspaceViewActions = useWorkspaceViewActions({
+    updateViewDocument: view,
+    setToast,
+  });
 
   // ========================================================================
   // 主 JSX
@@ -1382,65 +1052,9 @@ export function IntentEditor() {
           addBusinessChild(scopeId, false)
         }
         onFeedback={setToast}
-        onWorkspaceChange={(workspace: WorkspaceState) => {
-          view((active) => ({
-            ...active,
-            workspaceState: workspace,
-          }));
-        }}
-        onUpdateView={(panelId) => {
-          view((active) => {
-            const panel = active.workspaceState.panels.find(
-              (candidate) => candidate.id === panelId,
-            );
-            if (!panel) return active;
-            return {
-              ...active,
-              views: active.views.map((item) =>
-                item.id === panel.viewId
-                  ? {
-                      ...item,
-                      layoutLocked: panel.layoutLocked,
-                      surfaceTemplates: clone(panel.surfaces),
-                    }
-                  : item,
-              ),
-            };
-          });
-          setToast("已用当前 Panel 实例更新 View");
-        }}
-        onSaveViewAs={(panelId) => {
-          const name = window.prompt("新 View 名称");
-          if (!name?.trim()) return;
-          view((active) => {
-            const panel = active.workspaceState.panels.find(
-              (candidate) => candidate.id === panelId,
-            );
-            const sourceView = active.views.find(
-              (item) => item.id === panel?.viewId,
-            );
-            if (!panel || !sourceView) return active;
-            const viewId = uid("view");
-            const withPanel = updatePanel(active, panelId, (candidate) => ({
-              ...candidate,
-              viewId,
-            }));
-            return {
-              ...withPanel,
-              views: [
-                ...withPanel.views,
-                {
-                  ...sourceView,
-                  id: viewId,
-                  name: name.trim(),
-                  layoutLocked: panel.layoutLocked,
-                  surfaceTemplates: clone(panel.surfaces),
-                },
-              ],
-            };
-          });
-          setToast(`已另存 View：${name.trim()}`);
-        }}
+        onWorkspaceChange={workspaceViewActions.onWorkspaceChange}
+        onUpdateView={workspaceViewActions.onUpdateView}
+        onSaveViewAs={workspaceViewActions.onSaveViewAs}
       canvas={
         <ScopeCanvas
           refs={{ viewport: viewportRef }}
