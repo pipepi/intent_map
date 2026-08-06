@@ -454,17 +454,14 @@ const appNodeDefinitions = (): AppNodeDefinition[] => [
   {
     id: "global_toolbar",
     name: "顶栏与全局命令",
-    description: "品牌、新建、导入导出、撤销重做与运行控制。",
+    description: "品牌、新建、导入导出、撤销重做与布局控制。",
     kind: "renderer",
     key: "global-toolbar",
     lane: "interface",
     position: { x: 540, y: 70 },
     size: { width: 920, height: 170 },
     inputs: [port("state", "应用状态", "object", "data", ref("app_state", "snapshot"))],
-    outputs: [
-      port("command", "界面命令", "object", "event"),
-      port("run", "运行请求", "object", "event"),
-    ],
+    outputs: [port("command", "界面命令", "object", "event")],
   },
   {
     id: "intent_tree",

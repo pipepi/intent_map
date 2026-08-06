@@ -35,7 +35,7 @@ const summaryRenderer =
   };
 
 const builtInRenderers: Record<string, RuntimeRenderer> = {
-  "application-root": summaryRenderer("ROOT", "全屏节点运行时"),
+  "application-root": summaryRenderer("ROOT", "全屏节点编辑器"),
   "intent-document-loader": summaryRenderer("LOADER", "v3 工作区文档校验"),
   "application-state": summaryRenderer("STATE", "作用域、选择与布局快照"),
   "event-clock": summaryRenderer("EVENT", "离散事务批次"),

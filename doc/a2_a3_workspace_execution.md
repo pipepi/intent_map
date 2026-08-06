@@ -30,8 +30,8 @@ branch:   codex/a2-a3-workspace-refactor
 |---|---|---|---|
 | 0 | 稳定行为基线与执行台账 | `checkpoint/workspace-refactor-baseline` | complete |
 | 1 | a2/a3 单向依赖边界 | `checkpoint/a2-a3-boundary-v1` | complete |
-| 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | in progress |
-| 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | pending |
+| 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | complete |
+| 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | in progress |
 | 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | pending |
 | 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | pending |
 | 6 | a3 自定义节点和投影工作区 | `checkpoint/a3-projection-workspace-v1` | pending |
@@ -52,9 +52,14 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 2 清理 a2 文档模型和界面中属于外树或富内容创作的职责，只保留通用节点、
-纯文本意图、层级、关系、历史与无损 PIP envelope。每项删除先由行为测试锁定真正
-需要保留的通用编辑能力。
+Phase 3 将 TypeScript 与 Rust PIP 读取路径中的固定容量常量替换为显式策略。策略
+支持命令行、本机会话/Profile 和包内请求；包内请求不能自行放宽本机边界，桌面端
+必须确认，非交互 CLI 必须给出可执行的参数提示。缺省值是 `ask`，而不是隐藏的
+固定字节数。
+
+Phase 2 检查点已通过 `npm run lint`、`npm test`、`npm run test:pip` 与
+`npm run pip:dist`。a2 不再启动 a3、执行业务 DAG 或提供运行轨迹，默认样例也只
+表达场景、约束、决策和结果；系统 a0–a3 PIP 已随检查点重新生成。
 
 ---
 
