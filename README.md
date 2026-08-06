@@ -111,10 +111,9 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Current PIP Desktop Prototype
 
-The current build can produce `dist/pip/intent-map.pip.exe`, a convenience
-prototype that combines the native seed with an embedded Intent Map PIP.
-Double-clicking it opens Intent Map in a native Tauri/WebView2 window without a
-console window, external browser, loopback port, or Node.js runtime.
+The current build can still produce the legacy `dist/pip/intent-map.pip.exe`
+overlay prototype. The target architecture does not embed a PIP in the native
+executable: Seed and `.pip` remain separate files.
 
 In the target architecture, only the minimal, stateless Seed is a native
 double-clickable executable. Evolving capabilities are separate `.pip` files:
@@ -125,6 +124,10 @@ Seed executable
 → intent-map.pip
 → capability and application PIPs
 ```
+
+Without an explicit startup path, Seed automatically loads a `.pip` only when
+exactly one exists beside it. If the directory contains none or multiple PIPs,
+the user must provide a startup argument or select one through the minimal UI.
 
 The package format and executable overlay are implemented by `pip-core`.
 `pip-seed-cli.exe` remains a separate recovery tool:
