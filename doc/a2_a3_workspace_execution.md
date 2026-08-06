@@ -32,7 +32,7 @@ branch:   codex/a2-a3-workspace-refactor
 | 1 | a2/a3 单向依赖边界 | `checkpoint/a2-a3-boundary-v1` | complete |
 | 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | complete |
 | 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | complete |
-| 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | pending |
+| 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | complete |
 | 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | pending |
 | 6 | a3 自定义节点和投影工作区 | `checkpoint/a3-projection-workspace-v1` | pending |
 | 7 | Software Authoring | `checkpoint/software-authoring-v1` | pending |
@@ -52,9 +52,14 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 4 将建立 `intent.pip + resources/` 工作区。`intent.pip` 只保存内树、资源
+Phase 5 将在拆分工作区之上实现默认单文件 Bundle。打包与解包复用 Phase 4 的
+资源索引和逐文件存储边界，并把大文件路径推进为流式读写；Bundle 只用于交换和
+分发，不取代 `intent.pip + resources/` 的工作区权威副本。
+
+Phase 4 已建立 `intent.pip + resources/` 工作区。`intent.pip` 只保存内树、资源
 索引和完整性引用，UI、DB、API、代码、图片等外树内容保留为可逐文件读写和 Git
-跟踪的原始资源；a2 只接收内树，不解释资源内容。
+跟踪的原始资源；a2 只接收内树，不解释资源内容。Web 与原生目录适配器共享同一
+惰性会话，CLI 能以不覆盖目标的方式把现有 PIP 拆成工作区。
 
 Phase 3 已从 TypeScript 与 Rust PIP 读取路径移除固定容量常量。策略支持命令行、
 本机设置和包内声明；包内声明不能自行放宽本机边界，桌面端必须确认，非交互 CLI
@@ -64,6 +69,10 @@ Phase 3 已从 TypeScript 与 Rust PIP 读取路径移除固定容量常量。�
 Phase 3 检查点已通过 `npm run lint`、`npm test`、`npm run test:pip`、
 `npm run pip:dist` 和版本化 CLI 实包验证。macOS `.app`、系统 a0–a3 PIP、分发
 清单和 SHA 构建回执已重新生成；a2 包包含本阶段的容量策略界面与本机保存入口。
+
+Phase 4 检查点已通过相同的 lint、100 项工程测试、PIP/Rust 测试和完整 macOS
+分发。默认 a3 PIP 已收录根目录 `a3/` 工作区实现源树；a2 保持不导入 a3，系统
+分发仍只包含选定的 a0–a3，不包含任何用户工作区或 a4/a5 资源。
 
 ---
 

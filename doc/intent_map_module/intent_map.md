@@ -74,6 +74,7 @@ Canvas（高性能节点地图）
 - [Bevy Canvas Runtime](bevy_canvas_runtime.md) 是可选渲染投影，不进入文档语义；
 - MCP 可以让 Agent 操作 Intent Map，但属于可选接入方式。
 - [Runtime Profile](pip_runtime_profiles.md) 精确选择 a1、一个主 a2 和 a3 扩展集合。
+- [Split Workspace](split_workspace.md) 由 a3 保存外树资源，a2 只编辑其中的内树。
 
 ## `.pip` 自举关系
 

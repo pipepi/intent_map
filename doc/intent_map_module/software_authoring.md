@@ -2,6 +2,10 @@
 
 [← 上一篇：Intent Map](intent_map.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Crypto CEX →](crypto_cex.md)
 
+Software Authoring 的 UI、DB、API 和代码等原始产物使用
+[Split Workspace](split_workspace.md) 保存在 `resources/`；`intent.pip` 只保存内树
+与资源完整性索引。
+
 ## 定位
 
 Software Authoring 是默认系统 a3 之一，通过 `software-authoring/1` 提供源码、

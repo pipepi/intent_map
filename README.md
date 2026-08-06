@@ -12,6 +12,8 @@ Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应�
 
 当前 a2/a3 边界、拆分资源工作区、Bundle 与可配置容量策略的长期实施进度参见：
 [a2/a3 Workspace Refactor Execution Ledger](doc/a2_a3_workspace_execution.md)。
+已实现的 `intent.pip + resources/` 创作存储契约参见：
+[Split Workspace](doc/intent_map_module/split_workspace.md)。
 
 ## Implementation
 
@@ -110,6 +112,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run pip:system`: rebuild the Git-tracked default a0–a3 source packages
 - `npm run pip:install-user -- <file.pip>`: install an immutable version into the user Registry
 - `npm run pip:promote-system -- <file.pip>`: promote a validated maintained a0–a3 candidate
+- `npm run pip:workspace:split -- <bundle.pip> <new-directory> --allow-package-limits`: create a non-overwriting split workspace
 - `npm run pip:cli`: build the versioned diagnostic Seed CLI under `dist/pip-runtime/tools/`
 - `npm run pip:verify`: verify the generated `.pip`
 - `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
