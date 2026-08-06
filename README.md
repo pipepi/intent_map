@@ -1,4 +1,14 @@
-# vinext-starter
+# Intent Map
+
+Intent Map 是面向 Agent 时代的软件创作与掌控工作台。它将实现无关的业务核心物流动场景和约束沉淀为分形内树，让人与 Agent 在合适颗粒度的树枝上达成共识；UI、DB Tables、API、代码、外围系统、分发和分利润等层级均可按需披露，并可选择手工、人机协作或 Agent 代理实现。
+
+Agent 的每次输出被限制在可理解、可修改、可接管或可重来的局部范围，并收敛为可视、可聚焦、可继续协作的 `.pip`。Intent Map 既接收和组织多 Agent 输出，也通过 PIP MCP Server 为 Agent 提供编辑、填充、导入和导出 `.pip` 的标准工具。
+
+> **核心价值：通过分形边界、逐层披露和局部填充，获得对软件复杂度的超强掌控力。**
+
+完整的方案、产品定位、八层模型、`.pip` 范式与 MCP 架构参见：[Intent Map：方案与产品定位](doc/intent_map_position.md)。
+
+## Implementation
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
