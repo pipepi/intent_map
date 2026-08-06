@@ -9,3 +9,8 @@ intent editor. a3 may import a2 public contracts and the shared PIP runtime;
 - `workspace/`: split intent/resource storage;
 - `bundle/`: portable Bundle import and export;
 - `extensions/`: concrete capabilities such as Software Authoring.
+
+Split workspaces use `intent.pip` plus a sibling `resources/` directory. The PIP
+contains only the generic intent document and `a3/workspace/resources.json`, a
+deterministic index of external paths, media types, byte lengths, and SHA-256
+hashes. Resource bytes remain ordinary files and never pass through a2.
