@@ -31,7 +31,7 @@ branch:   codex/a2-a3-workspace-refactor
 | 0 | 稳定行为基线与执行台账 | `checkpoint/workspace-refactor-baseline` | complete |
 | 1 | a2/a3 单向依赖边界 | `checkpoint/a2-a3-boundary-v1` | complete |
 | 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | complete |
-| 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | in progress |
+| 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | complete |
 | 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | pending |
 | 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | pending |
 | 6 | a3 自定义节点和投影工作区 | `checkpoint/a3-projection-workspace-v1` | pending |
@@ -52,14 +52,18 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 3 将 TypeScript 与 Rust PIP 读取路径中的固定容量常量替换为显式策略。策略
-支持命令行、本机会话/Profile 和包内请求；包内请求不能自行放宽本机边界，桌面端
-必须确认，非交互 CLI 必须给出可执行的参数提示。缺省值是 `ask`，而不是隐藏的
-固定字节数。
+Phase 4 将建立 `intent.pip + resources/` 工作区。`intent.pip` 只保存内树、资源
+索引和完整性引用，UI、DB、API、代码、图片等外树内容保留为可逐文件读写和 Git
+跟踪的原始资源；a2 只接收内树，不解释资源内容。
 
-Phase 2 检查点已通过 `npm run lint`、`npm test`、`npm run test:pip` 与
-`npm run pip:dist`。a2 不再启动 a3、执行业务 DAG 或提供运行轨迹，默认样例也只
-表达场景、约束、决策和结果；系统 a0–a3 PIP 已随检查点重新生成。
+Phase 3 已从 TypeScript 与 Rust PIP 读取路径移除固定容量常量。策略支持命令行、
+本机设置和包内声明；包内声明不能自行放宽本机边界，桌面端必须确认，非交互 CLI
+必须给出完整参数或显式的 `--allow-package-limits`。编辑器既能把策略保存进导出
+包，也能经宿主端点或 Web 本地存储保存为本机默认。缺省值是 `ask`。
+
+Phase 3 检查点已通过 `npm run lint`、`npm test`、`npm run test:pip`、
+`npm run pip:dist` 和版本化 CLI 实包验证。macOS `.app`、系统 a0–a3 PIP、分发
+清单和 SHA 构建回执已重新生成；a2 包包含本阶段的容量策略界面与本机保存入口。
 
 ---
 

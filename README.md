@@ -139,7 +139,7 @@ Use `--profile`, `--editor`, or `--select-editor` to override defaults without
 silently falling back from an invalid explicit choice.
 
 ```powershell
-.\dist\pip-runtime\tools\a0_pip_seed_cli_1_0_0_20260806.exe --verify .\dist\pip-runtime\pip\a2_intent_map_1_0_0_20260806.pip
+.\dist\pip-runtime\tools\a0_pip_seed_cli_1_0_0_20260806.exe --verify .\dist\pip-runtime\pip\a2_intent_map_1_0_0_20260806.pip --allow-package-limits
 ```
 
 On macOS, double-click the versioned `.app` to launch without Terminal. Desktop
@@ -152,6 +152,30 @@ open -n dist/pip-runtime/a0_pip_seed_1_0_0_20260806.app --args \
 
 Use `npm run pip:cli` for terminal hosting and `--verify` diagnostics.
 See [Runtime profiles, editor selection, and capability composition](doc/intent_map_module/pip_runtime_profiles.md).
+
+### PIP I/O policy
+
+PIP byte, resource, expanded-size, resource-count, and compression-ratio limits do
+not use hidden product constants. Each field is `ask`, an explicit decimal value,
+or `unlimited`. The editor's **容量策略** dialog saves the current values into the
+next exported `.pip`; **保存为本机默认** stores the higher-priority local policy.
+Desktop and CLI startup resolve command-line values over that local policy.
+
+The available command-line options are:
+
+```text
+--max-pip-size <bytes|unlimited>
+--max-resource-size <bytes|unlimited>
+--max-expanded-size <bytes|unlimited>
+--max-resource-count <count|unlimited>
+--max-compression-ratio <ratio|unlimited>
+--allow-package-limits
+```
+
+`--allow-package-limits` explicitly allows every still-unconfigured field for
+the current process. A non-interactive CLI rejects operations while any field
+still requires confirmation. The desktop asks before granting those fields for
+the current launch. A package cannot silently relax the local or CLI boundary.
 
 ## Learn More
 

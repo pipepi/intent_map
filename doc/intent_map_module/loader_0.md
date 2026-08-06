@@ -113,6 +113,34 @@ open -n a0_pip_seed_1_0_0_20260806.app --args \
 
 验证和终端宿主继续使用 `tools/a0_pip_seed_cli_{version}_{date}`。
 
+## PIP 容量策略
+
+Seed 不写死 PIP 文件、单资源、展开后内容、资源数量或压缩比上限。五个字段分别
+支持“每次确认”、非负十进制数值和“不限制”。解析优先级为：
+
+```text
+命令行显式参数 > 本机策略 > 本次桌面确认
+```
+
+编辑器“容量策略”界面的“保存为本机默认”会写入平台用户数据目录；Web 静态版
+使用浏览器本地存储。包内策略随 `.pip` 导出，用来表达该包的容量请求，但不能
+自行放宽命令行或本机边界。本机策略更改在当前编辑器读写中立即生效，原生 Seed
+在下次启动时读取它。
+
+CLI 可以逐项配置：
+
+```text
+--max-pip-size <bytes|unlimited>
+--max-resource-size <bytes|unlimited>
+--max-expanded-size <bytes|unlimited>
+--max-resource-count <count|unlimited>
+--max-compression-ratio <ratio|unlimited>
+```
+
+`--allow-package-limits` 仅为本进程把尚未配置的字段显式设为“不限制”。非交互
+CLI 仍有字段为“每次确认”时直接报错；桌面端则在读取 PIP 前请求一次本次启动
+授权。所有数值使用十进制字符串存储，避免 JavaScript 大整数精度损失。
+
 ## 实现映射
 
 当前或未来属于该边界的代码包括：

@@ -46,11 +46,16 @@ packages/system/       官方 a0–a3 权威 PIP
 用户数据/registry/     用户 a0–a5
 用户数据/profiles/     Runtime Profile
 用户数据/workspaces/   用户项目与 a4/a5
+用户数据/pip-io-policy.json  本机 PIP 读写边界
 dist/pip-runtime/pip/  当前官方发行选择的系统包副本
 ```
 
 官方分发不包含 a4/a5 或用户版本。用户可以自行用独立 Git、同步盘或备份工具管理
 Registry 和 Workspace。
+
+本机 PIP I/O 策略独立于运行 Profile 保存：Profile 选择精确的包和能力，本机
+策略约束这些包可处理的容量。命令行可以逐字段覆盖本机策略；包内声明不能静默
+放宽本机设置。
 
 ---
 
