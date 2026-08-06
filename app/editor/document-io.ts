@@ -65,6 +65,7 @@ export interface DocumentIODeps {
   pipProject: PipProjectSession | null;
   setPipProject: (project: PipProjectSession | null) => void;
   pipIoPolicy: PipIoPolicy;
+  localPipIoPolicy: PipIoPolicy;
   setPipIoPolicy: (policy: PipIoPolicy) => void;
 }
 
@@ -97,6 +98,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
     pipProject,
     setPipProject,
     pipIoPolicy,
+    localPipIoPolicy,
     setPipIoPolicy,
   } = deps;
 
@@ -153,7 +155,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
           rootTreeText: serializeIntentDocument(documentState),
           assets: pipProject?.assets ?? [],
         },
-        { confirm: confirmPipIo },
+        { policy: localPipIoPolicy, confirm: confirmPipIo },
       );
       downloadBytes(
         pipFilename(exportManifest),
@@ -172,7 +174,10 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
     requireConfirmation?: boolean,
   ): Promise<IntentDocumentV3> => {
     void requireConfirmation;
-    const pip = await decodePip(bytes, { confirm: confirmPipIo });
+    const pip = await decodePip(bytes, {
+      policy: localPipIoPolicy,
+      confirm: confirmPipIo,
+    });
     setPipProject({
       manifest: pip.manifest,
       loaderSource: pip.loaderSource,

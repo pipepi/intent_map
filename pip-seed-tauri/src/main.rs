@@ -3,9 +3,10 @@
 use pip_core::{
     CatalogSource, Package, PackageOrigin, PipDiscovery, PipIoPolicy, PipLayer, RuntimeProfile,
     catalog_entries_from_sources_with_trust, discover_loader_pip, install_user_package,
-    load_catalog_package_from_source, load_default_editor_package, load_runtime_profile,
-    resolve_package_ref, runtime_catalog_sources, save_runtime_profile, trust_hash, trusted_hashes,
-    user_data_root, validate_package_filename, validate_profile_trust, validate_runtime_profile,
+    load_catalog_package_from_source, load_default_editor_package, load_io_policy,
+    load_runtime_profile, resolve_package_ref, runtime_catalog_sources, save_io_policy,
+    save_runtime_profile, trust_hash, trusted_hashes, user_data_root, validate_package_filename,
+    validate_profile_trust, validate_runtime_profile,
 };
 use serde_json::json;
 use std::borrow::Cow;
@@ -196,6 +197,39 @@ fn package_response(
             ),
             Err(error) => response(
                 StatusCode::INTERNAL_SERVER_ERROR,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
+        };
+    }
+    if request.method() == Method::GET && raw_path == "/__pip/io-policy" {
+        return match load_io_policy(&state.user_root).and_then(|policy| {
+            serde_json::to_vec(&policy.unwrap_or_else(PipIoPolicy::ask))
+                .map_err(|error| error.to_string())
+        }) {
+            Ok(body) => response(
+                StatusCode::OK,
+                "application/json; charset=utf-8",
+                body,
+                false,
+            ),
+            Err(error) => response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
+        };
+    }
+    if request.method() == Method::POST && raw_path == "/__pip/io-policy" {
+        let result = serde_json::from_slice::<PipIoPolicy>(request.body())
+            .map_err(|error| format!("invalid PIP I/O policy: {error}"))
+            .and_then(|policy| save_io_policy(&state.user_root, &policy).map(|_| ()));
+        return match result {
+            Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
+            Err(error) => response(
+                StatusCode::BAD_REQUEST,
                 "text/plain",
                 error.into_bytes(),
                 false,
@@ -556,7 +590,15 @@ fn show_fatal(message: &str) {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    let parsed_policy = match PipIoPolicy::from_cli_args(&args) {
+    let local_policy = user_data_root().and_then(|root| load_io_policy(&root));
+    let local_policy = match local_policy {
+        Ok(policy) => policy,
+        Err(error) => {
+            show_fatal(&error);
+            std::process::exit(1);
+        }
+    };
+    let parsed_policy = match PipIoPolicy::resolve_cli_args(&args, local_policy.as_ref()) {
         Ok(policy) => policy,
         Err(error) => {
             show_fatal(&error);

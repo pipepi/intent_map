@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn user_data_root() -> Result<PathBuf, String> {
@@ -66,6 +68,48 @@ pub fn load_runtime_profile(user_root: &Path, profile_id: &str) -> Result<Runtim
         return Err("runtime profile filename and profileId do not match".into());
     }
     Ok(profile)
+}
+
+pub fn load_io_policy(user_root: &Path) -> Result<Option<PipIoPolicy>, String> {
+    let path = user_root.join("pip-io-policy.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|error| format!("cannot inspect PIP I/O policy: {error}"))?;
+    if !metadata.file_type().is_file() {
+        return Err("PIP I/O policy must be a regular, non-symlink file".into());
+    }
+    let policy: PipIoPolicy = serde_json::from_slice(
+        &fs::read(&path).map_err(|error| format!("cannot read PIP I/O policy: {error}"))?,
+    )
+    .map_err(|error| format!("invalid PIP I/O policy JSON: {error}"))?;
+    policy.validate()?;
+    Ok(Some(policy))
+}
+
+pub fn save_io_policy(user_root: &Path, policy: &PipIoPolicy) -> Result<PathBuf, String> {
+    policy.validate()?;
+    fs::create_dir_all(user_root)
+        .map_err(|error| format!("cannot create user data directory: {error}"))?;
+    let destination = user_root.join("pip-io-policy.json");
+    let temporary = user_root.join(format!(".pip-io-policy.{}.tmp", std::process::id()));
+    let payload = serde_json::to_vec_pretty(policy).map_err(|error| error.to_string())?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| format!("cannot create temporary PIP I/O policy: {error}"))?;
+    if let Err(error) = file.write_all(&payload).and_then(|_| file.sync_all()) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!("cannot write PIP I/O policy: {error}"));
+    }
+    drop(file);
+    if let Err(error) = fs::rename(&temporary, &destination) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!("cannot commit PIP I/O policy: {error}"));
+    }
+    Ok(destination)
 }
 
 pub fn save_runtime_profile(
@@ -225,6 +269,20 @@ mod tests {
         trust_hash(&directory, &hash).unwrap();
         assert!(trusted_hashes(&directory).unwrap().contains(&hash));
         assert!(trust_hash(&directory, "not-a-hash").is_err());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn round_trips_local_io_policy() {
+        let directory = temporary_directory("io-policy");
+        assert!(load_io_policy(&directory).unwrap().is_none());
+        let mut policy = PipIoPolicy::unlimited();
+        policy.max_pip_bytes = crate::PipLimit::Value {
+            value: "4096".into(),
+        };
+        let path = save_io_policy(&directory, &policy).unwrap();
+        assert_eq!(path, directory.join("pip-io-policy.json"));
+        assert_eq!(load_io_policy(&directory).unwrap(), Some(policy));
         fs::remove_dir_all(directory).unwrap();
     }
 }

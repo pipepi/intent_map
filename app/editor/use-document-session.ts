@@ -13,6 +13,10 @@ import {
   ASK_PIP_IO_POLICY,
   type PipIoPolicy,
 } from "../runtime/pip-io-policy";
+import {
+  loadLocalPipIoPolicy,
+  saveLocalPipIoPolicy,
+} from "../runtime/pip-io-policy-store";
 import { createDocumentIO, type PipProjectSession } from "./document-io";
 import { useDocumentHistory } from "./use-document-history";
 import { useRuntimePipeline } from "./use-runtime-pipeline";
@@ -39,6 +43,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
   );
   const [pipProject, setPipProject] = useState<PipProjectSession | null>(null);
   const [pipIoPolicy, setPipIoPolicy] = useState<PipIoPolicy>(ASK_PIP_IO_POLICY);
+  const [localPipIoPolicy, setLocalPipIoPolicy] = useState<PipIoPolicy>(ASK_PIP_IO_POLICY);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runtime = useRuntimePipeline({ setDocumentState: updateDocument, setToast });
 
@@ -90,8 +95,20 @@ export function useDocumentSession(setToast: (message: string) => void) {
     pipProject,
     setPipProject,
     pipIoPolicy,
+    localPipIoPolicy,
     setPipIoPolicy,
   });
+
+  const savePipIoPolicyAsLocalDefault = async () => {
+    try {
+      const token = new URLSearchParams(window.location.search).get("token");
+      await saveLocalPipIoPolicy(pipIoPolicy, token);
+      setLocalPipIoPolicy(pipIoPolicy);
+      setToast("当前容量策略已保存为本机默认");
+    } catch (error) {
+      setToast(error instanceof Error ? `保存本机策略失败：${error.message}` : "保存本机策略失败");
+    }
+  };
 
   const newDocument = () => {
     if (
@@ -112,19 +129,40 @@ export function useDocumentSession(setToast: (message: string) => void) {
 
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token");
-    if (!token) return;
     let cancelled = false;
-    void fetch(`/__pip/package?token=${encodeURIComponent(token)}`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Host 返回 ${response.status}`);
-        return response.arrayBuffer();
+    void loadLocalPipIoPolicy(token)
+      .then((policy) => {
+        if (!cancelled) setLocalPipIoPolicy(policy);
+        return policy;
       })
-      .then((bytes) => documentIO.loadPipBytes(bytes, false))
+      .then((policy) => {
+        if (!token) return null;
+        return fetch(`/__pip/package?token=${encodeURIComponent(token)}`)
+          .then((response) => {
+            if (!response.ok) throw new Error(`Host 返回 ${response.status}`);
+            return response.arrayBuffer();
+          })
+          .then(async (bytes) => {
+            const loaded = await createDocumentIO({
+              documentState,
+              loadDocument,
+              dispatchRuntimeEvent: runtime.dispatchRuntimeEvent,
+              setNavigationStack,
+              markClean,
+              setToast,
+              pipProject,
+              setPipProject,
+              pipIoPolicy,
+              localPipIoPolicy: policy,
+              setPipIoPolicy,
+            }).loadPipBytes(bytes, false);
+            return loaded;
+          });
+      })
       .then((loaded) => {
-        if (!cancelled) {
-          documentIO.applyLoadedDocument(loaded);
-          setToast("已从 Rust 种皮加载 PIP 内树");
-        }
+        if (!loaded || cancelled) return;
+        documentIO.applyLoadedDocument(loaded);
+        setToast("已从 Rust 种皮加载 PIP 内树");
       })
       .catch((error) => {
         if (!cancelled) {
@@ -145,6 +183,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
       navigationStack,
       pipProject,
       pipIoPolicy,
+      localPipIoPolicy,
     },
     writes: {
       commitDocumentChange,
@@ -160,6 +199,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
     historyActions: { undo, redo },
     setNavigationStack,
     setPipIoPolicy,
+    savePipIoPolicyAsLocalDefault,
     runtime,
   };
 }

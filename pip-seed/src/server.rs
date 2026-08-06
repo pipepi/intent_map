@@ -1,8 +1,8 @@
 use pip_core::{
     CatalogSource, Package, PackageOrigin, PipIoPolicy, RuntimeProfile,
     catalog_entries_from_sources_with_trust, install_user_package,
-    load_catalog_package_from_source, load_default_editor_package, save_runtime_profile,
-    trust_hash, trusted_hashes,
+    load_catalog_package_from_source, load_default_editor_package, load_io_policy, save_io_policy,
+    save_runtime_profile, trust_hash, trusted_hashes,
 };
 use serde_json::json;
 use std::io::{Read, Write};
@@ -130,6 +130,35 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
             "200 OK",
             "application/json; charset=utf-8",
             &payload,
+            false,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    if method == "GET" && raw_path == "/__pip/io-policy" {
+        let policy = load_io_policy(&state.user_root)?.unwrap_or_else(PipIoPolicy::ask);
+        let payload = serde_json::to_vec(&policy).map_err(|error| error.to_string())?;
+        response(
+            &mut stream,
+            "200 OK",
+            "application/json; charset=utf-8",
+            &payload,
+            false,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    if method == "POST" && raw_path == "/__pip/io-policy" {
+        let policy: PipIoPolicy = serde_json::from_slice(body)
+            .map_err(|error| format!("invalid PIP I/O policy: {error}"))?;
+        save_io_policy(&state.user_root, &policy)?;
+        response(
+            &mut stream,
+            "204 No Content",
+            "text/plain",
+            b"",
             false,
             None,
         )

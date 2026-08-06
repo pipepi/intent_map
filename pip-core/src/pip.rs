@@ -71,7 +71,14 @@ impl PipIoPolicy {
     }
 
     pub fn from_cli_args(args: &[String]) -> Result<Self, String> {
-        let mut policy = Self::ask();
+        Self::resolve_cli_args(args, None)
+    }
+
+    pub fn resolve_cli_args(
+        args: &[String],
+        lower_priority: Option<&PipIoPolicy>,
+    ) -> Result<Self, String> {
+        let mut policy = lower_priority.cloned().unwrap_or_else(Self::ask);
         for (option, target) in [
             ("--max-pip-size", &mut policy.max_pip_bytes),
             ("--max-resource-size", &mut policy.max_single_resource_bytes),
@@ -507,6 +514,19 @@ mod tests {
                 "2".into(),
             ])
             .is_err()
+        );
+
+        let mut local = PipIoPolicy::unlimited();
+        local.max_pip_bytes = PipLimit::Value { value: "8".into() };
+        let resolved = PipIoPolicy::resolve_cli_args(
+            &["--max-resource-count".into(), "3".into()],
+            Some(&local),
+        )
+        .expect("CLI overlays local policy");
+        assert_eq!(resolved.max_pip_bytes, local.max_pip_bytes);
+        assert_eq!(
+            resolved.max_resource_count,
+            PipLimit::Value { value: "3".into() }
         );
     }
 }

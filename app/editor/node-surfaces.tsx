@@ -70,6 +70,7 @@ export type NodeSurfaceDeps = {
   dirty: boolean;
   pipIoPolicy: PipIoPolicy;
   setPipIoPolicy: (policy: PipIoPolicy) => void;
+  savePipIoPolicyAsLocalDefault: () => Promise<void>;
   layoutLocked: boolean;
   camera: CameraState;
   search: string;
@@ -206,6 +207,7 @@ export const renderNodeSurface = (
     dirty,
     pipIoPolicy,
     setPipIoPolicy,
+    savePipIoPolicyAsLocalDefault,
     layoutLocked,
     camera,
     navigationStack,
@@ -388,7 +390,10 @@ export const renderNodeSurface = (
                 </label>
               );
             })}
-            <footer><button>完成</button></footer>
+            <footer>
+              <button type="button" onClick={() => void savePipIoPolicyAsLocalDefault()}>保存为本机默认</button>
+              <button>完成</button>
+            </footer>
           </form>
         </dialog>
       </div>

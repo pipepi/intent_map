@@ -6,7 +6,7 @@ import { renderNodeSurface, type NodeSurfaceDeps } from "./node-surfaces";
 type Fields<K extends keyof NodeSurfaceDeps> = Pick<NodeSurfaceDeps, K>;
 
 export interface EditorCapabilities {
-  document: Fields<"documentState" | "history" | "future" | "dirty" | "pipIoPolicy" | "setPipIoPolicy" | "exportDocument" | "exportPip" | "updateDocumentNode">;
+  document: Fields<"documentState" | "history" | "future" | "dirty" | "pipIoPolicy" | "setPipIoPolicy" | "savePipIoPolicyAsLocalDefault" | "exportDocument" | "exportPip" | "updateDocumentNode">;
   scope: Fields<"appRoot" | "businessRoot" | "businessScope" | "scopeNode" | "validationIssues" | "layoutLocked" | "camera" | "navigationStack">;
   selection: Fields<"selectedBusinessNode" | "selectedBusinessNodeId" | "selectedAppNodeId" | "setSelectedBusinessNodeId">;
   authoring: Fields<"renameBusinessNode" | "bindingOptionsFor" | "updateInputBinding" | "outputBindingOptionsFor" | "updateOutputBinding" | "editPortSchema" | "addPortSchema" | "movePortSchema" | "duplicateBusinessNode" | "createLinkedBusinessNode" | "deleteBusinessNode" | "insertModule">;

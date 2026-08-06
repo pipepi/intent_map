@@ -33,6 +33,7 @@ export function IntentEditor() {
       dirty: document.model.dirty,
       pipIoPolicy: document.model.pipIoPolicy,
       setPipIoPolicy: document.setPipIoPolicy,
+      savePipIoPolicyAsLocalDefault: document.savePipIoPolicyAsLocalDefault,
       exportDocument: document.io.exportDocument,
       exportPip: document.io.exportPip,
       updateDocumentNode: document.writes.updateNode,

@@ -3,8 +3,9 @@ mod server;
 
 use pip_core::{
     Package, PipDiscovery, PipIoPolicy, PipLayer, RuntimeProfile, discover_loader_pip,
-    load_runtime_profile, resolve_package_ref, runtime_catalog_sources, trusted_hashes,
-    user_data_root, validate_package_filename, validate_profile_trust, validate_runtime_profile,
+    load_io_policy, load_runtime_profile, resolve_package_ref, runtime_catalog_sources,
+    trusted_hashes, user_data_root, validate_package_filename, validate_profile_trust,
+    validate_runtime_profile,
 };
 use std::env;
 use std::fs;
@@ -38,7 +39,6 @@ fn string_value(args: &[String], name: &str) -> Result<Option<String>, String> {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
-    let policy = PipIoPolicy::from_cli_args(&args)?;
     if args
         .iter()
         .any(|argument| argument == "--help" || argument == "-h")
@@ -46,6 +46,9 @@ fn run() -> Result<(), String> {
         usage();
         return Ok(());
     }
+    let user_root = user_data_root()?;
+    let local_policy = load_io_policy(&user_root)?;
+    let policy = PipIoPolicy::resolve_cli_args(&args, local_policy.as_ref())?;
     if policy.requires_confirmation() {
         return Err(
             "non-interactive PIP access requires every --max-* option or --allow-package-limits"
@@ -91,7 +94,6 @@ fn run() -> Result<(), String> {
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or(runtime_root.join("pip"));
-    let user_root = user_data_root()?;
     let sources = runtime_catalog_sources(&system_directory, &user_root);
     let profile: Option<RuntimeProfile> = string_value(&args, "--profile")?
         .map(|id| load_runtime_profile(&user_root, &id))
