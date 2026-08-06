@@ -3,9 +3,10 @@ import test from "node:test";
 
 import {
   assertPipManifest,
-  decodePip,
-  encodePip,
+  decodePip as decodePipWithPolicy,
+  encodePip as encodePipWithPolicy,
 } from "../app/runtime/pip.ts";
+import { UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
 import {
   assertCapabilityProvider,
   resolveCapabilitySet,
@@ -18,6 +19,9 @@ import {
 
 const sha = "a".repeat(64);
 const releaseDate = "20260807";
+const ioOptions = { policy: UNLIMITED_PIP_IO_POLICY };
+const encodePip = (input) => encodePipWithPolicy(input, ioOptions);
+const decodePip = (input) => decodePipWithPolicy(input, ioOptions);
 
 const manifest = (overrides = {}) => ({
   packageId: "baseline.intent",

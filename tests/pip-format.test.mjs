@@ -3,10 +3,14 @@ import test from "node:test";
 
 import {
   DEFAULT_PIP_LOADER_SOURCE,
-  decodePip,
-  encodePip,
+  decodePip as decodePipWithPolicy,
+  encodePip as encodePipWithPolicy,
   pipFilename,
 } from "../app/runtime/pip.ts";
+import {
+  UNLIMITED_PIP_IO_POLICY,
+  pipLimit,
+} from "../app/runtime/pip-io-policy.ts";
 import {
   createApplicationDocument,
   loadIntentDocument,
@@ -39,6 +43,10 @@ const rootTreeText = JSON.stringify({
   version: 2,
   rootIntent: { id: "application_root" },
 });
+
+const ioOptions = { policy: UNLIMITED_PIP_IO_POLICY };
+const encodePip = (input) => encodePipWithPolicy(input, ioOptions);
+const decodePip = (input) => decodePipWithPolicy(input, ioOptions);
 
 test("PIP v1 encodes deterministically and round-trips", async () => {
   const input = {
@@ -111,9 +119,28 @@ test("PIP v1 rejects corruption, truncation, and overlapping sections", async ()
   view.setBigUint64(16 + 48, view.getBigUint64(16, true), true);
   await assert.rejects(() => decodePip(overlapping), /overlap/);
 
-  const oversized = bytes.slice();
-  new DataView(oversized.buffer).setBigUint64(24, BigInt(64 * 1024 * 1024 + 1), true);
-  await assert.rejects(() => decodePip(oversized), /size limit/);
+  await assert.rejects(
+    () => decodePipWithPolicy(bytes, {
+      policy: { ...UNLIMITED_PIP_IO_POLICY, maxPipBytes: pipLimit(bytes.length - 1) },
+    }),
+    /maxPipBytes exceeded/,
+  );
+});
+
+test("PIP codecs require confirmation when no caller policy is supplied", async () => {
+  const input = {
+    manifest,
+    loaderSource: DEFAULT_PIP_LOADER_SOURCE,
+    rootTreeText,
+    assets: [],
+  };
+  await assert.rejects(() => encodePipWithPolicy(input), /confirmation required/);
+  const bytes = await encodePip(input);
+  await assert.rejects(() => decodePipWithPolicy(bytes), /confirmation required/);
+  assert.deepEqual(
+    await decodePipWithPolicy(bytes, { confirm: () => true }),
+    input,
+  );
 });
 
 test("PIP preserves the v3 multi-panel workspace and four-level tree", async () => {

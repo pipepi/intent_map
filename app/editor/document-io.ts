@@ -34,6 +34,7 @@ import {
   pipFilename,
   pipSha256,
   type PipAsset,
+  type PipIoConfirmationRequest,
   type PipManifest,
 } from "../runtime/pip";
 
@@ -94,6 +95,11 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
     setPipProject,
   } = deps;
 
+  const confirmPipIo = ({ field, actual, operation }: PipIoConfirmationRequest) =>
+    window.confirm(
+      `${operation === "decode" ? "导入" : "导出"}操作请求处理 ${field}=${actual}。是否仅允许本次操作？`,
+    );
+
   const applyLoadedDocument = (loaded: IntentDocumentV3) => {
     const restored = freePanelContext(loaded);
     loadDocument(loaded);
@@ -133,12 +139,15 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
           ...pipProject.manifest,
           rootNodeId: documentState.rootIntent.id,
         } : fallbackManifest;
-      const bytes = await encodePip({
-        manifest: exportManifest,
-        loaderSource: pipProject?.loaderSource ?? DEFAULT_PIP_LOADER_SOURCE,
-        rootTreeText: serializeIntentDocument(documentState),
-        assets: pipProject?.assets ?? [],
-      });
+      const bytes = await encodePip(
+        {
+          manifest: exportManifest,
+          loaderSource: pipProject?.loaderSource ?? DEFAULT_PIP_LOADER_SOURCE,
+          rootTreeText: serializeIntentDocument(documentState),
+          assets: pipProject?.assets ?? [],
+        },
+        { confirm: confirmPipIo },
+      );
       downloadBytes(
         pipFilename(exportManifest),
         bytes,
@@ -156,7 +165,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
     requireConfirmation?: boolean,
   ): Promise<IntentDocumentV3> => {
     void requireConfirmation;
-    const pip = await decodePip(bytes);
+    const pip = await decodePip(bytes, { confirm: confirmPipIo });
     setPipProject({
       manifest: pip.manifest,
       loaderSource: pip.loaderSource,

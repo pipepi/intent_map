@@ -1,10 +1,16 @@
+import {
+  ASK_PIP_IO_POLICY,
+  assertPipIoPolicy,
+  evaluatePipLimit,
+  type PipIoPolicy,
+  type PipIoPolicyField,
+} from "./pip-io-policy.ts";
+
 const PIP_MAGIC = new Uint8Array([0x50, 0x49, 0x50, 0x00, 0x53, 0x45, 0x45, 0x44]);
 const PIP_VERSION = 1;
 const SECTION_COUNT = 4;
 const SECTION_ENTRY_SIZE = 48;
 const PIP_HEADER_SIZE = 16 + SECTION_COUNT * SECTION_ENTRY_SIZE;
-const MAX_SECTION_SIZE = 64 * 1024 * 1024;
-const MAX_PACKAGE_SIZE = 128 * 1024 * 1024;
 
 export const DEFAULT_PIP_LOADER_SOURCE = `
 export async function load(api) {
@@ -78,6 +84,27 @@ export type PipPackage = {
   rootTreeText: string;
   assets: PipAsset[];
 };
+
+export type PipIoConfirmationRequest = {
+  field: PipIoPolicyField;
+  actual: string;
+  operation: "encode" | "decode";
+};
+
+export type PipIoOptions = {
+  policy?: PipIoPolicy;
+  confirm?: (request: PipIoConfirmationRequest) => boolean | Promise<boolean>;
+};
+
+export class PipIoConfirmationRequiredError extends Error {
+  readonly request: PipIoConfirmationRequest;
+
+  constructor(request: PipIoConfirmationRequest) {
+    super(`PIP I/O confirmation required for ${request.field}: ${request.actual}`);
+    this.name = "PipIoConfirmationRequiredError";
+    this.request = request;
+  }
+}
 
 type PipSection = {
   offset: number;
@@ -154,8 +181,29 @@ export const pipSha256 = async (bytes: Uint8Array) => [...await sha256(bytes)]
   .join("");
 
 const assertSafeLength = (length: number, label: string) => {
-  if (!Number.isSafeInteger(length) || length < 0 || length > MAX_SECTION_SIZE) {
-    throw new Error(`${label} exceeds the PIP v1 size limit`);
+  if (!Number.isSafeInteger(length) || length < 0) {
+    throw new Error(`${label} exceeds this JavaScript runtime's addressable range`);
+  }
+};
+
+const authorizeMetric = async (
+  field: PipIoPolicyField,
+  actual: number | bigint,
+  operation: PipIoConfirmationRequest["operation"],
+  options?: PipIoOptions,
+) => {
+  const policy = options?.policy
+    ? assertPipIoPolicy(options.policy)
+    : ASK_PIP_IO_POLICY;
+  const actualText = (typeof actual === "bigint" ? actual : BigInt(actual)).toString();
+  const decision = evaluatePipLimit(policy[field], actual);
+  if (decision.outcome === "allow") return;
+  if (decision.outcome === "deny") {
+    throw new Error(`${field} exceeded: ${decision.actual}/${decision.maximum}`);
+  }
+  const request = { field, actual: actualText, operation } as const;
+  if (!options?.confirm || !await options.confirm(request)) {
+    throw new PipIoConfirmationRequiredError(request);
   }
 };
 
@@ -205,12 +253,15 @@ export const encodePipAssets = (assets: PipAsset[]) => {
   return output;
 };
 
-export const decodePipAssets = (bytes: Uint8Array): PipAsset[] => {
+export const decodePipAssets = async (
+  bytes: Uint8Array,
+  options?: PipIoOptions,
+): Promise<PipAsset[]> => {
   if (!bytes.length) return [];
   if (bytes.length < 4) throw new Error("PIP asset section is truncated");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const count = view.getUint32(0, true);
-  if (count > 100_000) throw new Error("PIP asset count exceeds the limit");
+  await authorizeMetric("maxResourceCount", count, "decode", options);
   const assets: PipAsset[] = [];
   const seen = new Set<string>();
   let cursor = 4;
@@ -219,6 +270,7 @@ export const decodePipAssets = (bytes: Uint8Array): PipAsset[] => {
     const pathLength = view.getUint16(cursor, true);
     const mimeLength = view.getUint16(cursor + 2, true);
     const dataLength = readU64(view, cursor + 4);
+    await authorizeMetric("maxSingleResourceBytes", dataLength, "decode", options);
     cursor += 12;
     const end = cursor + pathLength + mimeLength + dataLength;
     if (end > bytes.length) throw new Error("PIP asset payload is truncated");
@@ -237,8 +289,15 @@ export const decodePipAssets = (bytes: Uint8Array): PipAsset[] => {
   return assets;
 };
 
-export const encodePip = async (input: PipPackage): Promise<Uint8Array> => {
+export const encodePip = async (
+  input: PipPackage,
+  options?: PipIoOptions,
+): Promise<Uint8Array> => {
   assertPipManifest(input.manifest);
+  await authorizeMetric("maxResourceCount", input.assets.length, "encode", options);
+  for (const asset of input.assets) {
+    await authorizeMetric("maxSingleResourceBytes", asset.bytes.length, "encode", options);
+  }
   const sections = [
     textEncoder.encode(JSON.stringify(input.manifest)),
     textEncoder.encode(input.loaderSource),
@@ -246,6 +305,10 @@ export const encodePip = async (input: PipPackage): Promise<Uint8Array> => {
     encodePipAssets(input.assets),
   ];
   sections.forEach((section, index) => assertSafeLength(section.length, `Section ${index}`));
+  const expandedSize = sections.reduce((total, section) => total + section.length, 0);
+  assertSafeLength(expandedSize, "Expanded PIP content");
+  await authorizeMetric("maxExpandedBytes", expandedSize, "encode", options);
+  await authorizeMetric("maxCompressionRatio", 1, "encode", options);
   let cursor = PIP_HEADER_SIZE;
   const descriptors: Array<{ offset: number; bytes: Uint8Array; hash: Uint8Array }> = [];
   for (const section of sections) {
@@ -253,7 +316,8 @@ export const encodePip = async (input: PipPackage): Promise<Uint8Array> => {
     descriptors.push({ offset: cursor, bytes: section, hash: await sha256(section) });
     cursor += section.length;
   }
-  if (cursor > MAX_PACKAGE_SIZE) throw new Error("PIP package exceeds the v1 size limit");
+  assertSafeLength(cursor, "PIP package");
+  await authorizeMetric("maxPipBytes", cursor, "encode", options);
   const output = new Uint8Array(cursor);
   const view = new DataView(output.buffer);
   output.set(PIP_MAGIC, 0);
@@ -269,10 +333,13 @@ export const encodePip = async (input: PipPackage): Promise<Uint8Array> => {
   return output;
 };
 
-export const decodePip = async (source: ArrayBuffer | Uint8Array): Promise<PipPackage> => {
+export const decodePip = async (
+  source: ArrayBuffer | Uint8Array,
+  options?: PipIoOptions,
+): Promise<PipPackage> => {
   const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
+  await authorizeMetric("maxPipBytes", bytes.length, "decode", options);
   if (bytes.length < PIP_HEADER_SIZE) throw new Error("PIP header is truncated");
-  if (bytes.length > MAX_PACKAGE_SIZE) throw new Error("PIP package exceeds the v1 size limit");
   if (!equalBytes(bytes.subarray(0, PIP_MAGIC.length), PIP_MAGIC)) throw new Error("Invalid PIP magic");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint32(8, true) !== PIP_VERSION) throw new Error("Unsupported PIP version");
@@ -294,6 +361,10 @@ export const decodePip = async (source: ArrayBuffer | Uint8Array): Promise<PipPa
       throw new Error("PIP sections overlap");
     }
   }
+  const expandedSize = sections.reduce((total, section) => total + section.length, 0);
+  assertSafeLength(expandedSize, "Expanded PIP content");
+  await authorizeMetric("maxExpandedBytes", expandedSize, "decode", options);
+  await authorizeMetric("maxCompressionRatio", 1, "decode", options);
   const payloads: Uint8Array[] = [];
   for (const [index, section] of sections.entries()) {
     const payload = bytes.slice(section.offset, section.offset + section.length);
@@ -305,7 +376,7 @@ export const decodePip = async (source: ArrayBuffer | Uint8Array): Promise<PipPa
     manifest,
     loaderSource: textDecoder.decode(payloads[1]),
     rootTreeText: textDecoder.decode(payloads[2]),
-    assets: decodePipAssets(payloads[3]),
+    assets: await decodePipAssets(payloads[3], options),
   };
 };
 

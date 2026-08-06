@@ -1,8 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip } from "../app/runtime/pip.ts";
+import { decodePip as decodePipWithPolicy } from "../app/runtime/pip.ts";
 import { readReleaseConfig, systemPackagesDirectory } from "./pip-release.mjs";
+import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
+
+const decodePip = (source) => decodePipWithPolicy(
+  source,
+  pipIoOptionsFromArgs(process.argv.slice(2)),
+);
 
 const input = process.argv[2];
 if (!input) throw new Error("Usage: npm run pip:promote-system -- <candidate.pip>");

@@ -1,4 +1,9 @@
-import { decodePip, pipSha256, type PipPackageOrigin } from "./pip";
+import {
+  decodePip,
+  pipSha256,
+  type PipIoOptions,
+  type PipPackageOrigin,
+} from "./pip";
 import type { PipCatalogEntry } from "./pip-profile";
 
 export interface PipPackageStore {
@@ -17,8 +22,10 @@ const requestResult = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, r
 
 export class IndexedDbPipPackageStore implements PipPackageStore {
   #database: Promise<IDBDatabase>;
+  #ioOptions: PipIoOptions;
 
-  constructor(databaseName = "intent-map-user-registry") {
+  constructor(ioOptions: PipIoOptions, databaseName = "intent-map-user-registry") {
+    this.#ioOptions = ioOptions;
     this.#database = new Promise((resolve, reject) => {
       const request = indexedDB.open(databaseName, 1);
       request.onupgradeneeded = () => request.result.createObjectStore("packages", { keyPath: "file" });
@@ -36,7 +43,7 @@ export class IndexedDbPipPackageStore implements PipPackageStore {
     return Promise.all(records.map(async ({ file, bytes }) => {
       try {
         const source = new Uint8Array(bytes);
-        const pip = await decodePip(source);
+        const pip = await decodePip(source, this.#ioOptions);
         return {
           file,
           origin: "user" as PipPackageOrigin,
@@ -80,7 +87,7 @@ export class IndexedDbPipPackageStore implements PipPackageStore {
     if ((await requestResult((await this.#store("readonly")).getKey(file))) !== undefined) {
       throw new Error(`PIP version already exists: ${file}`);
     }
-    const pip = await decodePip(bytes);
+    const pip = await decodePip(bytes, this.#ioOptions);
     const expected = `${pip.manifest.layer}_${pip.manifest.artifactName}_${pip.manifest.packageVersion.replaceAll(".", "_")}_${pip.manifest.releaseDate}.pip`;
     if (file !== expected) throw new Error("PIP filename does not match manifest");
     await requestResult((await this.#store("readwrite")).add({ file, bytes: Uint8Array.from(bytes).buffer }));

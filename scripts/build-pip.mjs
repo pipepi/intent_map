@@ -4,7 +4,7 @@ import process from "node:process";
 
 import {
   DEFAULT_PIP_LOADER_SOURCE,
-  encodePip,
+  encodePip as encodePipWithPolicy,
 } from "../app/runtime/pip.ts";
 import {
   createdAtFor,
@@ -16,6 +16,9 @@ import {
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
+import { trustedBuildPipIo } from "./pip-io-policy.mjs";
+
+const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -54,8 +57,6 @@ const collectAssets = async (directory, relative = "") => {
       assets.push(...await collectAssets(directory, child));
     } else if (entry.isFile()) {
       const filePath = path.join(directory, child);
-      const info = await stat(filePath);
-      if (info.size > 64 * 1024 * 1024) throw new Error(`PIP asset exceeds size limit: ${child}`);
       assets.push({
         path: child.split(path.sep).join("/"),
         mime: mimeFor(child),

@@ -42,6 +42,7 @@ export const PIP_IO_POLICY_FIELDS = Object.freeze([
 ] as const satisfies readonly PipIoPolicyField[]);
 
 const ask = (): PipLimit => ({ mode: "ask" });
+const unlimited = (): PipLimit => ({ mode: "unlimited" });
 
 export const ASK_PIP_IO_POLICY: PipIoPolicy = Object.freeze({
   schemaVersion: 1,
@@ -50,6 +51,15 @@ export const ASK_PIP_IO_POLICY: PipIoPolicy = Object.freeze({
   maxExpandedBytes: ask(),
   maxResourceCount: ask(),
   maxCompressionRatio: ask(),
+});
+
+export const UNLIMITED_PIP_IO_POLICY: PipIoPolicy = Object.freeze({
+  schemaVersion: 1,
+  maxPipBytes: unlimited(),
+  maxSingleResourceBytes: unlimited(),
+  maxExpandedBytes: unlimited(),
+  maxResourceCount: unlimited(),
+  maxCompressionRatio: unlimited(),
 });
 
 const decimalPattern = /^(0|[1-9]\d*)$/;

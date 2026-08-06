@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { encodePip } from "../app/runtime/pip.ts";
+import { encodePip as encodePipWithPolicy } from "../app/runtime/pip.ts";
 import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
 import {
   createdAtFor,
@@ -10,6 +10,9 @@ import {
   systemPackagePath,
 } from "./pip-release.mjs";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
+import { trustedBuildPipIo } from "./pip-io-policy.mjs";
+
+const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
 const release = (await readReleaseConfig()).loader;
 const source = path.join(projectRoot, "loader-n");

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ASK_PIP_IO_POLICY,
+  UNLIMITED_PIP_IO_POLICY,
   assertPipIoPolicy,
   evaluatePipLimit,
   pipLimit,
@@ -13,6 +14,13 @@ test("PIP I/O policy defaults every metric to an explicit confirmation", () => {
   assertPipIoPolicy(ASK_PIP_IO_POLICY);
   for (const [field, limit] of Object.entries(ASK_PIP_IO_POLICY)) {
     if (field !== "schemaVersion") assert.equal(limit.mode, "ask");
+  }
+});
+
+test("unlimited policy is available only as an explicit caller choice", () => {
+  assertPipIoPolicy(UNLIMITED_PIP_IO_POLICY);
+  for (const [field, limit] of Object.entries(UNLIMITED_PIP_IO_POLICY)) {
+    if (field !== "schemaVersion") assert.equal(limit.mode, "unlimited");
   }
 });
 

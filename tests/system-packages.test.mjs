@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { decodePip } from "../app/runtime/pip.ts";
+import { decodePip as decodePipWithPolicy } from "../app/runtime/pip.ts";
+import { UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
 import { readReleaseConfig, systemPackagePath } from "../scripts/pip-release.mjs";
 
 const release = await readReleaseConfig();
-const load = async (item) => decodePip(new Uint8Array(await readFile(systemPackagePath(item))));
+const load = async (item) => decodePipWithPolicy(
+  new Uint8Array(await readFile(systemPackagePath(item))),
+  { policy: UNLIMITED_PIP_IO_POLICY },
+);
 
 test("the Git-tracked system registry contains a0 through a3 source packages", async () => {
   const packages = await Promise.all([

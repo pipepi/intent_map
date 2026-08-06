@@ -3,7 +3,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
-import { decodePip } from "../app/runtime/pip.ts";
+import { decodePip as decodePipWithPolicy } from "../app/runtime/pip.ts";
+import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 import {
   applicationDirectory,
   artifactFilename,
@@ -12,6 +13,8 @@ import {
   runtimeDirectory,
   systemPackagePath,
 } from "./pip-release.mjs";
+
+const decodePip = (source) => decodePipWithPolicy(source, trustedBuildPipIo);
 
 const run = (script) => {
   const result = spawnSync(process.execPath, [path.join(projectRoot, "scripts", script)], {
