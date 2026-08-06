@@ -12,8 +12,6 @@ export type SupportedRuntimeCommand =
   | "REDO"
   | "AUTO_LAYOUT"
   | "PUBLISH_MODULE"
-  | "RUN_BUSINESS"
-  | "STOP_BUSINESS"
   | "ADD_BUSINESS_CHILD"
   | "DUPLICATE_NODE"
   | "DELETE_NODE"
@@ -37,8 +35,6 @@ const supportedCommands = new Set<SupportedRuntimeCommand>([
   "REDO",
   "AUTO_LAYOUT",
   "PUBLISH_MODULE",
-  "RUN_BUSINESS",
-  "STOP_BUSINESS",
   "ADD_BUSINESS_CHILD",
   "DUPLICATE_NODE",
   "DELETE_NODE",

@@ -25,7 +25,6 @@ export interface RuntimeCommandActionDeps {
     deleteAppNode: () => void;
     resetApplicationGraph: () => void;
   };
-  runtime: { run: () => Promise<void>; stop: () => void };
   navigation: {
     canNavigateParent: boolean;
     navigateToParent: () => void;
@@ -36,7 +35,6 @@ export function createRuntimeCommandActions({
   document,
   canvas,
   authoring,
-  runtime,
   navigation,
 }: RuntimeCommandActionDeps): RuntimeCommandActions {
   return {
@@ -49,8 +47,6 @@ export function createRuntimeCommandActions({
     REDO: document.redo,
     AUTO_LAYOUT: canvas.autoLayout,
     PUBLISH_MODULE: authoring.publishModule,
-    RUN_BUSINESS: runtime.run,
-    STOP_BUSINESS: runtime.stop,
     ADD_BUSINESS_CHILD: authoring.addBusinessChild,
     DUPLICATE_NODE: authoring.duplicateSelected,
     DELETE_NODE: authoring.deleteSelected,

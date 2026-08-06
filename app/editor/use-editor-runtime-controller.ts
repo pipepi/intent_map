@@ -6,7 +6,6 @@ import type { DocumentSession } from "./use-document-session";
 import type { EditorAuthoringController } from "./use-editor-authoring-controller";
 import type { EditorCanvasController } from "./use-editor-canvas-controller";
 import type { EditorUiSession } from "./use-editor-ui-session";
-import { useBusinessRunState } from "./use-business-run-state";
 import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useRuntimeCommandExecutor } from "./use-runtime-command-executor";
 
@@ -24,11 +23,6 @@ export function useEditorRuntimeController({
   ui,
 }: EditorRuntimeControllerDeps) {
   const { model, io, historyActions, runtime } = document;
-  const runState = useBusinessRunState({
-    businessRoot: canvas.authoring.businessRoot,
-    setToast: ui.feedback.show,
-  });
-
   useEditorShortcuts({
     dirty: model.dirty,
     undo: historyActions.undo,
@@ -66,7 +60,6 @@ export function useEditorRuntimeController({
       setScopeCamera: canvas.commands.resetCamera,
     },
     authoring: authoring.commands,
-    runtime: { run: runState.run, stop: runState.stop },
     navigation: {
       canNavigateParent: model.navigationStack.length > 1,
       navigateToParent: canvas.navigation.onNavigateParent,
@@ -89,10 +82,6 @@ export function useEditorRuntimeController({
       pendingEvents: runtime.pendingEvents,
       pipelineTrace: runtime.pipelineTrace,
       lastCommands: runtime.lastCommands,
-      runState: runState.runState,
-      trace: runState.trace,
-      rootInput: runState.rootInput,
-      setRootInput: runState.setRootInput,
       dispatchRuntimeEvent: runtime.dispatchRuntimeEvent,
       emit,
     },

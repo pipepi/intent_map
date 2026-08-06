@@ -12,7 +12,6 @@ test("registers every built-in application implementation", async () => {
     "application-state",
     "event-clock",
     "command-processor",
-    "intent-executor",
     "global-toolbar",
     "intent-tree",
     "module-library",
@@ -22,7 +21,6 @@ test("registers every built-in application implementation", async () => {
     "current-container",
     "canvas-status",
     "properties",
-    "run-trace",
   ];
 
   expected.forEach((key) => assert.match(source, new RegExp(`"${key}"`)));

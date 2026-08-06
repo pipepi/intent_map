@@ -452,25 +452,6 @@ const appNodeDefinitions = (): AppNodeDefinition[] => [
     outputs: [port("command", "状态命令", "object", "event")],
   },
   {
-    id: "intent_executor",
-    name: "意图执行器",
-    description: "执行当前业务根意图并产生分层追踪。",
-    kind: "action",
-    key: "intent-executor",
-    lane: "runtime",
-    position: { x: 90, y: 1200 },
-    size: { width: 290, height: 220 },
-    inputs: [
-      port("document", "业务文档", "object", "data", ref("document_loader", "document")),
-      port("run", "运行请求", "object", "event", ref("global_toolbar", "run")),
-    ],
-    outputs: [
-      port("result", "执行结果", "object"),
-      port("trace", "运行追踪", "array"),
-      port("completed", "运行完成", "object", "event"),
-    ],
-  },
-  {
     id: "global_toolbar",
     name: "顶栏与全局命令",
     description: "品牌、新建、导入导出、撤销重做与运行控制。",
@@ -600,22 +581,6 @@ const appNodeDefinitions = (): AppNodeDefinition[] => [
       port("selection", "当前选择", "string", "data", ref("app_state", "selection")),
     ],
     outputs: [port("edit", "文档编辑", "object", "event")],
-  },
-  {
-    id: "run_trace",
-    name: "运行追踪",
-    description: "填写根输入并查看分层执行结果。",
-    kind: "renderer",
-    key: "run-trace",
-    lane: "output",
-    position: { x: 1860, y: 820 },
-    size: { width: 420, height: 520 },
-    inputs: [
-      port("document", "业务文档", "object", "data", ref("document_loader", "document")),
-      port("trace", "执行追踪", "array", "data", ref("intent_executor", "trace")),
-      port("result", "执行结果", "object", "data", ref("intent_executor", "result")),
-    ],
-    outputs: [port("run", "运行请求", "object", "event")],
   },
 ];
 
@@ -869,7 +834,6 @@ export const createApplicationDocument = (
       ],
       outputs: [
         port("application_state", "应用状态", "object", "data", ref("app_state", "snapshot")),
-        port("execution_result", "执行结果", "object", "data", ref("intent_executor", "result")),
       ],
       children,
       position: { x: 0, y: 0 },

@@ -7,7 +7,7 @@
 // 显式传入，page.tsx 只负责打包状态与回调。
 // ============================================================================
 
-import { Fragment, type Dispatch, type SetStateAction } from "react";
+import { Fragment } from "react";
 import {
   getBusinessRoot,
   resolveFeatureContext,
@@ -37,7 +37,6 @@ import {
   detectCycle,
   type ValidationIssue,
 } from "./validation";
-import type { Trace } from "./executor";
 
 /**
  * renderNodeSurface 的全部外部依赖（原 Home 组件闭包捕获的状态与回调）。
@@ -60,11 +59,6 @@ export type NodeSurfaceDeps = {
   pendingEvents: RuntimeEvent[];
   pipelineTrace: PipelineTraceEntry[];
   lastCommands: PipelineCommand[];
-  // ---- 业务执行 ----
-  runState: "idle" | "running" | "success" | "failed";
-  trace: Trace[];
-  rootInput: Record<string, unknown>;
-  setRootInput: Dispatch<SetStateAction<Record<string, unknown>>>;
   // ---- 文档操作状态 ----
   history: IntentDocumentV3[];
   future: IntentDocumentV3[];
@@ -200,10 +194,6 @@ export const renderNodeSurface = (
     pendingEvents,
     pipelineTrace,
     lastCommands,
-    runState,
-    trace,
-    rootInput,
-    setRootInput,
     history,
     future,
     dirty,
@@ -317,18 +307,6 @@ export const renderNodeSurface = (
       </div>
     );
   }
-  // 执行器卡：运行状态 + "执行业务根"按钮
-  if (key === "intent-executor") {
-    return (
-      <div className="runtime-inspector-surface">
-        <span>EXECUTOR</span>
-        <strong>{runState.toUpperCase()}</strong>
-        <small>业务根：{businessRoot.name}</small>
-        <small>追踪步骤：{trace.length}</small>
-        <button onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "intent_executor")} disabled={runState === "running"}>执行业务根</button>
-      </div>
-    );
-  }
   // 全局工具栏：新建/导入/导出/撤销重做/泳道布局/发布模块/布局锁/运行停止
   if (key === "global-toolbar") {
     return (
@@ -344,7 +322,6 @@ export const renderNodeSurface = (
           <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "global_toolbar")}>泳道布局</button>
           <button onClick={() => dispatchRuntimeEvent("PUBLISH_MODULE", "global_toolbar")}>发布模块</button>
           <button onClick={() => dispatchRuntimeEvent("SET_LAYOUT_LOCK", "global_toolbar", { locked: !layoutLocked })}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
-          {runState === "running" ? <button className="danger" onClick={() => dispatchRuntimeEvent("STOP_REQUEST", "global_toolbar")}>停止</button> : <button className="primary" onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "global_toolbar")}>运行</button>}
         </div>
         <small className="runtime-save-state">{dirty ? "● 未导出" : "○ 已同步到文件"}</small>
       </div>
@@ -662,30 +639,6 @@ export const renderNodeSurface = (
           </section>
         ))}
         <div className="property-actions"><button onClick={() => contextAddress ? duplicateBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DUPLICATE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建副本</button><button onClick={() => createLinkedBusinessNode(contextualSubject.id, contextAddress?.panelId)} disabled={contextualSubject.id === contextualBusinessRoot.id}>创建链接实例</button><button className="danger" onClick={() => contextAddress ? deleteBusinessNode(contextualSubject.id, contextAddress.panelId) : dispatchRuntimeEvent("DELETE_NODE", "properties")} disabled={contextualSubject.id === contextualBusinessRoot.id}>删除</button></div>
-      </div>
-    );
-  }
-  // 运行追踪面板：运行状态、根输入编辑、逐节点轨迹（输出/错误/耗时）
-  if (key === "run-trace") {
-    return (
-      <div className="trace-surface">
-        <div className="run-state"><i className={runState} /><span><small>本地确定性执行</small><strong>{runState === "idle" ? "尚未运行" : runState === "running" ? "运行中" : runState === "success" ? "执行成功" : "执行失败"}</strong></span><button onClick={() => dispatchRuntimeEvent("RUN_REQUEST", "run_trace")} disabled={runState === "running"}>重新运行</button></div>
-        <div className="run-input-grid">{businessRoot.inputs.map((port) => {
-          const structured = port.type === "object" || port.type === "array";
-          const rawValue = rootInput[port.id];
-          const textValue = typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue) ?? "";
-          return (
-            <label key={port.id}>
-              <span>{port.name}<small>{port.type}</small></span>
-              {structured ? (
-                <textarea rows={2} placeholder='JSON，例如 ["角色A","角色B"]' value={textValue} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} />
-              ) : (
-                <input value={textValue} onChange={(event) => setRootInput((value) => ({ ...value, [port.id]: event.target.value }))} />
-              )}
-            </label>
-          );
-        })}</div>
-        <div className="trace-list">{trace.length ? trace.map((item, index) => <div className={`trace-row ${item.status}`} key={`${item.id}-${item.path}`}><b>{String(index + 1).padStart(2, "0")}</b><span><strong>{item.name}</strong><small>{item.path}</small>{item.output !== undefined && <code>输出 {JSON.stringify(item.output)?.slice(0, 220)}</code>}{item.error && <code>错误 {item.error}</code>}</span><i>{item.status}{item.duration ? ` · ${item.duration}ms` : ""}</i></div>) : <div className="surface-empty">运行后显示每层输入、输出与耗时</div>}</div>
       </div>
     );
   }

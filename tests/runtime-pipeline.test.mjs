@@ -39,12 +39,12 @@ test("applies state events atomically in one discrete tick", () => {
 });
 
 test("turns UI events into deterministic commands", () => {
-  const event = createRuntimeEvent("RUN_REQUEST", "global_toolbar");
+  const event = createRuntimeEvent("EXPORT_DOCUMENT", "global_toolbar");
   const result = processEventBatch([event], state, 7);
 
   assert.deepEqual(
     result.commands.map((command) => command.type),
-    ["RUN_BUSINESS"],
+    ["EXPORT_DOCUMENT"],
   );
   assert.equal(result.commands[0].sourceEventId, event.id);
   assert.equal(result.trace[0].outcome, "command");

@@ -1,14 +1,7 @@
-// ============================================================================
-// 业务执行器（page.tsx 拆出）
-//   - evaluateExpression：绑定表达式求值
-//   - executeBusinessNode：本地确定性拓扑执行 + 轨迹上报
-// ============================================================================
+import type { Expression, IntentNode } from "../../../../app/runtime/model";
+import { collectRefs } from "../../../../app/editor/bindings";
+import { detectCycle } from "../../../../app/editor/validation";
 
-import type { Expression, IntentNode } from "../runtime/model";
-import { collectRefs } from "./bindings";
-import { detectCycle } from "./validation";
-
-/** 业务执行追踪条目：记录每个业务节点一次执行的状态、耗时与输出。 */
 export type Trace = {
   id: string;
   name: string;
@@ -19,12 +12,6 @@ export type Trace = {
   error?: string;
 };
 
-/**
- * 绑定表达式求值器：
- *   const → 字面量；ref → 查环境输入或上游节点输出；
- *   op    → 递归求值后按算子归约（concat/add/and/or/array）。
- * environment 是容器环境输入表，outputs 是已执行节点的输出表。
- */
 export const evaluateExpression = (
   expression: Expression | undefined,
   environment: Record<string, unknown>,
@@ -47,13 +34,6 @@ export const evaluateExpression = (
   return values[0];
 };
 
-/**
- * 本地确定性业务执行器（递归）：
- *   - 叶子节点：按内置算子（identity/object/array/concat）把输入映射到首个输出；
- *   - 容器节点：先查环，然后按"输入依赖是否齐备"分批拓扑调度子节点，
- *     同批子节点并行执行，全部完成后求值容器输出映射；
- *   - onTrace 逐步上报执行轨迹（运行面板展示），cancelled() 支持中途停止。
- */
 export const executeBusinessNode = async (
   node: IntentNode,
   inputs: Record<string, unknown>,

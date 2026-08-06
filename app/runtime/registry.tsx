@@ -40,8 +40,7 @@ const builtInRenderers: Record<string, RuntimeRenderer> = {
   "application-state": summaryRenderer("STATE", "作用域、选择与布局快照"),
   "event-clock": summaryRenderer("EVENT", "离散事务批次"),
   "command-processor": summaryRenderer("ACTION", "确定性命令归约"),
-  "intent-executor": summaryRenderer("EXECUTOR", "本地业务 DAG 执行"),
-  "global-toolbar": summaryRenderer("VIEW", "全局文档与运行命令"),
+  "global-toolbar": summaryRenderer("VIEW", "全局文档与编辑命令"),
   "intent-tree": summaryRenderer("VIEW", "递归业务意图导航"),
   "module-library": summaryRenderer("VIEW", "不可变模块快照"),
   "validation": summaryRenderer("VIEW", "类型、作用域与依赖校验"),
@@ -50,7 +49,6 @@ const builtInRenderers: Record<string, RuntimeRenderer> = {
   "current-container": summaryRenderer("RENDERER", "稳定 scopeId 投影"),
   "canvas-status": summaryRenderer("VIEW", "管道和交互状态"),
   "properties": summaryRenderer("VIEW", "节点属性与端口绑定"),
-  "run-trace": summaryRenderer("VIEW", "根输入与分层追踪"),
 };
 
 export const rendererRegistry = Object.freeze(builtInRenderers);

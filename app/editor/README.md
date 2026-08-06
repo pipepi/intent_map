@@ -20,7 +20,7 @@ HomePage
             ├── ScopeNavigationBar / ScopeHeader
             ├── BusinessScopeLayer | AppScopeContent
             ├── ContainerResizeControls
-            └── runtime toast
+    └── editor feedback toast
 ```
 
 ### 页面与组合根
@@ -35,9 +35,8 @@ HomePage
 - `use-document-session.ts`：组合历史、运行时管线、导航上下文、文档 IO、新建和宿主加载。
 - `use-editor-canvas-controller.ts`：组合 scope、camera、projection、navigation、pointer 和 auto-layout，并直接输出画布 capability。
 - `use-editor-authoring-controller.ts`：组合 Schema、Panel、应用节点和业务创作操作，按 Workspace、Canvas、NodeSurface 和 Command 输出能力。
-- `use-editor-runtime-controller.ts`：组合运行状态、快捷键、RuntimeCommand 映射和执行器。
-- `use-runtime-pipeline.ts`：事件批处理、运行时状态及命令生成。
-- `use-business-run-state.ts`：业务执行、取消、输入和 trace。
+- `use-editor-runtime-controller.ts`：组合编辑器快捷键、RuntimeCommand 映射和命令执行入口。
+- `use-runtime-pipeline.ts`：编辑器事件批处理、状态及命令生成。
 - `use-scope-session.ts`：两棵树投影、当前作用域、导航栈、连线/校验派生及浏览上下文持久化。
 - `use-canvas-projection-actions.ts`：节点与容器投影持久化、显示和缩放模式切换。
 - `use-canvas-camera-session.ts`：相机状态、作用域恢复/适应策略和相机相关 refs。
@@ -66,7 +65,7 @@ HomePage
 ### 行为与纯逻辑
 
 - 组合工厂：`scope-camera.ts`、`scope-navigation.ts`、`pointer-gestures.ts`、`business-ops.ts`、`document-io.ts`。
-- 纯函数：`tree-utils.ts`、`bindings.ts`、`validation.ts`、`executor.ts`、`auto-layout.ts`。
+- 纯函数：`tree-utils.ts`、`bindings.ts`、`validation.ts`、`auto-layout.ts`。
 
 ## 约束
 
@@ -77,6 +76,7 @@ HomePage
 - 领域 controller 可以组合既有小 hooks，但不得复制其算法或反向依赖视图容器。
 - 组合根只消费 capability，不得重新展开底层 refs、工厂 deps 或命令映射。
 - a2 不导入或启动根目录 `a3/` 的扩展；a3 生命周期由外层工作区宿主管理。
+- a2 不提供业务执行、运行轨迹或代码生成语义；这些能力由 `a3/` 扩展实现。
 
 ## 验证
 

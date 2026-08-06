@@ -15,20 +15,30 @@ const sourceUnder = async (relative) => {
 };
 
 test("a2 editor sources do not import or start a3 capabilities", async () => {
-  const sources = await sourceUnder("app/editor/");
+  const sources = [
+    ...await sourceUnder("app/editor/"),
+    ...await sourceUnder("app/runtime/"),
+  ];
   for (const { file, source } of sources) {
     assert.doesNotMatch(source, /(?:from|import\()\s*["'][^"']*\/a3\//, file);
     assert.doesNotMatch(source, /usePipCapabilitySession|PipCapabilityWorker/, file);
+    assert.doesNotMatch(
+      source,
+      /executeBusinessNode|RUN_BUSINESS|STOP_BUSINESS|intent-executor|run-trace/,
+      file,
+    );
   }
 });
 
 test("a3 implementation lives outside the a2 app directory", async () => {
-  const [core, host, extension] = await Promise.all([
+  const [core, host, extension, executor] = await Promise.all([
     readFile(new URL("a3/core/pip-capabilities.ts", root), "utf8"),
     readFile(new URL("a3/host/use-pip-capability-session.ts", root), "utf8"),
     readFile(new URL("a3/extensions/software-authoring/capability.mjs", root), "utf8"),
+    readFile(new URL("a3/extensions/software-authoring/runtime/executor.ts", root), "utf8"),
   ]);
   assert.match(core, /PIP_CAPABILITY_ABI/);
   assert.match(host, /usePipCapabilitySession/);
   assert.match(extension, /software-authoring\/1/);
+  assert.match(executor, /executeBusinessNode/);
 });

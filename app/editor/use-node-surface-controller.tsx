@@ -11,7 +11,7 @@ export interface EditorCapabilities {
   selection: Fields<"selectedBusinessNode" | "selectedBusinessNodeId" | "selectedAppNodeId" | "setSelectedBusinessNodeId">;
   authoring: Fields<"renameBusinessNode" | "bindingOptionsFor" | "updateInputBinding" | "outputBindingOptionsFor" | "updateOutputBinding" | "editPortSchema" | "addPortSchema" | "movePortSchema" | "duplicateBusinessNode" | "createLinkedBusinessNode" | "deleteBusinessNode" | "insertModule">;
   navigation: Fields<"navigateToBusinessNode" | "navigatePanelBusinessNode" | "selectPanelBusinessNode">;
-  runtime: Fields<"runtimeState" | "eventTick" | "pendingEvents" | "pipelineTrace" | "lastCommands" | "runState" | "trace" | "rootInput" | "setRootInput" | "dispatchRuntimeEvent" | "emit">;
+  runtime: Fields<"runtimeState" | "eventTick" | "pendingEvents" | "pipelineTrace" | "lastCommands" | "dispatchRuntimeEvent" | "emit">;
   workspace: Fields<"search" | "setSearch">;
   feedback: Fields<"setToast">;
 }
