@@ -43,6 +43,18 @@ export type NodeImplementation = {
   visual?: boolean;
 };
 
+/**
+ * Optional higher-layer data attached to a generic intent node.
+ *
+ * a2 owns the node envelope and preserves this payload, but does not interpret
+ * its namespace or data. a3 extensions are responsible for validation and UI.
+ */
+export type IntentNodeExtension = {
+  namespace: string;
+  schemaVersion: number;
+  data: JsonValue;
+};
+
 export type CameraState = {
   scale: number;
   x: number;
@@ -75,6 +87,7 @@ export type IntentNode = {
   displayMode?: NodeDisplayMode;
   moduleRef?: { moduleId: string; version: number };
   implementation?: NodeImplementation;
+  extension?: IntentNodeExtension;
 };
 
 export type PublishedModule = {
@@ -1046,6 +1059,17 @@ const assertNodeShape: (
     value.children.forEach((child, index) =>
       assertNodeShape(child, `${path}.children[${index}]`),
     );
+  }
+  if (
+    value.extension !== undefined &&
+    (!isRecord(value.extension) ||
+      typeof value.extension.namespace !== "string" ||
+      !value.extension.namespace ||
+      !Number.isSafeInteger(value.extension.schemaVersion) ||
+      (value.extension.schemaVersion as number) < 1 ||
+      !("data" in value.extension))
+  ) {
+    throw new Error(`${path}.extension: 无效扩展数据`);
   }
 };
 
