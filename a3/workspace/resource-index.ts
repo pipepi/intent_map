@@ -36,6 +36,9 @@ export const assertWorkspaceResourcePath = (value: unknown): string => {
   if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
     throw new Error(`Unsafe workspace resource path: ${value}`);
   }
+  if (value === PIP_WORKSPACE_INDEX_PATH) {
+    throw new Error(`Reserved workspace resource path: ${value}`);
+  }
   return value;
 };
 
