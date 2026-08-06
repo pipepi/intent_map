@@ -15,6 +15,13 @@ export interface WorkspaceResourceStore {
   remove(path: string): Promise<void>;
 }
 
+export interface StreamingWorkspaceResourceStore extends WorkspaceResourceStore {
+  openRead(path: string): Promise<{
+    byteLength: number;
+    chunks: AsyncIterable<Uint8Array>;
+  }>;
+}
+
 export class WorkspaceResourceSession {
   #index: WorkspaceResourceIndex;
   readonly #store: WorkspaceResourceStore;

@@ -14,7 +14,7 @@ import {
   assertWorkspaceResourcePath,
   type WorkspaceResource,
 } from "./resource-index.ts";
-import type { WorkspaceResourceStore } from "./resource-store.ts";
+import type { StreamingWorkspaceResourceStore } from "./resource-store.ts";
 
 const assertDirectory = async (directory: string, label: string) => {
   const metadata = await lstat(directory);
@@ -75,7 +75,7 @@ const resourceTarget = async (
   return path.join(directory, name);
 };
 
-export class NodeDirectoryResourceStore implements WorkspaceResourceStore {
+export class NodeDirectoryResourceStore implements StreamingWorkspaceResourceStore {
   readonly #root: string;
 
   constructor(resourcesDirectory: string) {

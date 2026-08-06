@@ -9,7 +9,19 @@ class FileHandle {
   }
 
   async getFile() {
-    return { arrayBuffer: async () => this.bytes.slice().buffer };
+    const bytes = this.bytes;
+    return {
+      size: bytes.byteLength,
+      arrayBuffer: async () => bytes.slice().buffer,
+      stream: () => new ReadableStream({
+        start(controller) {
+          const middle = Math.ceil(bytes.byteLength / 2);
+          controller.enqueue(bytes.slice(0, middle));
+          controller.enqueue(bytes.slice(middle));
+          controller.close();
+        },
+      }),
+    };
   }
 
   async createWritable() {
@@ -56,6 +68,11 @@ test("browser split workspace keeps intent.pip and resources as separate files",
     bytes: new Uint8Array([7, 8]),
   });
   assert.deepEqual(await workspace.resources.read("ui/image.bin"), new Uint8Array([7, 8]));
+  const opened = await workspace.resources.openRead("ui/image.bin");
+  assert.equal(opened.byteLength, 2);
+  const chunks = [];
+  for await (const chunk of opened.chunks) chunks.push(...chunk);
+  assert.deepEqual(chunks, [7, 8]);
   await workspace.resources.remove("ui/image.bin");
   await assert.rejects(() => workspace.resources.read("ui/image.bin"), /missing file/);
 
