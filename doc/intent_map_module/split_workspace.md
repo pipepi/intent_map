@@ -56,9 +56,24 @@ npm run pip:workspace:split -- source.pip ./my-workspace --allow-package-limits
 
 ## 与 Bundle 的关系
 
-拆分工作区是默认创作形态；单文件 Bundle 是交换和离线分发形态。Phase 5 会把
-`intent.pip` 与索引指向的资源按需打成 Bundle，并在导入后回到拆分工作区。两者
-共用同一内树和完整性身份，Bundle 不是编辑时的权威副本。
+拆分工作区是默认创作形态；单文件 Bundle 是交换和离线分发形态。打包把
+`intent.pip` 与索引指向的资源写入一个版本化 PIP，导入则恢复小型
+`intent.pip` 和普通 `resources/` 文件。两者共用同一内树、资源索引和完整性
+身份，Bundle 不是编辑时的权威副本。
+
+```bash
+npm run pip:workspace:bundle -- ./my-workspace a4_my_app_1_0_0_20260807.pip --allow-package-limits
+npm run pip:workspace:unbundle -- a4_my_app_1_0_0_20260807.pip ./restored-workspace --allow-package-limits
+```
+
+文件名必须与 Manifest 的层级、artifactName、版本和发布日期完全一致。CLI 不
+覆盖已有 Bundle 或工作区；先写同目录临时目标，完成段哈希、资源 SHA 和索引
+校验后再原子改名。
+
+Node/CLI 和 Web File System Access 路径都按块读取、写入和计算 SHA-256，不把
+大型资源聚合进内存。Web 导出写入用户选择的文件句柄；Web 导入要求用户选择一个
+空目录，失败时删除本次创建的 `intent.pip` 与 `resources/`。所有路径统一执行
+可导出的 PIP I/O 策略，没有产品内写死的文件大小上限。
 
 ## 实现映射
 
@@ -67,7 +82,12 @@ npm run pip:workspace:split -- source.pip ./my-workspace --allow-package-limits
 - `a3/workspace/browser-directory-store.ts`：Web 目录适配；
 - `a3/workspace/node-directory-store.ts`：原生/CLI 目录适配；
 - `a3/workspace/split-workspace.ts`：拆分、打开和保存生命周期；
-- `scripts/split-pip-workspace.mjs`：非破坏性 CLI 入口。
+- `a3/bundle/workspace-bundle.ts`：平台无关的 Bundle 往返语义；
+- `a3/bundle/node-streaming-*.ts`：Node/原生流式 Bundle 读写；
+- `a3/bundle/browser-streaming-*.ts`：Web 文件与目录句柄的流式 Bundle 读写；
+- `scripts/split-pip-workspace.mjs`：从普通 PIP 创建工作区；
+- `scripts/bundle-pip-workspace.mjs`：工作区流式导出 Bundle；
+- `scripts/unbundle-pip-workspace.mjs`：Bundle 流式恢复工作区。
 
 ---
 

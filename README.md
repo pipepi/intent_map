@@ -113,6 +113,8 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run pip:install-user -- <file.pip>`: install an immutable version into the user Registry
 - `npm run pip:promote-system -- <file.pip>`: promote a validated maintained a0–a3 candidate
 - `npm run pip:workspace:split -- <bundle.pip> <new-directory> --allow-package-limits`: create a non-overwriting split workspace
+- `npm run pip:workspace:bundle -- <workspace-directory> <versioned.pip> --allow-package-limits`: stream a split workspace into one exchange Bundle
+- `npm run pip:workspace:unbundle -- <versioned.pip> <new-directory> --allow-package-limits`: stream a Bundle back into a split workspace
 - `npm run pip:cli`: build the versioned diagnostic Seed CLI under `dist/pip-runtime/tools/`
 - `npm run pip:verify`: verify the generated `.pip`
 - `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
