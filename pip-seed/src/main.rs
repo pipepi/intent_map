@@ -2,9 +2,9 @@ mod platform;
 mod server;
 
 use pip_core::{
-    Package, PipDiscovery, PipLayer, RuntimeProfile, discover_loader_pip, load_runtime_profile,
-    resolve_package_ref, runtime_catalog_sources, user_data_root, validate_package_filename,
-    validate_profile_trust, validate_runtime_profile, trusted_hashes,
+    Package, PipDiscovery, PipIoPolicy, PipLayer, RuntimeProfile, discover_loader_pip,
+    load_runtime_profile, resolve_package_ref, runtime_catalog_sources, trusted_hashes,
+    user_data_root, validate_package_filename, validate_profile_trust, validate_runtime_profile,
 };
 use std::env;
 use std::fs;
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 fn usage() {
     eprintln!(
-        "Usage:\n  pip-seed-cli [--profile <id>] [--pip <a1.pip>] [--editor <a2.pip>] [--select-editor] [--no-open]\n  pip-seed-cli --verify <file.pip>"
+        "Usage:\n  pip-seed-cli [--profile <id>] [--pip <a1.pip>] [--editor <a2.pip>] [--select-editor] [--no-open] [PIP limit options]\n  pip-seed-cli --verify <file.pip> [PIP limit options]\n\nPIP limit options:\n  --max-pip-size <bytes|unlimited>\n  --max-resource-size <bytes|unlimited>\n  --max-expanded-size <bytes|unlimited>\n  --max-resource-count <count|unlimited>\n  --max-compression-ratio <ratio|unlimited>\n  --allow-package-limits"
     );
 }
 
@@ -38,6 +38,7 @@ fn string_value(args: &[String], name: &str) -> Result<Option<String>, String> {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
+    let policy = PipIoPolicy::from_cli_args(&args)?;
     if args
         .iter()
         .any(|argument| argument == "--help" || argument == "-h")
@@ -45,13 +46,22 @@ fn run() -> Result<(), String> {
         usage();
         return Ok(());
     }
+    if policy.requires_confirmation() {
+        return Err(
+            "non-interactive PIP access requires every --max-* option or --allow-package-limits"
+                .into(),
+        );
+    }
     if args.first().map(String::as_str) == Some("--verify") {
-        if args.len() != 2 {
-            return Err("--verify requires exactly one PIP path".into());
-        }
-        let path = Path::new(&args[1]);
-        let package =
-            Package::parse(fs::read(path).map_err(|error| format!("cannot read PIP: {error}"))?)?;
+        let path = args
+            .get(1)
+            .filter(|path| !path.starts_with("--"))
+            .map(Path::new)
+            .ok_or("--verify requires a PIP path")?;
+        let package = Package::parse_with_policy(
+            fs::read(path).map_err(|error| format!("cannot read PIP: {error}"))?,
+            &policy,
+        )?;
         validate_package_filename(path, &package)?;
         println!(
             "valid PIP: {} · {} · {} bytes · {} assets",
@@ -66,12 +76,18 @@ fn run() -> Result<(), String> {
         env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
     let explicit = argument_value(&args, "--pip")?;
     let executable_parent = executable.parent().ok_or("executable has no parent")?;
-    let runtime_root = if executable_parent.file_name().is_some_and(|name| name == "tools") {
-        executable_parent.parent().ok_or("tools directory has no runtime parent")?
+    let runtime_root = if executable_parent
+        .file_name()
+        .is_some_and(|name| name == "tools")
+    {
+        executable_parent
+            .parent()
+            .ok_or("tools directory has no runtime parent")?
     } else {
         executable_parent
     };
-    let system_directory = explicit.as_deref()
+    let system_directory = explicit
+        .as_deref()
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or(runtime_root.join("pip"));
@@ -81,15 +97,18 @@ fn run() -> Result<(), String> {
         .map(|id| load_runtime_profile(&user_root, &id))
         .transpose()?;
     if let Some(profile) = &profile {
-        validate_runtime_profile(profile, &sources)?;
+        validate_runtime_profile(profile, &sources, &policy)?;
         validate_profile_trust(profile, &trusted_hashes(&user_root)?)?;
     }
-    let profile_loader = profile.as_ref()
-        .map(|profile| resolve_package_ref(&sources, &profile.loader, Some(PipLayer::Loader)))
+    let profile_loader = profile
+        .as_ref()
+        .map(|profile| {
+            resolve_package_ref(&sources, &profile.loader, Some(PipLayer::Loader), &policy)
+        })
         .transpose()?
         .map(|(path, _)| path);
     let discovery = if explicit.is_some() || profile_loader.is_none() {
-        discover_loader_pip(explicit.as_deref(), &runtime_root.join("seed"))?
+        discover_loader_pip(explicit.as_deref(), &runtime_root.join("seed"), &policy)?
     } else {
         PipDiscovery::Selected(profile_loader.expect("profile loader"))
     };
@@ -102,19 +121,30 @@ fn run() -> Result<(), String> {
             ));
         }
     };
-    let package =
-        Package::parse(fs::read(&path).map_err(|error| format!("cannot read PIP: {error}"))?)?;
+    let package = Package::parse_with_policy(
+        fs::read(&path).map_err(|error| format!("cannot read PIP: {error}"))?,
+        &policy,
+    )?;
     let token = platform::random_token()?;
     let explicit_editor = argument_value(&args, "--editor")?
         .map(|path| {
-            let editor = Package::parse(fs::read(&path).map_err(|error| format!("cannot read editor PIP: {error}"))?)?;
+            let editor = Package::parse_with_policy(
+                fs::read(&path).map_err(|error| format!("cannot read editor PIP: {error}"))?,
+                &policy,
+            )?;
             validate_package_filename(&path, &editor)?;
-            if editor.manifest_data().layer != "a2" { return Err::<Package, String>("--editor requires an a2 PIP".into()); }
+            if editor.manifest_data().layer != "a2" {
+                return Err::<Package, String>("--editor requires an a2 PIP".into());
+            }
             Ok(editor)
         })
         .transpose()?;
-    let profile_editor = profile.as_ref()
-        .map(|profile| resolve_package_ref(&sources, &profile.editor, Some(PipLayer::Editor)).map(|(_, package)| package))
+    let profile_editor = profile
+        .as_ref()
+        .map(|profile| {
+            resolve_package_ref(&sources, &profile.editor, Some(PipLayer::Editor), &policy)
+                .map(|(_, package)| package)
+        })
         .transpose()?;
     server::serve(
         package,
@@ -125,6 +155,7 @@ fn run() -> Result<(), String> {
         args.iter().any(|argument| argument == "--select-editor"),
         token,
         !args.iter().any(|argument| argument == "--no-open"),
+        policy,
     )
 }
 

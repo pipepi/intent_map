@@ -1,4 +1,4 @@
-use crate::Package;
+use crate::{Package, PipIoPolicy};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -173,7 +173,7 @@ pub enum PipDiscovery {
     NeedsSelection(Vec<PathBuf>),
 }
 
-fn validate_loader(path: &Path) -> Result<(), String> {
+fn validate_loader(path: &Path, policy: &PipIoPolicy) -> Result<(), String> {
     let metadata = fs::metadata(path)
         .map_err(|error| format!("cannot inspect PIP {}: {error}", path.display()))?;
     if !metadata.is_file() {
@@ -183,8 +183,9 @@ fn validate_loader(path: &Path) -> Result<(), String> {
     if artifact.layer != PipLayer::Loader {
         return Err(format!("Loader 0 requires an a1 PIP: {}", path.display()));
     }
-    let package = Package::parse(
+    let package = Package::parse_with_policy(
         fs::read(path).map_err(|error| format!("cannot read PIP {}: {error}", path.display()))?,
+        policy,
     )?;
     validate_package_filename(path, &package)
 }
@@ -192,9 +193,10 @@ fn validate_loader(path: &Path) -> Result<(), String> {
 pub fn discover_loader_pip(
     explicit: Option<&Path>,
     executable: &Path,
+    policy: &PipIoPolicy,
 ) -> Result<PipDiscovery, String> {
     if let Some(path) = explicit {
-        validate_loader(path)?;
+        validate_loader(path, policy)?;
         return Ok(PipDiscovery::Selected(path.to_path_buf()));
     }
     let root = executable.parent().ok_or_else(|| {
@@ -221,14 +223,14 @@ pub fn discover_loader_pip(
             .and_then(|value| value.to_str())
             .is_some_and(|value| value.eq_ignore_ascii_case("pip"))
             && parse_pip_filename(&path).is_ok_and(|value| value.layer == PipLayer::Loader)
-            && validate_loader(&path).is_ok()
+            && validate_loader(&path, policy).is_ok()
         {
             candidates.push(path);
         }
     }
     candidates.sort();
     if candidates.len() == 1 {
-        validate_loader(&candidates[0])?;
+        validate_loader(&candidates[0], policy)?;
         Ok(PipDiscovery::Selected(candidates.remove(0)))
     } else {
         Ok(PipDiscovery::NeedsSelection(candidates))
@@ -240,6 +242,7 @@ mod tests {
     use super::{
         PipDiscovery, PipLayer, ReleaseDate, Version, discover_loader_pip, parse_pip_filename,
     };
+    use crate::PipIoPolicy;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -304,13 +307,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            discover_loader_pip(None, &executable).unwrap(),
+            discover_loader_pip(None, &executable, &PipIoPolicy::unlimited()).unwrap(),
             PipDiscovery::Selected(loader)
         );
         assert!(
             discover_loader_pip(
                 Some(&directory.join("pip/a5_app_0_1_0_20260726.pip")),
                 &executable,
+                &PipIoPolicy::unlimited(),
             )
             .is_err()
         );
@@ -324,7 +328,7 @@ mod tests {
         fs::write(&executable, b"seed").unwrap();
         fs::create_dir(directory.join("pip")).unwrap();
         assert_eq!(
-            discover_loader_pip(None, &executable).unwrap(),
+            discover_loader_pip(None, &executable, &PipIoPolicy::unlimited()).unwrap(),
             PipDiscovery::NeedsSelection(Vec::new())
         );
         for name in [
@@ -334,7 +338,7 @@ mod tests {
             fs::copy(fixture(name), directory.join("pip").join(name)).unwrap();
         }
         assert!(
-            matches!(discover_loader_pip(None, &executable).unwrap(), PipDiscovery::NeedsSelection(items) if items.len() == 2)
+            matches!(discover_loader_pip(None, &executable, &PipIoPolicy::unlimited()).unwrap(), PipDiscovery::NeedsSelection(items) if items.len() == 2)
         );
         fs::remove_dir_all(directory).unwrap();
     }
@@ -348,10 +352,13 @@ mod tests {
         let mismatched = directory.join("pip/a1_wrong_name_1_0_0_20260726.pip");
         fs::copy(fixture("a1_loader_1_0_0_20260726.pip"), &mismatched).unwrap();
         assert_eq!(
-            discover_loader_pip(None, &executable).unwrap(),
+            discover_loader_pip(None, &executable, &PipIoPolicy::unlimited()).unwrap(),
             PipDiscovery::NeedsSelection(Vec::new())
         );
-        assert!(discover_loader_pip(Some(&mismatched), &executable).is_err());
+        assert!(
+            discover_loader_pip(Some(&mismatched), &executable, &PipIoPolicy::unlimited(),)
+                .is_err()
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 }

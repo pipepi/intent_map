@@ -1,6 +1,6 @@
 use crate::{
-    CatalogSource, Package, PackageOrigin, RuntimeProfile, parse_pip_filename, sha256_hex,
-    validate_package_filename, validate_runtime_profile,
+    CatalogSource, Package, PackageOrigin, PipIoPolicy, RuntimeProfile, parse_pip_filename,
+    sha256_hex, validate_package_filename, validate_runtime_profile,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -50,7 +50,9 @@ pub fn load_runtime_profile(user_root: &Path, profile_id: &str) -> Result<Runtim
     {
         return Err("unsafe runtime profile id".into());
     }
-    let path = user_root.join("profiles").join(format!("{profile_id}.json"));
+    let path = user_root
+        .join("profiles")
+        .join(format!("{profile_id}.json"));
     let metadata = fs::symlink_metadata(&path)
         .map_err(|error| format!("cannot inspect runtime profile {}: {error}", path.display()))?;
     if !metadata.file_type().is_file() {
@@ -70,8 +72,9 @@ pub fn save_runtime_profile(
     user_root: &Path,
     profile: &RuntimeProfile,
     sources: &[CatalogSource],
+    policy: &PipIoPolicy,
 ) -> Result<PathBuf, String> {
-    validate_runtime_profile(profile, sources)?;
+    validate_runtime_profile(profile, sources, policy)?;
     validate_profile_trust(profile, &trusted_hashes(user_root)?)?;
     if profile.profile_id.is_empty()
         || !profile.profile_id.bytes().all(|byte| {
@@ -81,12 +84,17 @@ pub fn save_runtime_profile(
         return Err("unsafe runtime profile id".into());
     }
     let directory = user_root.join("profiles");
-    fs::create_dir_all(&directory).map_err(|error| format!("cannot create profile directory: {error}"))?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("cannot create profile directory: {error}"))?;
     let destination = directory.join(format!("{}.json", profile.profile_id));
     let temporary = directory.join(format!("{}.json.tmp", profile.profile_id));
-    fs::write(&temporary, serde_json::to_vec_pretty(profile).map_err(|error| error.to_string())?)
-        .map_err(|error| format!("cannot write runtime profile: {error}"))?;
-    fs::rename(temporary, &destination).map_err(|error| format!("cannot commit runtime profile: {error}"))?;
+    fs::write(
+        &temporary,
+        serde_json::to_vec_pretty(profile).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("cannot write runtime profile: {error}"))?;
+    fs::rename(temporary, &destination)
+        .map_err(|error| format!("cannot commit runtime profile: {error}"))?;
     Ok(destination)
 }
 
@@ -113,8 +121,13 @@ pub fn trusted_hashes(user_root: &Path) -> Result<BTreeSet<String>, String> {
     .map_err(|error| format!("invalid trust store: {error}"))
 }
 
-pub fn validate_profile_trust(profile: &RuntimeProfile, trusted: &BTreeSet<String>) -> Result<(), String> {
-    let references = profile.seed.iter()
+pub fn validate_profile_trust(
+    profile: &RuntimeProfile,
+    trusted: &BTreeSet<String>,
+) -> Result<(), String> {
+    let references = profile
+        .seed
+        .iter()
         .chain(std::iter::once(&profile.loader))
         .chain(std::iter::once(&profile.editor))
         .chain(profile.capabilities.values());
@@ -130,28 +143,42 @@ pub fn validate_profile_trust(profile: &RuntimeProfile, trusted: &BTreeSet<Strin
 }
 
 pub fn trust_hash(user_root: &Path, hash: &str) -> Result<(), String> {
-    if hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) {
+    if hash.len() != 64
+        || !hash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
         return Err("invalid lowercase SHA-256 hash".into());
     }
     let mut hashes = trusted_hashes(user_root)?;
     hashes.insert(hash.to_string());
-    fs::create_dir_all(user_root).map_err(|error| format!("cannot create user data directory: {error}"))?;
+    fs::create_dir_all(user_root)
+        .map_err(|error| format!("cannot create user data directory: {error}"))?;
     let path = user_root.join("trusted.json");
     let temporary = user_root.join("trusted.json.tmp");
-    fs::write(&temporary, serde_json::to_vec_pretty(&TrustFile { hashes }).map_err(|error| error.to_string())?)
-        .map_err(|error| format!("cannot write trust store: {error}"))?;
+    fs::write(
+        &temporary,
+        serde_json::to_vec_pretty(&TrustFile { hashes }).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("cannot write trust store: {error}"))?;
     fs::rename(temporary, path).map_err(|error| format!("cannot commit trust store: {error}"))
 }
 
-pub fn install_user_package(user_root: &Path, file: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+pub fn install_user_package(
+    user_root: &Path,
+    file: &str,
+    bytes: &[u8],
+    policy: &PipIoPolicy,
+) -> Result<PathBuf, String> {
     if file.is_empty() || file.contains('/') || file.contains('\\') || file.contains("..") {
         return Err("unsafe user package filename".into());
     }
     let artifact = parse_pip_filename(Path::new(file))?;
-    let package = Package::parse(bytes.to_vec())?;
+    let package = Package::parse_with_policy(bytes.to_vec(), policy)?;
     validate_package_filename(Path::new(file), &package)?;
     let directory = user_root.join("registry").join(artifact.layer.key());
-    fs::create_dir_all(&directory).map_err(|error| format!("cannot create user registry: {error}"))?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("cannot create user registry: {error}"))?;
     let destination = directory.join(file);
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -160,7 +187,8 @@ pub fn install_user_package(user_root: &Path, file: &str, bytes: &[u8]) -> Resul
         .open(&destination)
         .and_then(|mut output| output.write_all(bytes))
         .map_err(|error| format!("cannot install user package without overwriting: {error}"))?;
-    let installed = fs::read(&destination).map_err(|error| format!("cannot verify installed package: {error}"))?;
+    let installed = fs::read(&destination)
+        .map_err(|error| format!("cannot verify installed package: {error}"))?;
     if sha256_hex(&installed) != sha256_hex(bytes) {
         return Err("installed package hash mismatch".into());
     }
@@ -183,9 +211,10 @@ mod tests {
         let directory = temporary_directory("install");
         let bytes = include_bytes!("../../tests/fixtures/minimal-valid.pip");
         let file = "a5_intent_map_test_0_1_0_20260726.pip";
-        let destination = install_user_package(&directory, file, bytes).unwrap();
+        let destination =
+            install_user_package(&directory, file, bytes, &PipIoPolicy::unlimited()).unwrap();
         assert_eq!(destination, directory.join("registry/a5").join(file));
-        assert!(install_user_package(&directory, file, bytes).is_err());
+        assert!(install_user_package(&directory, file, bytes, &PipIoPolicy::unlimited()).is_err());
         fs::remove_dir_all(directory).unwrap();
     }
 

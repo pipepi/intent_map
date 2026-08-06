@@ -1,4 +1,6 @@
-use crate::{Package, PipLayer, parse_pip_filename, sha256_hex, validate_package_filename};
+use crate::{
+    Package, PipIoPolicy, PipLayer, parse_pip_filename, sha256_hex, validate_package_filename,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -114,6 +116,7 @@ fn safe_file(file: &str) -> Result<(), String> {
 pub fn load_catalog_package_from_source(
     source: &CatalogSource,
     file: &str,
+    policy: &PipIoPolicy,
 ) -> Result<(PathBuf, Package), String> {
     safe_file(file)?;
     let path = source.directory.join(file);
@@ -123,14 +126,19 @@ pub fn load_catalog_package_from_source(
         return Err("PIP package must be a regular, non-symlink file".into());
     }
     parse_pip_filename(&path)?;
-    let package = Package::parse(
+    let package = Package::parse_with_policy(
         fs::read(&path).map_err(|error| format!("cannot read PIP package: {error}"))?,
+        policy,
     )?;
     validate_package_filename(&path, &package)?;
     Ok((path, package))
 }
 
-pub fn load_catalog_package(directory: &Path, file: &str) -> Result<(PathBuf, Package), String> {
+pub fn load_catalog_package(
+    directory: &Path,
+    file: &str,
+    policy: &PipIoPolicy,
+) -> Result<(PathBuf, Package), String> {
     load_catalog_package_from_source(
         &CatalogSource {
             origin: PackageOrigin::System,
@@ -138,6 +146,7 @@ pub fn load_catalog_package(directory: &Path, file: &str) -> Result<(PathBuf, Pa
             read_only: true,
         },
         file,
+        policy,
     )
 }
 
@@ -166,11 +175,12 @@ fn files_in(source: &CatalogSource) -> Result<Vec<String>, String> {
 pub fn catalog_entries_from_sources_with_trust(
     sources: &[CatalogSource],
     trusted: &BTreeSet<String>,
+    policy: &PipIoPolicy,
 ) -> Result<Vec<CatalogEntry>, String> {
     let mut entries = Vec::new();
     for source in sources {
         for file in files_in(source)? {
-            let entry = match load_catalog_package_from_source(source, &file) {
+            let entry = match load_catalog_package_from_source(source, &file, policy) {
                 Ok((_, package)) => {
                     let manifest = package.manifest_data();
                     let hash = sha256_hex(package.bytes());
@@ -179,7 +189,8 @@ pub fn catalog_entries_from_sources_with_trust(
                         origin: source.origin,
                         read_only: source.read_only,
                         installed: source.origin != PackageOrigin::Workspace,
-                        trusted_for_execution: source.origin == PackageOrigin::System || trusted.contains(&hash),
+                        trusted_for_execution: source.origin == PackageOrigin::System
+                            || trusted.contains(&hash),
                         valid: true,
                         package_id: Some(manifest.package_id.clone()),
                         layer: Some(manifest.layer.clone()),
@@ -202,22 +213,32 @@ pub fn catalog_entries_from_sources_with_trust(
     Ok(entries)
 }
 
-pub fn catalog_entries_from_sources(sources: &[CatalogSource]) -> Result<Vec<CatalogEntry>, String> {
-    catalog_entries_from_sources_with_trust(sources, &BTreeSet::new())
+pub fn catalog_entries_from_sources(
+    sources: &[CatalogSource],
+    policy: &PipIoPolicy,
+) -> Result<Vec<CatalogEntry>, String> {
+    catalog_entries_from_sources_with_trust(sources, &BTreeSet::new(), policy)
 }
 
-pub fn catalog_entries(directory: &Path) -> Result<Vec<CatalogEntry>, String> {
-    catalog_entries_from_sources(&[CatalogSource {
-        origin: PackageOrigin::System,
-        directory: directory.to_path_buf(),
-        read_only: true,
-    }])
+pub fn catalog_entries(
+    directory: &Path,
+    policy: &PipIoPolicy,
+) -> Result<Vec<CatalogEntry>, String> {
+    catalog_entries_from_sources(
+        &[CatalogSource {
+            origin: PackageOrigin::System,
+            directory: directory.to_path_buf(),
+            read_only: true,
+        }],
+        policy,
+    )
 }
 
 pub fn resolve_package_ref(
     sources: &[CatalogSource],
     reference: &PackageRef,
     expected_layer: Option<PipLayer>,
+    policy: &PipIoPolicy,
 ) -> Result<(PathBuf, Package), String> {
     if reference.origin == PackageOrigin::Workspace {
         return Err("runtime profiles cannot execute uninstalled workspace packages".into());
@@ -232,7 +253,7 @@ pub fn resolve_package_ref(
     let mut matches = Vec::new();
     for source in matching_sources {
         for file in files_in(source)? {
-            let Ok(loaded) = load_catalog_package_from_source(source, &file) else {
+            let Ok(loaded) = load_catalog_package_from_source(source, &file, policy) else {
                 continue;
             };
             let manifest = loaded.1.manifest_data();
@@ -253,33 +274,44 @@ pub fn resolve_package_ref(
     }
     let (path, package) = matches.into_iter().next().expect("one match");
     if expected_layer.is_some_and(|layer| package.manifest_data().layer != layer.key()) {
-        return Err(format!("package {} has the wrong layer", reference.package_id));
+        return Err(format!(
+            "package {} has the wrong layer",
+            reference.package_id
+        ));
     }
     Ok((path, package))
 }
 
-pub fn validate_runtime_profile(profile: &RuntimeProfile, sources: &[CatalogSource]) -> Result<(), String> {
+pub fn validate_runtime_profile(
+    profile: &RuntimeProfile,
+    sources: &[CatalogSource],
+    policy: &PipIoPolicy,
+) -> Result<(), String> {
     if profile.schema_version != 1 || profile.profile_id.is_empty() || profile.name.is_empty() {
         return Err("invalid runtime profile identity".into());
     }
-    resolve_package_ref(sources, &profile.loader, Some(PipLayer::Loader))?;
-    resolve_package_ref(sources, &profile.editor, Some(PipLayer::Editor))?;
+    resolve_package_ref(sources, &profile.loader, Some(PipLayer::Loader), policy)?;
+    resolve_package_ref(sources, &profile.editor, Some(PipLayer::Editor), policy)?;
     if let Some(seed) = &profile.seed {
-        resolve_package_ref(sources, seed, Some(PipLayer::Seed))?;
+        resolve_package_ref(sources, seed, Some(PipLayer::Seed), policy)?;
     }
     let mut providers = HashSet::new();
     for (capability, reference) in &profile.capabilities {
         if !providers.insert(capability) {
             return Err(format!("duplicate capability provider: {capability}"));
         }
-        let (_, package) = resolve_package_ref(sources, reference, Some(PipLayer::Functional))?;
+        let (_, package) =
+            resolve_package_ref(sources, reference, Some(PipLayer::Functional), policy)?;
         if !package
             .manifest_data()
             .provided_capabilities
             .iter()
             .any(|provided| provided == capability)
         {
-            return Err(format!("{} does not provide {capability}", reference.package_id));
+            return Err(format!(
+                "{} does not provide {capability}",
+                reference.package_id
+            ));
         }
     }
     Ok(())
@@ -289,17 +321,22 @@ pub fn load_default_editor_package(
     loader: &Package,
     sources: &[CatalogSource],
     force_selection: bool,
+    policy: &PipIoPolicy,
 ) -> Result<Option<Package>, String> {
     if force_selection {
         return Ok(None);
     }
-    let Some(asset) = loader.assets().iter().find(|asset| asset.path == "config.json") else {
+    let Some(asset) = loader
+        .assets()
+        .iter()
+        .find(|asset| asset.path == "config.json")
+    else {
         return Ok(None);
     };
     let Ok(config) = serde_json::from_slice::<LoaderConfig>(loader.asset_bytes(asset)) else {
         return Ok(None);
     };
-    let matches: Vec<_> = catalog_entries_from_sources(sources)?
+    let matches: Vec<_> = catalog_entries_from_sources(sources, policy)?
         .into_iter()
         .filter(|entry| {
             entry.valid
@@ -316,13 +353,15 @@ pub fn load_default_editor_package(
         .iter()
         .find(|source| source.origin == selected.origin)
         .ok_or("selected editor source disappeared")?;
-    load_catalog_package_from_source(source, &selected.file).map(|(_, package)| Some(package))
+    load_catalog_package_from_source(source, &selected.file, policy)
+        .map(|(_, package)| Some(package))
 }
 
 pub fn load_default_catalog_package(
     loader: &Package,
     directory: &Path,
     force_selection: bool,
+    policy: &PipIoPolicy,
 ) -> Result<Option<Package>, String> {
     load_default_editor_package(
         loader,
@@ -332,6 +371,7 @@ pub fn load_default_catalog_package(
             read_only: true,
         }],
         force_selection,
+        policy,
     )
 }
 
@@ -351,7 +391,8 @@ mod tests {
     }
 
     fn reference(source: &CatalogSource, file: &str) -> PackageRef {
-        let (_, package) = load_catalog_package_from_source(source, file).unwrap();
+        let (_, package) =
+            load_catalog_package_from_source(source, file, &PipIoPolicy::unlimited()).unwrap();
         let manifest = package.manifest_data();
         PackageRef {
             origin: source.origin,
@@ -380,9 +421,9 @@ mod tests {
                 reference(&capability, "a3_software_authoring_1_0_0_20260806.pip"),
             )]),
         };
-        validate_runtime_profile(&profile, &sources).unwrap();
+        validate_runtime_profile(&profile, &sources, &PipIoPolicy::unlimited()).unwrap();
         let mut changed = profile.clone();
         changed.editor.sha256 = "0".repeat(64);
-        assert!(validate_runtime_profile(&changed, &sources).is_err());
+        assert!(validate_runtime_profile(&changed, &sources, &PipIoPolicy::unlimited()).is_err());
     }
 }

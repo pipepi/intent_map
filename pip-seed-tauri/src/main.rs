@@ -1,11 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use pip_core::{
-    CatalogSource, Package, PackageOrigin, PipDiscovery, PipLayer, RuntimeProfile,
+    CatalogSource, Package, PackageOrigin, PipDiscovery, PipIoPolicy, PipLayer, RuntimeProfile,
     catalog_entries_from_sources_with_trust, discover_loader_pip, install_user_package,
     load_catalog_package_from_source, load_default_editor_package, load_runtime_profile,
-    resolve_package_ref, runtime_catalog_sources, save_runtime_profile, trust_hash, trusted_hashes, user_data_root,
-    validate_package_filename, validate_profile_trust, validate_runtime_profile,
+    resolve_package_ref, runtime_catalog_sources, save_runtime_profile, trust_hash, trusted_hashes,
+    user_data_root, validate_package_filename, validate_profile_trust, validate_runtime_profile,
 };
 use serde_json::json;
 use std::borrow::Cow;
@@ -23,6 +23,7 @@ struct RuntimeState {
     force_selection: bool,
     loader: pip_core::Manifest,
     profile: Option<RuntimeProfile>,
+    io_policy: PipIoPolicy,
     seed_source_sha: Option<&'static str>,
 }
 
@@ -33,19 +34,23 @@ enum OneShotCommand {
 
 fn parse_one_shot_command(args: &[String]) -> Result<Option<OneShotCommand>, String> {
     match args.first().map(String::as_str) {
-        Some("--verify") if args.len() == 2 => {
-            Ok(Some(OneShotCommand::Verify(PathBuf::from(&args[1]))))
-        }
-        Some("--verify") => Err("--verify requires exactly one PIP path".into()),
+        Some("--verify") => args
+            .get(1)
+            .filter(|path| !path.starts_with("--"))
+            .map(PathBuf::from)
+            .map(OneShotCommand::Verify)
+            .map(Some)
+            .ok_or("--verify requires a PIP path".into()),
         _ => Ok(None),
     }
 }
 
-fn run_one_shot(command: OneShotCommand) -> Result<(), String> {
+fn run_one_shot(command: OneShotCommand, policy: &PipIoPolicy) -> Result<(), String> {
     match command {
         OneShotCommand::Verify(path) => {
-            let package = Package::parse(
+            let package = Package::parse_with_policy(
                 fs::read(&path).map_err(|error| format!("cannot read PIP: {error}"))?,
+                policy,
             )?;
             validate_package_filename(&path, &package)
         }
@@ -101,16 +106,23 @@ fn seed_artifact(executable: &Path) -> PathBuf {
     }
 }
 
-fn resolve_loader(args: &[String], seed: &Path) -> Result<Option<PathBuf>, String> {
+fn resolve_loader(
+    args: &[String],
+    seed: &Path,
+    policy: &PipIoPolicy,
+) -> Result<Option<PathBuf>, String> {
     let explicit = argument_path(args, "--pip")?;
-    match discover_loader_pip(explicit.as_deref(), seed)? {
+    match discover_loader_pip(explicit.as_deref(), seed, policy)? {
         PipDiscovery::Selected(path) => Ok(Some(path)),
         PipDiscovery::NeedsSelection(_) => {
-            let directory = seed.parent().ok_or("Seed artifact has no parent")?.join("pip");
+            let directory = seed
+                .parent()
+                .ok_or("Seed artifact has no parent")?
+                .join("pip");
             let Some(path) = choose_loader(&directory)? else {
                 return Ok(None);
             };
-            match discover_loader_pip(Some(&path), seed)? {
+            match discover_loader_pip(Some(&path), seed, policy)? {
                 PipDiscovery::Selected(path) => Ok(Some(path)),
                 PipDiscovery::NeedsSelection(_) => unreachable!(),
             }
@@ -154,7 +166,11 @@ fn package_response(
     }
     if request.method() == Method::GET && raw_path == "/__pip/catalog" {
         return match trusted_hashes(&state.user_root).and_then(|trusted| {
-            catalog_entries_from_sources_with_trust(&state.sources, &trusted)
+            catalog_entries_from_sources_with_trust(
+                &state.sources,
+                &trusted,
+                &state.io_policy,
+            )
         }).and_then(|packages| {
             serde_json::to_vec(&json!({
                 "forceSelection": state.force_selection,
@@ -207,15 +223,22 @@ fn package_response(
                 Ok((origin, file))
             })
             .and_then(|(origin, file)| {
-                let package = state.sources.iter()
+                let package = state
+                    .sources
+                    .iter()
                     .filter(|source| source.origin == origin)
-                    .find_map(|source| load_catalog_package_from_source(source, &file).ok().map(|(_, package)| package))
+                    .find_map(|source| {
+                        load_catalog_package_from_source(source, &file, &state.io_policy)
+                            .ok()
+                            .map(|(_, package)| package)
+                    })
                     .ok_or_else(|| "activation package is unavailable".to_string())?;
                 if package.manifest_data().layer != "a2" {
                     return Err("only a2 editors can be activated".into());
                 }
                 if origin == PackageOrigin::User
-                    && !trusted_hashes(&state.user_root)?.contains(&pip_core::sha256_hex(package.bytes()))
+                    && !trusted_hashes(&state.user_root)?
+                        .contains(&pip_core::sha256_hex(package.bytes()))
                 {
                     return Err("user editor SHA is not trusted for execution".into());
                 }
@@ -241,28 +264,55 @@ fn package_response(
     if request.method() == Method::POST && raw_path == "/__pip/trust" {
         let result = serde_json::from_slice::<serde_json::Value>(request.body())
             .map_err(|error| format!("invalid trust request: {error}"))
-            .and_then(|value| value.get("sha256").and_then(|item| item.as_str())
-                .ok_or_else(|| "trust request requires sha256".to_string())
-                .and_then(|hash| trust_hash(&state.user_root, hash)));
+            .and_then(|value| {
+                value
+                    .get("sha256")
+                    .and_then(|item| item.as_str())
+                    .ok_or_else(|| "trust request requires sha256".to_string())
+                    .and_then(|hash| trust_hash(&state.user_root, hash))
+            });
         return match result {
             Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
-            Err(error) => response(StatusCode::BAD_REQUEST, "text/plain", error.into_bytes(), false),
+            Err(error) => response(
+                StatusCode::BAD_REQUEST,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
         };
     }
     if request.method() == Method::POST && raw_path == "/__pip/profiles" {
         let result = serde_json::from_slice::<RuntimeProfile>(request.body())
             .map_err(|error| format!("invalid runtime profile: {error}"))
-            .and_then(|profile| save_runtime_profile(&state.user_root, &profile, &state.sources).map(|_| ()));
+            .and_then(|profile| {
+                save_runtime_profile(&state.user_root, &profile, &state.sources, &state.io_policy)
+                    .map(|_| ())
+            });
         return match result {
             Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
-            Err(error) => response(StatusCode::BAD_REQUEST, "text/plain", error.into_bytes(), false),
+            Err(error) => response(
+                StatusCode::BAD_REQUEST,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
         };
     }
     if request.method() == Method::POST {
         if let Some(file) = raw_path.strip_prefix("/__pip/install/") {
-            return match install_user_package(&state.user_root, file, request.body()) {
+            return match install_user_package(
+                &state.user_root,
+                file,
+                request.body(),
+                &state.io_policy,
+            ) {
                 Ok(_) => response(StatusCode::CREATED, "text/plain", Vec::new(), false),
-                Err(error) => response(StatusCode::BAD_REQUEST, "text/plain", error.into_bytes(), false),
+                Err(error) => response(
+                    StatusCode::BAD_REQUEST,
+                    "text/plain",
+                    error.into_bytes(),
+                    false,
+                ),
             };
         }
     }
@@ -277,20 +327,48 @@ fn package_response(
     let head_only = request.method() == Method::HEAD;
     if let Some(rest) = raw_path.strip_prefix("/__pip/packages/") {
         let Some((origin, file)) = rest.split_once('/') else {
-            return response(StatusCode::BAD_REQUEST, "text/plain", b"package path requires origin and file".to_vec(), head_only);
+            return response(
+                StatusCode::BAD_REQUEST,
+                "text/plain",
+                b"package path requires origin and file".to_vec(),
+                head_only,
+            );
         };
         let origin = match origin {
             "system" => PackageOrigin::System,
             "user" => PackageOrigin::User,
             "workspace" => PackageOrigin::Workspace,
-            _ => return response(StatusCode::BAD_REQUEST, "text/plain", b"invalid package origin".to_vec(), head_only),
+            _ => {
+                return response(
+                    StatusCode::BAD_REQUEST,
+                    "text/plain",
+                    b"invalid package origin".to_vec(),
+                    head_only,
+                );
+            }
         };
-        let package = state.sources.iter()
+        let package = state
+            .sources
+            .iter()
             .filter(|source| source.origin == origin)
-            .find_map(|source| load_catalog_package_from_source(source, file).ok().map(|(_, package)| package));
+            .find_map(|source| {
+                load_catalog_package_from_source(source, file, &state.io_policy)
+                    .ok()
+                    .map(|(_, package)| package)
+            });
         return match package {
-            Some(package) => response(StatusCode::OK, "application/vnd.intent-map.pip", package.bytes().to_vec(), head_only),
-            None => response(StatusCode::NOT_FOUND, "text/plain", b"package not found".to_vec(), head_only),
+            Some(package) => response(
+                StatusCode::OK,
+                "application/vnd.intent-map.pip",
+                package.bytes().to_vec(),
+                head_only,
+            ),
+            None => response(
+                StatusCode::NOT_FOUND,
+                "text/plain",
+                b"package not found".to_vec(),
+                head_only,
+            ),
         };
     }
     let package = match state.package.read() {
@@ -345,33 +423,42 @@ fn package_response(
     }
 }
 
-fn run(args: &[String]) -> Result<(), String> {
+fn run(args: &[String], policy: PipIoPolicy) -> Result<(), String> {
     let executable =
         env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
     let seed = seed_artifact(&executable);
-    let system_directory = seed.parent().ok_or("Seed artifact has no parent")?.join("pip");
+    let system_directory = seed
+        .parent()
+        .ok_or("Seed artifact has no parent")?
+        .join("pip");
     let user_root = user_data_root()?;
     let sources = runtime_catalog_sources(&system_directory, &user_root);
     let profile: Option<RuntimeProfile> = argument_string(args, "--profile")?
         .map(|profile_id| load_runtime_profile(&user_root, &profile_id))
         .transpose()?;
     if let Some(profile) = &profile {
-        validate_runtime_profile(profile, &sources)?;
+        validate_runtime_profile(profile, &sources, &policy)?;
         validate_profile_trust(profile, &trusted_hashes(&user_root)?)?;
     }
-    let loader_from_profile = profile.as_ref()
-        .map(|profile| resolve_package_ref(&sources, &profile.loader, Some(PipLayer::Loader)))
+    let loader_from_profile = profile
+        .as_ref()
+        .map(|profile| {
+            resolve_package_ref(&sources, &profile.loader, Some(PipLayer::Loader), &policy)
+        })
         .transpose()?
         .map(|(path, _)| path);
-    let Some(loader_path) = (if argument_path(args, "--pip")?.is_some() || loader_from_profile.is_none() {
-        resolve_loader(args, &seed)?
-    } else {
-        loader_from_profile
-    }) else {
+    let Some(loader_path) =
+        (if argument_path(args, "--pip")?.is_some() || loader_from_profile.is_none() {
+            resolve_loader(args, &seed, &policy)?
+        } else {
+            loader_from_profile
+        })
+    else {
         return Ok(());
     };
-    let package = Package::parse(
+    let package = Package::parse_with_policy(
         fs::read(&loader_path).map_err(|error| format!("cannot read PIP: {error}"))?,
+        &policy,
     )?;
     if !package
         .assets()
@@ -384,8 +471,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let force_selection = args.iter().any(|argument| argument == "--select-editor");
     let explicit_editor = argument_path(args, "--editor")?
         .map(|path| {
-            let bytes = fs::read(&path).map_err(|error| format!("cannot read editor PIP: {error}"))?;
-            let editor = Package::parse(bytes)?;
+            let bytes =
+                fs::read(&path).map_err(|error| format!("cannot read editor PIP: {error}"))?;
+            let editor = Package::parse_with_policy(bytes, &policy)?;
             validate_package_filename(&path, &editor)?;
             if editor.manifest_data().layer != "a2" {
                 return Err::<Package, String>("--editor requires an a2 PIP".into());
@@ -393,15 +481,19 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(editor)
         })
         .transpose()?;
-    let profile_editor = profile.as_ref()
-        .map(|profile| resolve_package_ref(&sources, &profile.editor, Some(PipLayer::Editor)).map(|(_, package)| package))
+    let profile_editor = profile
+        .as_ref()
+        .map(|profile| {
+            resolve_package_ref(&sources, &profile.editor, Some(PipLayer::Editor), &policy)
+                .map(|(_, package)| package)
+        })
         .transpose()?;
     let package = if force_selection {
         package
     } else if let Some(editor) = explicit_editor.or(profile_editor) {
         editor
     } else {
-        load_default_editor_package(&package, &sources, false)?.unwrap_or(package)
+        load_default_editor_package(&package, &sources, false, &policy)?.unwrap_or(package)
     };
     let state = Arc::new(RuntimeState {
         package: RwLock::new(package),
@@ -410,6 +502,7 @@ fn run(args: &[String]) -> Result<(), String> {
         force_selection,
         loader,
         profile,
+        io_policy: policy,
         seed_source_sha: option_env!("PIP_SEED_SOURCE_SHA"),
     });
     let protocol_state = Arc::clone(&state);
@@ -463,9 +556,16 @@ fn show_fatal(message: &str) {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    let parsed_policy = match PipIoPolicy::from_cli_args(&args) {
+        Ok(policy) => policy,
+        Err(error) => {
+            show_fatal(&error);
+            std::process::exit(1);
+        }
+    };
     match parse_one_shot_command(&args) {
         Ok(Some(command)) => {
-            if let Err(error) = run_one_shot(command) {
+            if let Err(error) = run_one_shot(command, &parsed_policy) {
                 show_fatal(&error);
                 std::process::exit(1);
             }
@@ -475,7 +575,22 @@ fn main() {
             std::process::exit(1);
         }
         Ok(None) => {
-            if let Err(error) = run(&args) {
+            let mut policy = parsed_policy;
+            if policy.requires_confirmation() {
+                let accepted = rfd::MessageDialog::new()
+                    .set_level(rfd::MessageLevel::Warning)
+                    .set_title("PIP 容量策略")
+                    .set_description(
+                        "当前没有完整的本机 PIP 容量配置。是否仅在本次启动中允许包的容量请求？",
+                    )
+                    .set_buttons(rfd::MessageButtons::YesNo)
+                    .show();
+                if accepted != rfd::MessageDialogResult::Yes {
+                    return;
+                }
+                policy.allow_asked();
+            }
+            if let Err(error) = run(&args, policy) {
                 show_fatal(&error);
                 std::process::exit(1);
             }

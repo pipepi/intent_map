@@ -300,10 +300,6 @@ fn parse_assets(section: &[u8], base: usize, policy: &PipIoPolicy) -> Result<Vec
 }
 
 impl Package {
-    pub fn parse(bytes: Vec<u8>) -> Result<Self, String> {
-        Self::parse_with_policy(bytes, &PipIoPolicy::unlimited())
-    }
-
     pub fn parse_with_policy(bytes: Vec<u8>, policy: &PipIoPolicy) -> Result<Self, String> {
         policy.authorize("maxPipBytes", &policy.max_pip_bytes, bytes.len() as u64)?;
         if bytes.len() < HEADER_SIZE {
@@ -457,9 +453,11 @@ mod tests {
 
     #[test]
     fn reads_typescript_fixed_vector() {
-        let package =
-            Package::parse(include_bytes!("../../tests/fixtures/minimal-valid.pip").to_vec())
-                .expect("TypeScript fixture must be a valid PIP");
+        let package = Package::parse_with_policy(
+            include_bytes!("../../tests/fixtures/minimal-valid.pip").to_vec(),
+            &PipIoPolicy::unlimited(),
+        )
+        .expect("TypeScript fixture must be a valid PIP");
         assert_eq!(package.assets().len(), 1);
         assert_eq!(package.assets()[0].path, "index.html");
         assert_eq!(package.asset_bytes(&package.assets()[0]), b"<h1>PIP</h1>");
