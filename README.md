@@ -10,6 +10,9 @@ Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应�
 
 完整的系统定位、递归 PIP 架构、软件开发能力、Crypto 交易所案例与可选 MCP 接入参见：[Intent Map：方案与产品定位](doc/intent_map_position.md)。
 
+当前 a2/a3 边界、拆分资源工作区、Bundle 与可配置容量策略的长期实施进度参见：
+[a2/a3 Workspace Refactor Execution Ledger](doc/a2_a3_workspace_execution.md)。
+
 ## Implementation
 
 A clean full-stack starter running on

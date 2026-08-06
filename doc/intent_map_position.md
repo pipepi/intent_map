@@ -2,6 +2,8 @@
 
 [← 返回项目 README](../README.md)
 
+[a2/a3 Workspace Refactor 执行台账](a2_a3_workspace_execution.md)
+
 ## 总体定位
 
 Intent Map 是系统默认提供的业务无关分形节点编辑器。a2 是可扩展的通用编辑器
