@@ -1,4 +1,9 @@
-import type { PipManifest, PipPackage, PipPackageRef, PipRuntimeProfile } from "./pip";
+import type {
+  PipManifest,
+  PipPackage,
+  PipPackageRef,
+  PipRuntimeProfile,
+} from "../../app/runtime/pip";
 
 export const PIP_CAPABILITY_ABI = "pip-capability/1" as const;
 

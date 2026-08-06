@@ -7,7 +7,7 @@ import {
   capabilitySource,
   PipCapabilityWorker,
   resolveCapabilitySet,
-} from "../runtime/pip-capabilities";
+} from "../../a3/core/pip-capabilities";
 import { readHostCatalog, readHostPackage } from "../runtime/pip-host-client";
 import { decodePip, type PipPackageRef } from "../runtime/pip";
 import { entryMatchesRef } from "../runtime/pip-profile";

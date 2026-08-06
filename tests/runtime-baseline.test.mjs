@@ -9,7 +9,7 @@ import {
 import {
   assertCapabilityProvider,
   resolveCapabilitySet,
-} from "../app/runtime/pip-capabilities.ts";
+} from "../a3/core/pip-capabilities.ts";
 import {
   compatibleEditors,
   entryMatchesRef,

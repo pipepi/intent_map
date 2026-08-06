@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { compatibleEditors, resolveExactEditor } from "../app/runtime/pip-profile.ts";
-import { resolveCapabilitySet } from "../app/runtime/pip-capabilities.ts";
+import { resolveCapabilitySet } from "../a3/core/pip-capabilities.ts";
 
 const reference = {
   origin: "user",
