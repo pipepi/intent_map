@@ -38,10 +38,10 @@ export const createSampleBusinessRoot = (): IntentNode => {
       operator: "object",
     },
     {
-      id: "ui_consensus",
-      name: "场景匹配的 UI Demo 与流程共识",
+      id: "scenario_constraints",
+      name: "场景约束与业务不变量",
       description:
-        "基于业务场景形成可交互 UI Demo，使需求方与实现方确认业务处理流程。",
+        "记录场景必须满足的边界、禁止条件以及跨步骤保持成立的业务事实。",
       position: { x: 450, y: 360 },
       inputs: [
         {
@@ -56,58 +56,58 @@ export const createSampleBusinessRoot = (): IntentNode => {
         },
       ],
       output: {
-        id: "demo_consensus",
-        name: "UI Demo 与流程共识",
+        id: "constraint_spec",
+        name: "约束与不变量",
         type: "object" as const,
       },
       operator: "identity",
     },
     {
-      id: "database_schema",
-      name: "业务流程匹配的数据库表结构",
+      id: "decision_boundaries",
+      name: "关键决策与例外边界",
       description:
-        "根据已确认的业务流程和约束抽象实体、关系、状态与审计字段。",
+        "明确主流程中的业务判断、允许的例外以及需要由人确认的边界。",
       position: { x: 710, y: 150 },
       inputs: [
         {
           id: "consensus",
-          name: "流程共识",
+          name: "场景约束",
           type: "object" as const,
           binding: {
             kind: "ref" as const,
-            nodeId: "ui_consensus",
-            portId: "demo_consensus",
+            nodeId: "scenario_constraints",
+            portId: "constraint_spec",
           },
         },
       ],
       output: {
-        id: "schema_model",
-        name: "数据库表结构",
+        id: "decision_spec",
+        name: "决策与例外",
         type: "object" as const,
       },
       operator: "object",
     },
     {
-      id: "business_api",
-      name: "基于表结构的业务逻辑与 UI API",
+      id: "success_outcomes",
+      name: "成功结果与验收信号",
       description:
-        "依据表结构实现确定性的业务处理逻辑，并输出 UI 所需 API 契约。",
+        "描述业务流完成后的可观察结果、失败信号以及利益相关方的验收条件。",
       position: { x: 970, y: 360 },
       inputs: [
         {
-          id: "schema",
-          name: "数据库结构",
+          id: "decisions",
+          name: "决策边界",
           type: "object" as const,
           binding: {
             kind: "ref" as const,
-            nodeId: "database_schema",
-            portId: "schema_model",
+            nodeId: "decision_boundaries",
+            portId: "decision_spec",
           },
         },
       ],
       output: {
-        id: "api_contract",
-        name: "业务逻辑与 UI API",
+        id: "intent_contract",
+        name: "核心业务意图契约",
         type: "object" as const,
       },
       operator: "identity",
@@ -163,9 +163,9 @@ export const createSampleBusinessRoot = (): IntentNode => {
 
   return {
     id: "business_root",
-    name: "Agentic 软件开发框架",
+    name: "核心业务意图",
     description:
-      "从核心场景共识出发，依次形成 UI Demo、数据库表结构以及可供 UI 使用的业务 API。",
+      "只组织业务核心流动场景、约束、关键决策与成功结果，不规定任何外树实现。",
     kind: "composite",
     inputs: [
       { id: "product_goal", name: "产品目标", type: "string" },
@@ -174,13 +174,13 @@ export const createSampleBusinessRoot = (): IntentNode => {
     ],
     outputs: [
       {
-        id: "delivery_blueprint",
-        name: "可实施软件交付蓝图",
+        id: "business_intent",
+        name: "核心业务意图契约",
         type: "object",
         binding: {
           kind: "ref",
-          nodeId: "business_api",
-          portId: "api_contract",
+          nodeId: "success_outcomes",
+          portId: "intent_contract",
         },
       },
     ],

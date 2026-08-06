@@ -290,8 +290,8 @@ test("keeps projection command addresses isolated between panels", () => {
   document = updatePanel(document, "panel-free-layout", (panel) => ({
     ...panel,
     selection: {
-      nodeIds: ["database_schema"],
-      primaryNodeId: "database_schema",
+      nodeIds: ["decision_boundaries"],
+      primaryNodeId: "decision_boundaries",
       revision: 1,
     },
   }));
@@ -308,7 +308,7 @@ test("keeps projection command addresses isolated between panels", () => {
   ).commandContext;
 
   assert.equal(workbench.subjectNodeId, "scenario_flow");
-  assert.equal(freeLayout.subjectNodeId, "database_schema");
+  assert.equal(freeLayout.subjectNodeId, "decision_boundaries");
   assert.notEqual(workbench.panelId, freeLayout.panelId);
 });
 
