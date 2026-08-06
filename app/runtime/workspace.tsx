@@ -22,6 +22,7 @@ import type {
   SurfaceInstance,
   WorkspaceState,
 } from "./model";
+
 import {
   NodeProjection,
   PortRegionToggle,
@@ -60,6 +61,11 @@ import {
   removeWorkspacePanel,
   scopeCameraKey,
 } from "./model";
+
+const workspaceUid = (prefix: string) =>
+  `${prefix}_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
 
 type WorkspaceProps = {
   document: IntentDocumentV3;
@@ -517,11 +523,6 @@ export function Workspace({
     document.rootIntent,
     "current_container",
   );
-  const workspaceUid = (prefix: string) =>
-    `${prefix}_${Date.now().toString(36)}_${Math.random()
-      .toString(36)
-      .slice(2, 6)}`;
-
   const duplicateActivePanel = () => {
     const source = document.workspaceState.panels.find(
       (panel) => panel.id === effectivePanelId,
