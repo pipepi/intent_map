@@ -4,6 +4,7 @@ import path from "node:path";
 export const projectRoot = path.resolve(import.meta.dirname, "..");
 export const runtimeDirectory = path.join(projectRoot, "dist", "pip-runtime");
 export const applicationDirectory = path.join(runtimeDirectory, "pip");
+export const systemPackagesDirectory = path.join(projectRoot, "packages", "system");
 
 const artifactPattern = /^[a-z][a-z0-9_]*$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -19,17 +20,24 @@ const validDate = (value) => {
 
 export const readReleaseConfig = async () => {
   const config = JSON.parse(await readFile(path.join(projectRoot, "pip.release.json"), "utf8"));
-  Object.entries(config).forEach(([key, value]) => {
+  Object.entries(config).filter(([, value]) => value?.layer).forEach(([key, value]) => {
     if (!/^a[0-5]$/.test(value.layer)) throw new Error(`${key}: invalid layer`);
     if (!artifactPattern.test(value.artifactName)) throw new Error(`${key}: invalid artifactName`);
     if (!versionPattern.test(value.version)) throw new Error(`${key}: invalid version`);
     if (!validDate(value.releaseDate)) throw new Error(`${key}: invalid releaseDate`);
-    if (value.layer !== "a0" && (!value.packageId || !value.name)) {
+    if (!value.nativeOnly && (!value.packageId || !value.name)) {
       throw new Error(`${key}: PIP metadata requires packageId and name`);
     }
   });
   return config;
 };
+
+export const systemPackagePath = (release) => path.join(
+  systemPackagesDirectory,
+  release.layer,
+  release.packageId,
+  artifactFilename(release),
+);
 
 export const artifactFilename = (release, extension = "pip") => {
   const version = release.version.replaceAll(".", "_");

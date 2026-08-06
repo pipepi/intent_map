@@ -6,7 +6,7 @@ import { artifactFilename, projectRoot, readReleaseConfig, runtimeDirectory } fr
 const release = (await readReleaseConfig()).loader;
 const result = spawnSync("cargo", [
   "run", "--manifest-path", path.join(projectRoot, "pip-seed-tauri", "Cargo.toml"), "--",
-  "--pip", path.join(runtimeDirectory, artifactFilename(release)),
+  "--pip", path.join(runtimeDirectory, "pip", artifactFilename(release)),
   ...process.argv.slice(2),
 ], { cwd: projectRoot, stdio: "inherit" });
 process.exit(result.status ?? 1);

@@ -37,7 +37,17 @@ pub struct Manifest {
     pub release_date: String,
     pub root_node_id: String,
     pub loader_abi: String,
+    pub artifact_role: String,
+    pub editor_abi: Option<String>,
+    pub provided_editor_kinds: Vec<String>,
+    pub supported_document_kinds: Vec<String>,
+    pub preferred_editor_kinds: Vec<String>,
+    pub required_editor_capabilities: Vec<String>,
+    pub provided_capabilities: Vec<String>,
     pub required_capabilities: Vec<String>,
+    pub required_authoring_capabilities: Vec<String>,
+    pub authoring_kind: Option<String>,
+    pub authoring_compiler: Option<String>,
     pub created_at: String,
     pub content_type: String,
 }
@@ -167,12 +177,55 @@ impl Package {
         crate::PipLayer::parse(&manifest.layer)?;
         crate::Version::parse(&manifest.package_version)?;
         crate::ReleaseDate::parse(&manifest.release_date)?;
+        let valid_capability = |value: &str| {
+            let Some((name, version)) = value.rsplit_once('/') else {
+                return false;
+            };
+            !name.is_empty()
+                && name.bytes().next().is_some_and(|byte| byte.is_ascii_lowercase())
+                && name.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || matches!(byte, b'.' | b'-')
+                })
+                && !version.is_empty()
+                && !version.starts_with('0')
+                && version.bytes().all(|byte| byte.is_ascii_digit())
+        };
+        let layer = crate::PipLayer::parse(&manifest.layer)?;
         if manifest.package_id.is_empty()
             || manifest.artifact_name.is_empty()
             || manifest.name.is_empty()
             || manifest.root_node_id.is_empty()
             || manifest.loader_abi != "pip-loader/1"
+            || !matches!(
+                manifest.artifact_role.as_str(),
+                "authoring-source" | "runtime" | "source-and-runtime"
+            )
             || manifest.content_type != "application/vnd.intent-map.pip"
+            || manifest
+                .provided_editor_kinds
+                .iter()
+                .chain(&manifest.supported_document_kinds)
+                .chain(&manifest.preferred_editor_kinds)
+                .chain(&manifest.required_editor_capabilities)
+                .chain(&manifest.provided_capabilities)
+                .chain(&manifest.required_capabilities)
+                .chain(&manifest.required_authoring_capabilities)
+                .any(|value| value.is_empty())
+            || manifest.authoring_kind.as_deref().is_some_and(str::is_empty)
+            || manifest.authoring_compiler.as_deref().is_some_and(str::is_empty)
+            || manifest
+                .provided_capabilities
+                .iter()
+                .chain(&manifest.required_authoring_capabilities)
+                .any(|value| !valid_capability(value))
+            || (layer == crate::PipLayer::Editor
+                && (manifest.editor_abi.as_deref() != Some("pip-editor/1")
+                    || manifest.provided_editor_kinds.is_empty()))
+            || (layer != crate::PipLayer::Editor && manifest.editor_abi.is_some())
+            || (layer == crate::PipLayer::Functional
+                && manifest.provided_capabilities.is_empty())
         {
             return Err("invalid PIP manifest fields".into());
         }

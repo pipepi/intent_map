@@ -31,7 +31,9 @@ import {
   DEFAULT_PIP_LOADER_SOURCE,
   decodePip,
   encodePip,
-  runPipLoader,
+  pipSha256,
+  type PipAsset,
+  type PipManifest,
 } from "../runtime/pip";
 
 import { freePanelContext } from "./tree-utils";
@@ -57,7 +59,16 @@ export interface DocumentIODeps {
   /** 标记文档为干净（导出成功后） */
   markClean: () => void;
   setToast: (message: string) => void;
+  pipProject: PipProjectSession | null;
+  setPipProject: (project: PipProjectSession | null) => void;
 }
+
+export type PipProjectSession = {
+  manifest: PipManifest;
+  loaderSource: string;
+  assets: PipAsset[];
+  sourceHash: string;
+};
 
 export interface DocumentIOOps {
   applyLoadedDocument: (loaded: IntentDocumentV3) => void;
@@ -78,6 +89,8 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
     setNavigationStack,
     markClean,
     setToast,
+    pipProject,
+    setPipProject,
   } = deps;
 
   const applyLoadedDocument = (loaded: IntentDocumentV3) => {
@@ -94,8 +107,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
     try {
       const now = new Date();
       const releaseDate = now.toISOString().slice(0, 10).replaceAll("-", "");
-      const bytes = await encodePip({
-        manifest: {
+      const fallbackManifest: PipManifest = {
           packageId: "intent-map.document",
           layer: "a5",
           artifactName: "intent_map_document",
@@ -104,13 +116,26 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
           releaseDate,
           rootNodeId: documentState.rootIntent.id,
           loaderAbi: "pip-loader/1",
+          artifactRole: "runtime",
+          providedEditorKinds: [],
+          supportedDocumentKinds: [],
+          preferredEditorKinds: ["tree-map/1"],
+          requiredEditorCapabilities: ["intent-document/3"],
+          providedCapabilities: [],
           requiredCapabilities: [],
+          requiredAuthoringCapabilities: [],
+          authoringKind: "intent-document/1",
           createdAt: now.toISOString(),
           contentType: "application/vnd.intent-map.pip",
-        },
-        loaderSource: DEFAULT_PIP_LOADER_SOURCE,
+        };
+      const bytes = await encodePip({
+        manifest: pipProject ? {
+          ...pipProject.manifest,
+          rootNodeId: documentState.rootIntent.id,
+        } : fallbackManifest,
+        loaderSource: pipProject?.loaderSource ?? DEFAULT_PIP_LOADER_SOURCE,
         rootTreeText: serializeIntentDocument(documentState),
-        assets: [],
+        assets: pipProject?.assets ?? [],
       });
       downloadBytes(
         `a5_intent_map_document_0_1_0_${releaseDate}.pip`,
@@ -126,23 +151,17 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
 
   const loadPipBytes = async (
     bytes: ArrayBuffer,
-    requireConfirmation: boolean,
+    requireConfirmation?: boolean,
   ): Promise<IntentDocumentV3> => {
+    void requireConfirmation;
     const pip = await decodePip(bytes);
-    if (
-      requireConfirmation &&
-      !window.confirm(
-        `“${pip.manifest.name}”包含 JavaScript Loader。SHA-256 只能验证完整性，不能证明发布者可信。是否在隔离 Worker 中运行？`,
-      )
-    ) {
-      throw new Error("用户取消运行 PIP Loader");
-    }
-    const parsed = await runPipLoader(
-      pip.loaderSource,
-      pip.manifest,
-      pip.rootTreeText,
-    );
-    return loadIntentDocument(parsed);
+    setPipProject({
+      manifest: pip.manifest,
+      loaderSource: pip.loaderSource,
+      assets: pip.assets,
+      sourceHash: await pipSha256(new Uint8Array(bytes)),
+    });
+    return loadIntentDocument(JSON.parse(pip.rootTreeText) as unknown);
   };
 
   const importDocument = async (event: ChangeEvent<HTMLInputElement>) => {

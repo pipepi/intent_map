@@ -1,4 +1,8 @@
-use pip_core::{Package, catalog_entries, load_catalog_package, load_default_catalog_package};
+use pip_core::{
+    CatalogSource, Package, PackageOrigin, RuntimeProfile, catalog_entries_from_sources_with_trust,
+    install_user_package, load_catalog_package_from_source, load_default_editor_package,
+    save_runtime_profile, trust_hash, trusted_hashes,
+};
 use serde_json::json;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -8,9 +12,11 @@ use std::time::Duration;
 
 struct RuntimeState {
     package: RwLock<Package>,
-    applications: PathBuf,
+    sources: Vec<CatalogSource>,
+    user_root: PathBuf,
     force_selection: bool,
     loader: pip_core::Manifest,
+    profile: Option<RuntimeProfile>,
 }
 
 fn response(
@@ -48,9 +54,12 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
     if size == request_bytes.len() {
         return Err("HTTP request exceeds limit".into());
     }
-    let request =
-        std::str::from_utf8(&request_bytes[..size]).map_err(|_| "HTTP request is not UTF-8")?;
-    let (headers, body) = request.split_once("\r\n\r\n").unwrap_or((request, ""));
+    let request = &request_bytes[..size];
+    let header_end = request.windows(4).position(|window| window == b"\r\n\r\n")
+        .unwrap_or(request.len());
+    let headers = std::str::from_utf8(&request[..header_end])
+        .map_err(|_| "HTTP headers are not UTF-8")?;
+    let body = if header_end + 4 <= request.len() { &request[header_end + 4..] } else { &[] };
     let first_line = headers.lines().next().ok_or("empty HTTP request")?;
     let mut parts = first_line.split_whitespace();
     let method = parts.next().ok_or("missing method")?;
@@ -93,7 +102,8 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
         return Ok(());
     }
     if method == "GET" && raw_path == "/__pip/catalog" {
-        let apps = catalog_entries(&state.applications)?;
+        let trusted = trusted_hashes(&state.user_root)?;
+        let packages = catalog_entries_from_sources_with_trust(&state.sources, &trusted)?;
         let payload = serde_json::to_vec(&json!({
             "forceSelection": state.force_selection,
             "loader": {
@@ -102,7 +112,8 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
                 "packageVersion": state.loader.package_version,
                 "releaseDate": state.loader.release_date,
             },
-            "apps": apps,
+            "profile": state.profile,
+            "packages": packages,
         }))
         .map_err(|error| error.to_string())?;
         response(
@@ -117,13 +128,29 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
         return Ok(());
     }
     if method == "POST" && raw_path == "/__pip/activate" {
-        let value: serde_json::Value = serde_json::from_str(body)
+        let value: serde_json::Value = serde_json::from_slice(body)
             .map_err(|error| format!("invalid activation request: {error}"))?;
         let file = value
             .get("file")
             .and_then(|value| value.as_str())
             .ok_or("activation request requires file")?;
-        let (_, package) = load_catalog_package(&state.applications, file)?;
+        let origin = match value.get("origin").and_then(|value| value.as_str()) {
+            Some("system") => PackageOrigin::System,
+            Some("user") => PackageOrigin::User,
+            _ => return Err("activation request requires system or user origin".into()),
+        };
+        let package = state.sources.iter()
+            .filter(|source| source.origin == origin)
+            .find_map(|source| load_catalog_package_from_source(source, file).ok().map(|(_, package)| package))
+            .ok_or("activation package is unavailable")?;
+        if package.manifest_data().layer != "a2" {
+            return Err("only a2 editors can be activated".into());
+        }
+        if origin == PackageOrigin::User
+            && !trusted_hashes(&state.user_root)?.contains(&pip_core::sha256_hex(package.bytes()))
+        {
+            return Err("user editor SHA is not trusted for execution".into());
+        }
         *state.package.write().map_err(|_| "package lock poisoned")? = package;
         response(
             &mut stream,
@@ -135,6 +162,32 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
         )
         .map_err(|error| error.to_string())?;
         return Ok(());
+    }
+    if method == "POST" && raw_path == "/__pip/trust" {
+        let value: serde_json::Value = serde_json::from_slice(body)
+            .map_err(|error| format!("invalid trust request: {error}"))?;
+        let hash = value.get("sha256").and_then(|item| item.as_str())
+            .ok_or("trust request requires sha256")?;
+        trust_hash(&state.user_root, hash)?;
+        response(&mut stream, "204 No Content", "text/plain", b"", false, None)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    if method == "POST" && raw_path == "/__pip/profiles" {
+        let profile: RuntimeProfile = serde_json::from_slice(body)
+            .map_err(|error| format!("invalid runtime profile: {error}"))?;
+        save_runtime_profile(&state.user_root, &profile, &state.sources)?;
+        response(&mut stream, "204 No Content", "text/plain", b"", false, None)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    if method == "POST" {
+        if let Some(file) = raw_path.strip_prefix("/__pip/install/") {
+            install_user_package(&state.user_root, file, body)?;
+            response(&mut stream, "201 Created", "text/plain", b"", false, None)
+                .map_err(|error| error.to_string())?;
+            return Ok(());
+        }
     }
     if !matches!(method, "GET" | "HEAD") {
         response(
@@ -149,6 +202,26 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
         return Ok(());
     }
     let head_only = method == "HEAD";
+    if let Some(rest) = raw_path.strip_prefix("/__pip/packages/") {
+        let (origin, file) = rest.split_once('/').ok_or("package path requires origin and file")?;
+        let origin = match origin {
+            "system" => PackageOrigin::System,
+            "user" => PackageOrigin::User,
+            "workspace" => PackageOrigin::Workspace,
+            _ => return Err("invalid package origin".into()),
+        };
+        let package = state.sources.iter()
+            .filter(|source| source.origin == origin)
+            .find_map(|source| load_catalog_package_from_source(source, file).ok().map(|(_, package)| package));
+        if let Some(package) = package {
+            response(&mut stream, "200 OK", "application/vnd.intent-map.pip", package.bytes(), head_only, None)
+                .map_err(|error| error.to_string())?;
+        } else {
+            response(&mut stream, "404 Not Found", "text/plain", b"package not found", head_only, None)
+                .map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
     let package = state.package.read().map_err(|_| "package lock poisoned")?;
     if raw_path == "/__pip/package" {
         response(
@@ -204,7 +277,10 @@ fn handle(mut stream: TcpStream, state: &RuntimeState, token: &str) -> Result<()
 
 pub fn serve(
     package: Package,
-    applications: PathBuf,
+    sources: Vec<CatalogSource>,
+    user_root: PathBuf,
+    selected_editor: Option<Package>,
+    profile: Option<RuntimeProfile>,
     force_selection: bool,
     token: String,
     open: bool,
@@ -217,13 +293,20 @@ pub fn serve(
         return Err("PIP package has no index.html asset".into());
     }
     let loader = package.manifest_data().clone();
-    let package =
-        load_default_catalog_package(&package, &applications, force_selection)?.unwrap_or(package);
+    let package = if force_selection {
+        package
+    } else if let Some(editor) = selected_editor {
+        editor
+    } else {
+        load_default_editor_package(&package, &sources, false)?.unwrap_or(package)
+    };
     let state = Arc::new(RuntimeState {
         package: RwLock::new(package),
-        applications,
+        sources,
+        user_root,
         force_selection,
         loader,
+        profile,
     });
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|error| error.to_string())?;
     let address = listener.local_addr().map_err(|error| error.to_string())?;

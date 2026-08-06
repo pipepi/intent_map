@@ -4,7 +4,9 @@
 
 ## 定位
 
-Software Authoring 是运行在 Intent Map 上的一组可选业务节点能力，可作为 `software_authoring.pip` 独立实现和分发。
+Software Authoring 是默认系统 a3 之一，通过 `software-authoring/1` 提供源码、
+构建、测试和发布能力。a3 是可组合的业务无关能力类别，不限于 Software
+Authoring；数据库设计、API 设计、Bevy 画布和测试生成都可以由不同 a3 提供。
 
 它不属于 Intent Map 内核，也不依赖 Agent。其核心价值是通过分形边界、逐层披露和局部填充，让人获得对软件开发复杂度的掌控力。
 
@@ -89,6 +91,12 @@ UI、DB Tables、API 和代码等是内树的可选投影：
 Intent Map：怎样编辑节点应用
 Software Authoring：怎样用节点掌控软件开发复杂度
 ```
+
+用户 Runtime Profile 指定的 a3 提供者优先于系统默认。一个能力 ABI 只能有
+一个主提供者；不同能力可以由多个隔离 Worker 同时提供。缺失或崩溃的能力
+只禁用相关编辑面，不影响基础节点编辑。
+
+[查看多编辑器、多能力和用户版本选择规则 →](pip_runtime_profiles.md)
 
 ## 实现映射
 

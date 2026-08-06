@@ -2,13 +2,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { encodePip } from "../app/runtime/pip.ts";
+import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
 import {
-  artifactFilename,
   createdAtFor,
   projectRoot,
   readReleaseConfig,
-  runtimeDirectory,
+  systemPackagePath,
 } from "./pip-release.mjs";
+import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
 
 const release = (await readReleaseConfig()).loader;
 const source = path.join(projectRoot, "loader-n");
@@ -18,11 +19,20 @@ const files = [
   ["app.js", "text/javascript; charset=utf-8"],
   ["config.json", "application/json; charset=utf-8"],
 ];
-const assets = await Promise.all(files.map(async ([assetPath, mime]) => ({
+const runtimeAssets = await Promise.all(files.map(async ([assetPath, mime]) => ({
   path: assetPath,
   mime,
   bytes: new Uint8Array(await readFile(path.join(source, assetPath))),
 })));
+const sourceAssets = await collectSourceAssets(projectRoot, ["loader-n"]);
+const assets = [...runtimeAssets, ...sourceAssets];
+const root = softwareProjectRoot({
+  id: "loader_root",
+  name: "PIP Loader",
+  description: "Selects exactly one a2 editor and starts it.",
+  compiler: "pip-loader-ui/1",
+  assets: sourceAssets,
+});
 const bytes = await encodePip({
   manifest: {
     packageId: release.packageId,
@@ -33,15 +43,24 @@ const bytes = await encodePip({
     releaseDate: release.releaseDate,
     rootNodeId: "loader_root",
     loaderAbi: "pip-loader/1",
+    artifactRole: "source-and-runtime",
+    providedEditorKinds: [],
+    supportedDocumentKinds: [],
+    preferredEditorKinds: [],
+    requiredEditorCapabilities: [],
+    providedCapabilities: [],
     requiredCapabilities: ["pip.catalog", "pip.activate"],
+    requiredAuthoringCapabilities: ["software-authoring/1"],
+    authoringKind: "software-project/1",
+    authoringCompiler: "pip-loader-ui/1",
     createdAt: createdAtFor(release),
     contentType: "application/vnd.intent-map.pip",
   },
   loaderSource: "export async function load() { return { rootNodeId: 'loader_root' }; }",
-  rootTreeText: JSON.stringify({ rootIntent: { id: "loader_root" } }),
+  rootTreeText: serializeIntentDocument(createApplicationDocument(root)),
   assets,
 });
-const output = path.join(runtimeDirectory, artifactFilename(release));
+const output = systemPackagePath(release);
 await mkdir(path.dirname(output), { recursive: true });
 await writeFile(output, bytes);
 process.stdout.write(`${output}\n${bytes.length} bytes\n`);

@@ -1,6 +1,7 @@
-import { access, readdir, readFile, rm } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 import { decodePip } from "../app/runtime/pip.ts";
 import {
@@ -9,6 +10,7 @@ import {
   projectRoot,
   readReleaseConfig,
   runtimeDirectory,
+  systemPackagePath,
 } from "./pip-release.mjs";
 
 const run = (script) => {
@@ -20,53 +22,57 @@ const run = (script) => {
 };
 
 await rm(runtimeDirectory, { recursive: true, force: true });
+run("build-system-core-pips.mjs");
 run("build-pip-seed.mjs");
 run("build-loader.mjs");
 run("build-static.mjs");
 run("build-pip.mjs");
 
 const release = await readReleaseConfig();
+const selected = [release.seed, release.loader, release.intentMap, release.softwareAuthoring];
+await mkdir(applicationDirectory, { recursive: true });
+for (const item of selected) {
+  await copyFile(systemPackagePath(item), path.join(applicationDirectory, artifactFilename(item)));
+}
+
 const rootEntries = await readdir(runtimeDirectory, { withFileTypes: true });
-const seedExtension = process.platform === "darwin"
-  ? "app"
-  : process.platform === "win32" ? "exe" : "";
+const seedExtension = process.platform === "darwin" ? "app" : process.platform === "win32" ? "exe" : "";
 const seedFile = artifactFilename(release.seed, seedExtension);
 const seedEntry = rootEntries.find((entry) => entry.name === seedFile);
 if (!seedEntry || (process.platform === "darwin" ? !seedEntry.isDirectory() : !seedEntry.isFile())) {
   throw new Error(`distribution is missing the configured Seed artifact: ${seedFile}`);
 }
-const seedArtifacts = rootEntries.filter((entry) => entry.name.startsWith("a0_"));
-if (seedArtifacts.length !== 1) throw new Error("distribution root must contain exactly one a0 Seed");
+if (rootEntries.some((entry) => entry.isFile() && entry.name.endsWith(".pip"))) {
+  throw new Error("distribution root may not contain PIP files");
+}
 if (process.platform === "darwin") {
   await access(path.join(runtimeDirectory, seedFile, "Contents", "MacOS", "pip-seed-tauri"));
 }
-const rootPips = rootEntries.filter((entry) => entry.isFile() && entry.name.endsWith(".pip")).map((entry) => entry.name);
-if (rootPips.length !== 1 || rootPips[0] !== artifactFilename(release.loader)) {
-  throw new Error("distribution root must contain exactly the configured a1 Loader PIP");
-}
-const applicationFiles = (await readdir(applicationDirectory)).filter((file) => file.endsWith(".pip"));
+
+const files = (await readdir(applicationDirectory)).filter((file) => file.endsWith(".pip")).sort();
+if (files.length !== selected.length) throw new Error("runtime PIP repository is incomplete");
 const packageIds = new Set();
-const manifest = [{
+const distribution = [{
   file: seedFile,
-  layer: release.seed.layer,
+  layer: "a0-native",
   artifactName: release.seed.artifactName,
   version: release.seed.version,
   releaseDate: release.seed.releaseDate,
 }];
-for (const file of [rootPips[0], ...applicationFiles.map((name) => `pip/${name}`)]) {
-  const pip = await decodePip(new Uint8Array(await readFile(path.join(runtimeDirectory, file))));
+for (const file of files) {
+  const bytes = new Uint8Array(await readFile(path.join(applicationDirectory, file)));
+  const pip = await decodePip(bytes);
   const expected = artifactFilename({
     layer: pip.manifest.layer,
     artifactName: pip.manifest.artifactName,
     version: pip.manifest.packageVersion,
     releaseDate: pip.manifest.releaseDate,
   });
-  if (path.basename(file) !== expected) throw new Error(`${file}: filename does not match manifest`);
-  if (file.startsWith("pip/") && pip.manifest.layer === "a1") throw new Error(`${file}: a1 is not an application`);
+  if (file !== expected) throw new Error(`${file}: filename does not match manifest`);
   if (packageIds.has(pip.manifest.packageId)) throw new Error(`${file}: duplicate packageId`);
   packageIds.add(pip.manifest.packageId);
-  manifest.push({
-    file,
+  distribution.push({
+    file: `pip/${file}`,
     layer: pip.manifest.layer,
     artifactName: pip.manifest.artifactName,
     packageId: pip.manifest.packageId,
@@ -74,4 +80,34 @@ for (const file of [rootPips[0], ...applicationFiles.map((name) => `pip/${name}`
     releaseDate: pip.manifest.releaseDate,
   });
 }
-process.stdout.write(`${runtimeDirectory}\n${JSON.stringify(manifest, null, 2)}\n`);
+if (![...packageIds].includes(release.defaults.loaderPackageId)) throw new Error("default loader is missing");
+if (![...packageIds].includes(release.defaults.editorPackageId)) throw new Error("default editor is missing");
+const commandVersion = (command, args) => spawnSync(command, args, { encoding: "utf8" }).stdout.trim();
+const seedBinaryPath = process.platform === "darwin"
+  ? path.join(runtimeDirectory, seedFile, "Contents", "MacOS", "pip-seed-tauri")
+  : path.join(runtimeDirectory, seedFile);
+const seedSource = await readFile(systemPackagePath(release.seed));
+const seedBinary = await readFile(seedBinaryPath);
+const receipt = {
+  generatedAt: new Date().toISOString(),
+  platform: `${process.platform}-${process.arch}`,
+  toolchain: {
+    node: process.version,
+    rustc: commandVersion("rustc", ["--version"]),
+    cargo: commandVersion("cargo", ["--version"]),
+  },
+  artifacts: await Promise.all([
+    {
+      file: seedFile,
+      sourceSha256: createHash("sha256").update(seedSource).digest("hex"),
+      artifactSha256: createHash("sha256").update(seedBinary).digest("hex"),
+    },
+    ...selected.map(async (item) => {
+      const source = await readFile(systemPackagePath(item));
+      const hash = createHash("sha256").update(source).digest("hex");
+      return { file: `pip/${artifactFilename(item)}`, sourceSha256: hash, artifactSha256: hash };
+    }),
+  ]),
+};
+await writeFile(path.join(runtimeDirectory, "build-receipt.json"), JSON.stringify(receipt, null, 2));
+process.stdout.write(`${runtimeDirectory}\n${JSON.stringify(distribution, null, 2)}\n`);

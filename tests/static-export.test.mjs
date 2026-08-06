@@ -73,8 +73,8 @@ test("keeps editor sessions and capability boundaries explicit", async () => {
   assert.doesNotMatch(intentEditor, /useRuntimeCommandExecutor/);
 });
 
-test("exports the everything-node application as a static page", async () => {
-  const html = await readFile(new URL("out/index.html", root), "utf8");
+test("exports the system a2 editor as a static page", async () => {
+  const html = await readFile(new URL("out/system-editor/index.html", root), "utf8");
   const page = await readApplicationSource();
   const exportRuntime = await readFile(
     new URL("app/runtime/export.ts", root),
@@ -92,7 +92,7 @@ test("exports the everything-node application as a static page", async () => {
 });
 
 test("renders free-layout and a three-surface workbench", async () => {
-  const html = await readFile(new URL("out/index.html", root), "utf8");
+  const html = await readFile(new URL("out/system-editor/index.html", root), "utf8");
   assert.match(html, /工作台/);
   assert.match(html, /自由布局/);
   assert.match(html, /节点树/);

@@ -17,7 +17,14 @@ const build = (manifest, title, additionalAssets = []) => encodePip({
 
 const common = {
   loaderAbi: "pip-loader/1",
+  artifactRole: "runtime",
+  providedEditorKinds: [],
+  supportedDocumentKinds: [],
+  preferredEditorKinds: [],
+  requiredEditorCapabilities: [],
+  providedCapabilities: [],
   requiredCapabilities: [],
+  requiredAuthoringCapabilities: [],
   createdAt: "2026-07-26T00:00:00.000Z",
   contentType: "application/vnd.intent-map.pip",
 };
@@ -41,10 +48,13 @@ const entries = [
     packageVersion: "1.0.0",
     releaseDate: "20260726",
     rootNodeId: "loader_root",
+    artifactRole: "source-and-runtime",
+    authoringKind: "software-project/1",
+    authoringCompiler: "pip-loader-ui/1",
   }, "Loader", [{
     path: "config.json",
     mime: "application/json; charset=utf-8",
-    bytes: new TextEncoder().encode(JSON.stringify({ defaultPackageId: "intent-map.test" })),
+    bytes: new TextEncoder().encode(JSON.stringify({ defaultEditorPackageId: "intent-map.test" })),
   }])],
   ["a1_loader_next_1_0_0_20260726.pip", await build({
     ...common,

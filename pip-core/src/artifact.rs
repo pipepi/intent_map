@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum PipLayer {
+    #[serde(rename = "a0")]
+    Seed,
     #[serde(rename = "a1")]
     Loader,
     #[serde(rename = "a2")]
@@ -20,6 +22,7 @@ pub enum PipLayer {
 impl PipLayer {
     pub fn key(self) -> &'static str {
         match self {
+            Self::Seed => "a0",
             Self::Loader => "a1",
             Self::Editor => "a2",
             Self::Functional => "a3",
@@ -30,6 +33,7 @@ impl PipLayer {
 
     pub fn parse(value: &str) -> Result<Self, String> {
         match value {
+            "a0" => Ok(Self::Seed),
             "a1" => Ok(Self::Loader),
             "a2" => Ok(Self::Editor),
             "a3" => Ok(Self::Functional),
@@ -193,14 +197,18 @@ pub fn discover_loader_pip(
         validate_loader(path)?;
         return Ok(PipDiscovery::Selected(path.to_path_buf()));
     }
-    let directory = executable.parent().ok_or_else(|| {
+    let root = executable.parent().ok_or_else(|| {
         format!(
             "executable has no parent directory: {}",
             executable.display()
         )
     })?;
+    let directory = root.join("pip");
+    if !directory.exists() {
+        return Ok(PipDiscovery::NeedsSelection(Vec::new()));
+    }
     let mut candidates = Vec::new();
-    for entry in fs::read_dir(directory).map_err(|error| {
+    for entry in fs::read_dir(&directory).map_err(|error| {
         format!(
             "cannot scan Seed directory {}: {error}",
             directory.display()
@@ -283,13 +291,13 @@ mod tests {
     }
 
     #[test]
-    fn discovers_only_a1_pips_beside_seed() {
+    fn discovers_only_a1_pips_in_the_runtime_repository() {
         let directory = temporary_directory("discover-one");
         let executable = directory.join("a0_seed.exe");
         fs::write(&executable, b"seed").unwrap();
-        let loader = directory.join("a1_loader_1_0_0_20260726.pip");
-        fs::copy(fixture("a1_loader_1_0_0_20260726.pip"), &loader).unwrap();
         fs::create_dir(directory.join("pip")).unwrap();
+        let loader = directory.join("pip/a1_loader_1_0_0_20260726.pip");
+        fs::copy(fixture("a1_loader_1_0_0_20260726.pip"), &loader).unwrap();
         fs::copy(
             fixture("minimal-valid.pip"),
             directory.join("pip/a5_app_0_1_0_20260726.pip"),
@@ -314,6 +322,7 @@ mod tests {
         let directory = temporary_directory("discover-many");
         let executable = directory.join("a0_seed.exe");
         fs::write(&executable, b"seed").unwrap();
+        fs::create_dir(directory.join("pip")).unwrap();
         assert_eq!(
             discover_loader_pip(None, &executable).unwrap(),
             PipDiscovery::NeedsSelection(Vec::new())
@@ -322,7 +331,7 @@ mod tests {
             "a1_loader_1_0_0_20260726.pip",
             "a1_loader_next_1_0_0_20260726.pip",
         ] {
-            fs::copy(fixture(name), directory.join(name)).unwrap();
+            fs::copy(fixture(name), directory.join("pip").join(name)).unwrap();
         }
         assert!(
             matches!(discover_loader_pip(None, &executable).unwrap(), PipDiscovery::NeedsSelection(items) if items.len() == 2)
@@ -335,7 +344,8 @@ mod tests {
         let directory = temporary_directory("discover-invalid");
         let executable = directory.join("a0_seed.exe");
         fs::write(&executable, b"seed").unwrap();
-        let mismatched = directory.join("a1_wrong_name_1_0_0_20260726.pip");
+        fs::create_dir(directory.join("pip")).unwrap();
+        let mismatched = directory.join("pip/a1_wrong_name_1_0_0_20260726.pip");
         fs::copy(fixture("a1_loader_1_0_0_20260726.pip"), &mismatched).unwrap();
         assert_eq!(
             discover_loader_pip(None, &executable).unwrap(),

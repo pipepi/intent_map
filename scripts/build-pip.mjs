@@ -7,16 +7,15 @@ import {
   encodePip,
 } from "../app/runtime/pip.ts";
 import {
-  applicationDirectory,
-  artifactFilename,
   createdAtFor,
   readReleaseConfig,
+  systemPackagePath,
 } from "./pip-release.mjs";
 import {
   createApplicationDocument,
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
-import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts";
+import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -70,16 +69,36 @@ const collectAssets = async (directory, relative = "") => {
 const treePath = option("--tree");
 const assetsDirectory = path.resolve(root, option("--assets") ?? "out");
 const release = (await readReleaseConfig()).intentMap;
-const output = path.join(applicationDirectory, artifactFilename(release));
-const tree = treePath
-  ? JSON.parse(await readFile(path.resolve(root, treePath), "utf8"))
-  : createApplicationDocument(createSampleBusinessRoot());
-const rootTreeText = serializeIntentDocument(tree);
+const output = systemPackagePath(release);
 const assetsInfo = await stat(assetsDirectory);
 if (!assetsInfo.isDirectory()) {
   throw new Error(`PIP asset source is not a directory: ${assetsDirectory}`);
 }
-const assets = await collectAssets(assetsDirectory);
+const collectedRuntimeAssets = await collectAssets(assetsDirectory);
+const systemEditorIndex = collectedRuntimeAssets.find((asset) => asset.path === "system-editor/index.html");
+if (!systemEditorIndex) throw new Error("static export is missing the system a2 editor entry");
+const runtimeAssets = [
+  ...collectedRuntimeAssets.filter((asset) => asset.path !== "index.html"),
+  { ...systemEditorIndex, path: "index.html" },
+];
+const sourceAssets = await collectSourceAssets(root, [
+  "app",
+  "package.json",
+  "package-lock.json",
+  "next.config.ts",
+  "tsconfig.json",
+]);
+const assets = [...runtimeAssets, ...sourceAssets];
+const tree = treePath
+  ? JSON.parse(await readFile(path.resolve(root, treePath), "utf8"))
+  : createApplicationDocument(softwareProjectRoot({
+      id: "intent_map_editor_root",
+      name: "Intent Map Editor",
+      description: "Generic tree-map and graph editor source project.",
+      compiler: "intent-map-app/1",
+      assets: sourceAssets,
+    }));
+const rootTreeText = serializeIntentDocument(tree);
 const assetMap = new Map(assets.map((asset) => [asset.path, asset]));
 const indexAsset = assetMap.get("index.html");
 if (!indexAsset) {
@@ -119,7 +138,17 @@ const bytes = await encodePip({
     releaseDate: release.releaseDate,
     rootNodeId: tree.rootIntent.id,
     loaderAbi: "pip-loader/1",
+    artifactRole: "source-and-runtime",
+    editorAbi: "pip-editor/1",
+    providedEditorKinds: ["tree-map/1", "graph/1"],
+    supportedDocumentKinds: ["intent-document/3"],
+    preferredEditorKinds: [],
+    requiredEditorCapabilities: [],
+    providedCapabilities: [],
     requiredCapabilities: [],
+    requiredAuthoringCapabilities: ["software-authoring/1"],
+    authoringKind: "software-project/1",
+    authoringCompiler: "intent-map-app/1",
     createdAt: createdAtFor(release),
     contentType: "application/vnd.intent-map.pip",
   },

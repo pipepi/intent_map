@@ -20,7 +20,27 @@ export async function load(api) {
 }
 `.trim();
 
-export type PipLayer = "a1" | "a2" | "a3" | "a4" | "a5";
+export type PipLayer = "a0" | "a1" | "a2" | "a3" | "a4" | "a5";
+export type PipArtifactRole = "authoring-source" | "runtime" | "source-and-runtime";
+export type PipPackageOrigin = "system" | "user" | "workspace";
+
+export type PipPackageRef = {
+  origin: Exclude<PipPackageOrigin, "workspace">;
+  packageId: string;
+  version: string;
+  releaseDate: string;
+  sha256: string;
+};
+
+export type PipRuntimeProfile = {
+  schemaVersion: 1;
+  profileId: string;
+  name: string;
+  seed?: PipPackageRef;
+  loader: PipPackageRef;
+  editor: PipPackageRef;
+  capabilities: Record<string, PipPackageRef>;
+};
 
 export type PipManifest = {
   packageId: string;
@@ -31,7 +51,17 @@ export type PipManifest = {
   releaseDate: string;
   rootNodeId: string;
   loaderAbi: "pip-loader/1";
+  artifactRole: PipArtifactRole;
+  editorAbi?: "pip-editor/1";
+  providedEditorKinds: string[];
+  supportedDocumentKinds: string[];
+  preferredEditorKinds: string[];
+  requiredEditorCapabilities: string[];
+  providedCapabilities: string[];
   requiredCapabilities: string[];
+  requiredAuthoringCapabilities: string[];
+  authoringKind?: string;
+  authoringCompiler?: string;
   createdAt: string;
   contentType: "application/vnd.intent-map.pip";
 };
@@ -59,6 +89,7 @@ const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 const artifactNamePattern = /^[a-z][a-z0-9_]*$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const capabilityPattern = /^[a-z][a-z0-9.-]*\/[1-9]\d*$/;
 
 const validReleaseDate = (value: string) => {
   if (!/^\d{8}$/.test(value)) return false;
@@ -70,9 +101,18 @@ const validReleaseDate = (value: string) => {
 };
 
 export const assertPipManifest = (manifest: PipManifest): PipManifest => {
+  if (!manifest) throw new Error("Invalid PIP manifest");
+  const stringArrays = [
+    manifest.providedEditorKinds,
+    manifest.supportedDocumentKinds,
+    manifest.preferredEditorKinds,
+    manifest.requiredEditorCapabilities,
+    manifest.providedCapabilities,
+    manifest.requiredCapabilities,
+    manifest.requiredAuthoringCapabilities,
+  ];
   if (
-    !manifest ||
-    !["a1", "a2", "a3", "a4", "a5"].includes(manifest.layer) ||
+    !["a0", "a1", "a2", "a3", "a4", "a5"].includes(manifest.layer) ||
     !artifactNamePattern.test(manifest.artifactName) ||
     !versionPattern.test(manifest.packageVersion) ||
     !validReleaseDate(manifest.releaseDate) ||
@@ -80,7 +120,16 @@ export const assertPipManifest = (manifest: PipManifest): PipManifest => {
     !manifest.name ||
     !manifest.rootNodeId ||
     manifest.loaderAbi !== "pip-loader/1" ||
-    manifest.contentType !== "application/vnd.intent-map.pip"
+    !["authoring-source", "runtime", "source-and-runtime"].includes(manifest.artifactRole) ||
+    manifest.contentType !== "application/vnd.intent-map.pip" ||
+    stringArrays.some((values) => !Array.isArray(values) || values.some((value) => typeof value !== "string" || !value)) ||
+    [...manifest.providedCapabilities, ...manifest.requiredAuthoringCapabilities]
+      .some((capability) => !capabilityPattern.test(capability)) ||
+    (manifest.layer === "a2" && (
+      manifest.editorAbi !== "pip-editor/1" || manifest.providedEditorKinds.length === 0
+    )) ||
+    (manifest.layer !== "a2" && manifest.editorAbi !== undefined) ||
+    (manifest.layer === "a3" && manifest.providedCapabilities.length === 0)
   ) throw new Error("Invalid PIP manifest");
   return manifest;
 };
@@ -94,6 +143,10 @@ const sha256 = async (bytes: Uint8Array) => {
   const copy = Uint8Array.from(bytes);
   return new Uint8Array(await crypto.subtle.digest("SHA-256", copy.buffer));
 };
+
+export const pipSha256 = async (bytes: Uint8Array) => [...await sha256(bytes)]
+  .map((value) => value.toString(16).padStart(2, "0"))
+  .join("");
 
 const assertSafeLength = (length: number, label: string) => {
   if (!Number.isSafeInteger(length) || length < 0 || length > MAX_SECTION_SIZE) {

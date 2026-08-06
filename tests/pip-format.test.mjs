@@ -22,7 +22,14 @@ const manifest = {
   releaseDate: "20260726",
   rootNodeId: "application_root",
   loaderAbi: "pip-loader/1",
+  artifactRole: "runtime",
+  providedEditorKinds: [],
+  supportedDocumentKinds: [],
+  preferredEditorKinds: ["tree-map/1"],
+  requiredEditorCapabilities: [],
+  providedCapabilities: [],
   requiredCapabilities: [],
+  requiredAuthoringCapabilities: [],
   createdAt: "2026-07-26T00:00:00.000Z",
   contentType: "application/vnd.intent-map.pip",
 };
@@ -49,7 +56,7 @@ test("PIP v1 encodes deterministically and round-trips", async () => {
 
 test("PIP manifest requires layer, artifact name, semantic version, and release date", async () => {
   for (const invalid of [
-    { ...manifest, layer: "a0" },
+    { ...manifest, layer: "a2" },
     { ...manifest, artifactName: "Intent-Map" },
     { ...manifest, packageVersion: "1.0" },
     { ...manifest, releaseDate: "20260230" },

@@ -1,8 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use pip_core::{
-    Package, PipDiscovery, catalog_entries, discover_loader_pip, load_catalog_package,
-    load_default_catalog_package, validate_package_filename,
+    CatalogSource, Package, PackageOrigin, PipDiscovery, PipLayer, RuntimeProfile,
+    catalog_entries_from_sources_with_trust, discover_loader_pip, install_user_package,
+    load_catalog_package_from_source, load_default_editor_package, load_runtime_profile,
+    resolve_package_ref, runtime_catalog_sources, save_runtime_profile, trust_hash, trusted_hashes, user_data_root,
+    validate_package_filename, validate_profile_trust, validate_runtime_profile,
 };
 use serde_json::json;
 use std::borrow::Cow;
@@ -15,9 +18,12 @@ use tauri::{WebviewUrl, WebviewWindowBuilder};
 
 struct RuntimeState {
     package: RwLock<Package>,
-    applications: PathBuf,
+    sources: Vec<CatalogSource>,
+    user_root: PathBuf,
     force_selection: bool,
     loader: pip_core::Manifest,
+    profile: Option<RuntimeProfile>,
+    seed_source_sha: Option<&'static str>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -56,6 +62,16 @@ fn argument_path(args: &[String], name: &str) -> Result<Option<PathBuf>, String>
     )))
 }
 
+fn argument_string(args: &[String], name: &str) -> Result<Option<String>, String> {
+    let Some(index) = args.iter().position(|argument| argument == name) else {
+        return Ok(None);
+    };
+    args.get(index + 1)
+        .cloned()
+        .map(Some)
+        .ok_or_else(|| format!("{name} requires a value"))
+}
+
 fn choose_loader(directory: &Path) -> Result<Option<PathBuf>, String> {
     Ok(rfd::FileDialog::new()
         .set_directory(directory)
@@ -90,8 +106,8 @@ fn resolve_loader(args: &[String], seed: &Path) -> Result<Option<PathBuf>, Strin
     match discover_loader_pip(explicit.as_deref(), seed)? {
         PipDiscovery::Selected(path) => Ok(Some(path)),
         PipDiscovery::NeedsSelection(_) => {
-            let directory = seed.parent().ok_or("Seed artifact has no parent")?;
-            let Some(path) = choose_loader(directory)? else {
+            let directory = seed.parent().ok_or("Seed artifact has no parent")?.join("pip");
+            let Some(path) = choose_loader(&directory)? else {
                 return Ok(None);
             };
             match discover_loader_pip(Some(&path), seed)? {
@@ -137,7 +153,9 @@ fn package_response(
         );
     }
     if request.method() == Method::GET && raw_path == "/__pip/catalog" {
-        return match catalog_entries(&state.applications).and_then(|apps| {
+        return match trusted_hashes(&state.user_root).and_then(|trusted| {
+            catalog_entries_from_sources_with_trust(&state.sources, &trusted)
+        }).and_then(|packages| {
             serde_json::to_vec(&json!({
                 "forceSelection": state.force_selection,
                 "loader": {
@@ -146,7 +164,11 @@ fn package_response(
                     "packageVersion": state.loader.package_version,
                     "releaseDate": state.loader.release_date,
                 },
-                "apps": apps,
+                "profile": state.profile,
+                "seedSourceSha256": state.seed_source_sha,
+                "seedIdentityMatchesProfile": state.profile.as_ref().and_then(|profile| profile.seed.as_ref())
+                    .map(|seed| Some(seed.sha256.as_str()) == state.seed_source_sha),
+                "packages": packages,
             }))
             .map_err(|error| error.to_string())
         }) {
@@ -168,14 +190,36 @@ fn package_response(
         let result = serde_json::from_slice::<serde_json::Value>(request.body())
             .map_err(|error| format!("invalid activation request: {error}"))
             .and_then(|value| {
-                value
+                let file = value
                     .get("file")
                     .and_then(|item| item.as_str())
                     .map(str::to_owned)
-                    .ok_or_else(|| "activation request requires file".into())
+                    .ok_or_else(|| "activation request requires file".to_string())?;
+                let origin = value
+                    .get("origin")
+                    .and_then(|item| item.as_str())
+                    .ok_or_else(|| "activation request requires origin".to_string())?;
+                let origin = match origin {
+                    "system" => PackageOrigin::System,
+                    "user" => PackageOrigin::User,
+                    _ => return Err("activation origin must be system or user".into()),
+                };
+                Ok((origin, file))
             })
-            .and_then(|file| {
-                load_catalog_package(&state.applications, &file).map(|(_, package)| package)
+            .and_then(|(origin, file)| {
+                let package = state.sources.iter()
+                    .filter(|source| source.origin == origin)
+                    .find_map(|source| load_catalog_package_from_source(source, &file).ok().map(|(_, package)| package))
+                    .ok_or_else(|| "activation package is unavailable".to_string())?;
+                if package.manifest_data().layer != "a2" {
+                    return Err("only a2 editors can be activated".into());
+                }
+                if origin == PackageOrigin::User
+                    && !trusted_hashes(&state.user_root)?.contains(&pip_core::sha256_hex(package.bytes()))
+                {
+                    return Err("user editor SHA is not trusted for execution".into());
+                }
+                Ok(package)
             })
             .and_then(|package| {
                 state
@@ -194,6 +238,34 @@ fn package_response(
             ),
         };
     }
+    if request.method() == Method::POST && raw_path == "/__pip/trust" {
+        let result = serde_json::from_slice::<serde_json::Value>(request.body())
+            .map_err(|error| format!("invalid trust request: {error}"))
+            .and_then(|value| value.get("sha256").and_then(|item| item.as_str())
+                .ok_or_else(|| "trust request requires sha256".to_string())
+                .and_then(|hash| trust_hash(&state.user_root, hash)));
+        return match result {
+            Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
+            Err(error) => response(StatusCode::BAD_REQUEST, "text/plain", error.into_bytes(), false),
+        };
+    }
+    if request.method() == Method::POST && raw_path == "/__pip/profiles" {
+        let result = serde_json::from_slice::<RuntimeProfile>(request.body())
+            .map_err(|error| format!("invalid runtime profile: {error}"))
+            .and_then(|profile| save_runtime_profile(&state.user_root, &profile, &state.sources).map(|_| ()));
+        return match result {
+            Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
+            Err(error) => response(StatusCode::BAD_REQUEST, "text/plain", error.into_bytes(), false),
+        };
+    }
+    if request.method() == Method::POST {
+        if let Some(file) = raw_path.strip_prefix("/__pip/install/") {
+            return match install_user_package(&state.user_root, file, request.body()) {
+                Ok(_) => response(StatusCode::CREATED, "text/plain", Vec::new(), false),
+                Err(error) => response(StatusCode::BAD_REQUEST, "text/plain", error.into_bytes(), false),
+            };
+        }
+    }
     if request.method() != Method::GET && request.method() != Method::HEAD {
         return response(
             StatusCode::METHOD_NOT_ALLOWED,
@@ -203,6 +275,24 @@ fn package_response(
         );
     }
     let head_only = request.method() == Method::HEAD;
+    if let Some(rest) = raw_path.strip_prefix("/__pip/packages/") {
+        let Some((origin, file)) = rest.split_once('/') else {
+            return response(StatusCode::BAD_REQUEST, "text/plain", b"package path requires origin and file".to_vec(), head_only);
+        };
+        let origin = match origin {
+            "system" => PackageOrigin::System,
+            "user" => PackageOrigin::User,
+            "workspace" => PackageOrigin::Workspace,
+            _ => return response(StatusCode::BAD_REQUEST, "text/plain", b"invalid package origin".to_vec(), head_only),
+        };
+        let package = state.sources.iter()
+            .filter(|source| source.origin == origin)
+            .find_map(|source| load_catalog_package_from_source(source, file).ok().map(|(_, package)| package));
+        return match package {
+            Some(package) => response(StatusCode::OK, "application/vnd.intent-map.pip", package.bytes().to_vec(), head_only),
+            None => response(StatusCode::NOT_FOUND, "text/plain", b"package not found".to_vec(), head_only),
+        };
+    }
     let package = match state.package.read() {
         Ok(package) => package,
         Err(_) => {
@@ -259,7 +349,25 @@ fn run(args: &[String]) -> Result<(), String> {
     let executable =
         env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
     let seed = seed_artifact(&executable);
-    let Some(loader_path) = resolve_loader(args, &seed)? else {
+    let system_directory = seed.parent().ok_or("Seed artifact has no parent")?.join("pip");
+    let user_root = user_data_root()?;
+    let sources = runtime_catalog_sources(&system_directory, &user_root);
+    let profile: Option<RuntimeProfile> = argument_string(args, "--profile")?
+        .map(|profile_id| load_runtime_profile(&user_root, &profile_id))
+        .transpose()?;
+    if let Some(profile) = &profile {
+        validate_runtime_profile(profile, &sources)?;
+        validate_profile_trust(profile, &trusted_hashes(&user_root)?)?;
+    }
+    let loader_from_profile = profile.as_ref()
+        .map(|profile| resolve_package_ref(&sources, &profile.loader, Some(PipLayer::Loader)))
+        .transpose()?
+        .map(|(path, _)| path);
+    let Some(loader_path) = (if argument_path(args, "--pip")?.is_some() || loader_from_profile.is_none() {
+        resolve_loader(args, &seed)?
+    } else {
+        loader_from_profile
+    }) else {
         return Ok(());
     };
     let package = Package::parse(
@@ -273,18 +381,36 @@ fn run(args: &[String]) -> Result<(), String> {
         return Err("PIP package has no index.html asset".into());
     }
     let loader = package.manifest_data().clone();
-    let applications = loader_path
-        .parent()
-        .ok_or("Loader PIP has no parent directory")?
-        .join("pip");
-    let force_selection = args.iter().any(|argument| argument == "--select-app");
-    let package =
-        load_default_catalog_package(&package, &applications, force_selection)?.unwrap_or(package);
+    let force_selection = args.iter().any(|argument| argument == "--select-editor");
+    let explicit_editor = argument_path(args, "--editor")?
+        .map(|path| {
+            let bytes = fs::read(&path).map_err(|error| format!("cannot read editor PIP: {error}"))?;
+            let editor = Package::parse(bytes)?;
+            validate_package_filename(&path, &editor)?;
+            if editor.manifest_data().layer != "a2" {
+                return Err::<Package, String>("--editor requires an a2 PIP".into());
+            }
+            Ok(editor)
+        })
+        .transpose()?;
+    let profile_editor = profile.as_ref()
+        .map(|profile| resolve_package_ref(&sources, &profile.editor, Some(PipLayer::Editor)).map(|(_, package)| package))
+        .transpose()?;
+    let package = if force_selection {
+        package
+    } else if let Some(editor) = explicit_editor.or(profile_editor) {
+        editor
+    } else {
+        load_default_editor_package(&package, &sources, false)?.unwrap_or(package)
+    };
     let state = Arc::new(RuntimeState {
         package: RwLock::new(package),
-        applications,
+        sources,
+        user_root,
         force_selection,
         loader,
+        profile,
+        seed_source_sha: option_env!("PIP_SEED_SOURCE_SHA"),
     });
     let protocol_state = Arc::clone(&state);
     tauri::Builder::default()

@@ -104,6 +104,9 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm test`: build the starter and verify its rendered loading skeleton
 - `npm run pip:build`: build the static application and deterministic `.pip`
 - `npm run pip:dist`: build the layered Seed, Loader, and application distribution
+- `npm run pip:system`: rebuild the Git-tracked default a0–a3 source packages
+- `npm run pip:install-user -- <file.pip>`: install an immutable version into the user Registry
+- `npm run pip:promote-system -- <file.pip>`: promote a validated maintained a0–a3 candidate
 - `npm run pip:cli`: build the versioned diagnostic Seed CLI under `dist/pip-runtime/tools/`
 - `npm run pip:verify`: verify the generated `.pip`
 - `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
@@ -117,17 +120,19 @@ layer, semantic version, and release date in the filename:
 ```text
 dist/pip-runtime/
 ├── a0_pip_seed_1_0_0_20260806.app  # macOS; Windows uses .exe
-├── a1_loader_1_0_0_20260806.pip
 └── pip/
-    └── a2_intent_map_1_0_0_20260806.pip
+    ├── a0_pip_seed_1_0_0_20260806.pip
+    ├── a1_loader_1_0_0_20260806.pip
+    ├── a2_intent_map_1_0_0_20260806.pip
+    └── a3_software_authoring_1_0_0_20260806.pip
 ```
 
-Seed loads the unique `a1` Loader beside it. The Loader discovers `a2`–`a5`
-applications in `pip/`. When the configured default resolves to exactly one
-valid package, Seed activates it before creating the window, so the application
-opens without flashing the Loader screen. Otherwise, or with `--select-app`,
-the Loader list is shown. The CLI Seed verifies external PIPs and never extracts an
-embedded payload:
+Seed loads the unique `a1` Loader from `pip/`. The Loader selects exactly one
+`a2` generic editor; the active editor may compose multiple `a3` capabilities.
+System defaults are Git-tracked under `packages/system/`. User a0–a5 packages,
+profiles, trust decisions, and workspaces live in the platform user-data directory.
+Use `--profile`, `--editor`, or `--select-editor` to override defaults without
+silently falling back from an invalid explicit choice.
 
 ```powershell
 .\dist\pip-runtime\tools\a0_pip_seed_cli_1_0_0_20260806.exe --verify .\dist\pip-runtime\pip\a2_intent_map_1_0_0_20260806.pip
@@ -138,10 +143,11 @@ arguments remain available through Launch Services:
 
 ```bash
 open -n dist/pip-runtime/a0_pip_seed_1_0_0_20260806.app --args \
-  --pip "$PWD/dist/pip-runtime/a1_loader_1_0_0_20260806.pip" --select-app
+  --pip "$PWD/dist/pip-runtime/pip/a1_loader_1_0_0_20260806.pip" --select-editor
 ```
 
 Use `npm run pip:cli` for terminal hosting and `--verify` diagnostics.
+See [Runtime profiles, editor selection, and capability composition](doc/intent_map_module/pip_runtime_profiles.md).
 
 ## Learn More
 

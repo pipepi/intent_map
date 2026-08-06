@@ -4,7 +4,8 @@
 
 ## 总体定位
 
-Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应用形式运行，用于构建、观察、编辑、组合和导出其他节点应用。
+Intent Map 是系统默认提供的业务无关分形节点编辑器。a2 是可扩展的通用编辑器
+类别，Intent Map 只是默认实现；a3 是可组合的业务无关能力类别。
 
 整个体系拆分为五个可以分别实现和演进的部分：
 
@@ -12,8 +13,8 @@ Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应�
 |---|---|---|---|
 | 1 | Loader 0 | 唯一原生、无状态且稳定的初始加载器（种皮） | [loader_0.md](intent_map_module/loader_0.md) |
 | 2 | Loader N | 由 `.pip` 承载、可以持续升级的加载器 | [loader_n.md](intent_map_module/loader_n.md) |
-| 3 | Intent Map | 业务无关的分形节点地图编辑器 | [intent_map.md](intent_map_module/intent_map.md) |
-| 4 | Software Authoring | 掌控软件开发复杂度的可选节点能力 | [software_authoring.md](intent_map_module/software_authoring.md) |
+| 3 | a2 Editors | Intent Map 等可替代通用节点编辑器 | [intent_map.md](intent_map_module/intent_map.md) |
+| 4 | a3 Capabilities | Software Authoring 等可组合业务无关能力 | [software_authoring.md](intent_map_module/software_authoring.md) |
 | 5 | Crypto CEX | 验证 Software Authoring 的真实交易所案例 | [crypto_cex.md](intent_map_module/crypto_cex.md) |
 
 ## 系统关系
@@ -21,13 +22,13 @@ Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应�
 ```text
 loader_0（a0 原生种皮）
         ↓ 加载
-a1_loader_{major}_{minor}_{patch}_{YYYYMMDD}.pip（可演进加载器）
-        ↓ 加载
-a2_intent_map_{major}_{minor}_{patch}_{YYYYMMDD}.pip（通用节点编辑器）
-        ↓ 编辑和运行
-a3_software_authoring_{major}_{minor}_{patch}_{YYYYMMDD}.pip（软件开发掌控能力）
+a1 Loader（选择一个主 a2）
+        ↓
+一个 a2 Editor（Intent Map 或其他通用编辑器）
+        ↓ 组合
+零到多个 a3 Capability（Software Authoring 等）
         ↓ 应用于
-a4_crypto_cex_{major}_{minor}_{patch}_{YYYYMMDD}.pip（Crypto 交易所案例）
+用户 a4/a5 PIP
 ```
 
 架构层级固定为 `a0` Seed、`a1` Loader、`a2` Editor、`a3` Functional、
@@ -43,6 +44,10 @@ a4_crypto_cex_{major}_{minor}_{patch}_{YYYYMMDD}.pip（Crypto 交易所案例）
 - Software Authoring 是一种可选节点应用，不是编辑器内核；
 - Crypto CEX 是 Software Authoring 的案例，不是通用能力的一部分；
 - 人、Agent、脚本和其他工具都是可选操作者。
+
+系统默认 a0–a3 由本仓库跟踪；用户自定义 a0–a3 和全部 a4/a5 位于用户
+Registry/Workspace。精确版本、一个主 a2 与多个 a3 由
+[Runtime Profile](intent_map_module/pip_runtime_profiles.md) 选择。
 
 ## `.pip` 统一范式
 
@@ -105,6 +110,7 @@ Intent Map 编辑 .pip
 - [Intent Map：通用分形节点编辑器](intent_map_module/intent_map.md)
 - [Software Authoring：软件开发复杂度掌控](intent_map_module/software_authoring.md)
 - [Crypto CEX：实际应用案例](intent_map_module/crypto_cex.md)
+- [Runtime Profile：多编辑器、多能力与用户版本](intent_map_module/pip_runtime_profiles.md)
 
 ---
 

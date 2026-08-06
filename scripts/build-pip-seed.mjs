@@ -1,4 +1,5 @@
 import { copyFile, cp, mkdir, readFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -7,9 +8,14 @@ import {
   projectRoot,
   readReleaseConfig,
   runtimeDirectory,
+  systemPackagePath,
 } from "./pip-release.mjs";
 
 const release = (await readReleaseConfig()).seed;
+const seedSourceSha = createHash("sha256")
+  .update(await readFile(systemPackagePath(release)))
+  .digest("hex");
+const buildEnvironment = { ...process.env, PIP_SEED_SOURCE_SHA: seedSourceSha };
 await mkdir(runtimeDirectory, { recursive: true });
 
 if (process.platform === "darwin") {
@@ -27,6 +33,7 @@ if (process.platform === "darwin") {
   ], {
     cwd: path.join(projectRoot, "pip-seed-tauri"),
     stdio: "inherit",
+    env: buildEnvironment,
   });
   if (bundle.status !== 0) process.exit(bundle.status ?? 1);
   const source = path.join(
@@ -47,7 +54,7 @@ if (process.platform === "darwin") {
 
 const cargo = spawnSync("cargo", [
   "build", "--release", "--manifest-path", path.join(projectRoot, "pip-seed-tauri", "Cargo.toml"),
-], { cwd: projectRoot, stdio: "inherit" });
+], { cwd: projectRoot, stdio: "inherit", env: buildEnvironment });
 if (cargo.status !== 0) process.exit(cargo.status ?? 1);
 const executableExtension = process.platform === "win32" ? "exe" : "";
 const source = path.join(

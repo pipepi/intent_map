@@ -9,9 +9,10 @@ import {
   type ScopeAddress,
 } from "../runtime/model";
 import { downloadExport, prepareDocumentExport } from "../runtime/export";
-import { createDocumentIO } from "./document-io";
+import { createDocumentIO, type PipProjectSession } from "./document-io";
 import { useDocumentHistory } from "./use-document-history";
 import { useRuntimePipeline } from "./use-runtime-pipeline";
+import { usePipCapabilitySession } from "./use-pip-capability-session";
 import { freePanelContext, sampleDocument, updateNode } from "./tree-utils";
 
 export function useDocumentSession(setToast: (message: string) => void) {
@@ -33,6 +34,8 @@ export function useDocumentSession(setToast: (message: string) => void) {
   const [navigationStack, setNavigationStack] = useState<ScopeAddress[]>(() =>
     freePanelContext(sampleDocument()).navigationStack,
   );
+  const [pipProject, setPipProject] = useState<PipProjectSession | null>(null);
+  const capabilities = usePipCapabilitySession(pipProject);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runtime = useRuntimePipeline({ setDocumentState: updateDocument, setToast });
 
@@ -81,6 +84,8 @@ export function useDocumentSession(setToast: (message: string) => void) {
     setNavigationStack,
     markClean,
     setToast,
+    pipProject,
+    setPipProject,
   });
 
   const newDocument = () => {
@@ -89,6 +94,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
       !window.confirm("当前文档有未导出的修改，确定要新建并丢弃这些修改吗？")
     ) return;
     const next = sampleDocument();
+    setPipProject(null);
     const restored = freePanelContext(next);
     loadDocument(next, true);
     setNavigationStack(restored.navigationStack);
@@ -125,7 +131,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
   }, []);
 
   return {
-    model: { document: documentState, history, future, dirty, navigationStack },
+    model: { document: documentState, history, future, dirty, navigationStack, pipProject, capabilities },
     writes: {
       commitDocumentChange,
       commitViewChange,

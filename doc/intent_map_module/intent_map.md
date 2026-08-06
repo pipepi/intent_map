@@ -4,7 +4,9 @@
 
 ## 定位
 
-Intent Map 是一个业务无关、可自举的分形节点地图编辑器，本身以 `intent_map.pip` 运行。它不享有特殊宿主地位，并能够用于查看和编辑包括自身在内的其他 `.pip`。
+Intent Map 是系统默认提供的一个 a2 通用节点编辑器，提供树形地图和图视图。
+a2 是编辑器类别而不是单一实现：用户可以选择表格、表单、空间画布或其他
+兼容 `pip-editor/1` 的编辑器。一个窗口只运行一个主 a2。
 
 ## 核心能力
 
@@ -16,6 +18,8 @@ Intent Map 是一个业务无关、可自举的分形节点地图编辑器，本
 - 选择、布局、相机和编辑历史；
 - 导入、导出、观察和运行节点应用；
 - 将编辑结果保存为新的 `.pip`。
+- 根据目标文档类型列出兼容 a2，并在用户确认后用新窗口打开；
+- 根据目标声明组合零到多个 a3 能力。
 
 ## 业务无关边界
 
@@ -68,6 +72,7 @@ Canvas（高性能节点地图）
 - [Crypto CEX](crypto_cex.md) 使用 Software Authoring 表达真实业务；
 - [Bevy Canvas Runtime](bevy_canvas_runtime.md) 是可选渲染投影，不进入文档语义；
 - MCP 可以让 Agent 操作 Intent Map，但属于可选接入方式。
+- [Runtime Profile](pip_runtime_profiles.md) 精确选择 a1、一个主 a2 和多个 a3。
 
 ## `.pip` 自举关系
 
