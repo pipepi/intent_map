@@ -6,11 +6,11 @@ import {
   type PipIoPolicyField,
 } from "./pip-io-policy.ts";
 
-const PIP_MAGIC = new Uint8Array([0x50, 0x49, 0x50, 0x00, 0x53, 0x45, 0x45, 0x44]);
-const PIP_VERSION = 1;
-const SECTION_COUNT = 4;
-const SECTION_ENTRY_SIZE = 48;
-const PIP_HEADER_SIZE = 16 + SECTION_COUNT * SECTION_ENTRY_SIZE;
+export const PIP_MAGIC = new Uint8Array([0x50, 0x49, 0x50, 0x00, 0x53, 0x45, 0x45, 0x44]);
+export const PIP_VERSION = 1;
+export const PIP_SECTION_COUNT = 4;
+export const PIP_SECTION_ENTRY_SIZE = 48;
+export const PIP_HEADER_SIZE = 16 + PIP_SECTION_COUNT * PIP_SECTION_ENTRY_SIZE;
 
 export const DEFAULT_PIP_LOADER_SOURCE = `
 export async function load(api) {
@@ -213,6 +213,8 @@ const authorizeMetric = async (
   }
 };
 
+export const authorizePipIoMetric = authorizeMetric;
+
 const writeU64 = (view: DataView, offset: number, value: number) => {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error("Invalid PIP offset");
   view.setBigUint64(offset, BigInt(value), true);
@@ -330,7 +332,7 @@ export const encodePip = async (
   view.setUint32(8, PIP_VERSION, true);
   view.setUint32(12, PIP_HEADER_SIZE, true);
   descriptors.forEach((descriptor, index) => {
-    const entry = 16 + index * SECTION_ENTRY_SIZE;
+    const entry = 16 + index * PIP_SECTION_ENTRY_SIZE;
     writeU64(view, entry, descriptor.offset);
     writeU64(view, entry + 8, descriptor.bytes.length);
     output.set(descriptor.hash, entry + 16);
@@ -351,8 +353,8 @@ export const decodePip = async (
   if (view.getUint32(8, true) !== PIP_VERSION) throw new Error("Unsupported PIP version");
   if (view.getUint32(12, true) !== PIP_HEADER_SIZE) throw new Error("Invalid PIP header size");
   const sections: PipSection[] = [];
-  for (let index = 0; index < SECTION_COUNT; index += 1) {
-    const entry = 16 + index * SECTION_ENTRY_SIZE;
+  for (let index = 0; index < PIP_SECTION_COUNT; index += 1) {
+    const entry = 16 + index * PIP_SECTION_ENTRY_SIZE;
     const offset = readU64(view, entry);
     const length = readU64(view, entry + 8);
     assertSafeLength(length, `Section ${index}`);

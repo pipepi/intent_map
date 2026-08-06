@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -27,6 +28,7 @@ const assertRegularFile = async (file: string, label: string) => {
   if (!metadata.isFile() || metadata.isSymbolicLink()) {
     throw new Error(`${label} must be a regular, non-symlink file`);
   }
+  return metadata;
 };
 
 const ensureDirectoryPath = async (root: string, segments: string[], create: boolean) => {
@@ -84,6 +86,18 @@ export class NodeDirectoryResourceStore implements WorkspaceResourceStore {
     const target = await resourceTarget(this.#root, resourcePath, false);
     await assertRegularFile(target, "workspace resource");
     return new Uint8Array(await readFile(target));
+  }
+
+  async openRead(resourcePath: string): Promise<{
+    byteLength: number;
+    chunks: AsyncIterable<Uint8Array>;
+  }> {
+    const target = await resourceTarget(this.#root, resourcePath, false);
+    const metadata = await assertRegularFile(target, "workspace resource");
+    return {
+      byteLength: metadata.size,
+      chunks: createReadStream(target),
+    };
   }
 
   async write(resource: WorkspaceResource): Promise<void> {
