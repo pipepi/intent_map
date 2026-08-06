@@ -24,6 +24,7 @@
     "pip:dist": "node scripts/build-pip-dist.mjs",
     "pip:install-user": "node scripts/install-user-pip.mjs",
     "pip:promote-system": "node scripts/promote-system-pip.mjs",
+    "pip:workspace:split": "node scripts/split-pip-workspace.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
