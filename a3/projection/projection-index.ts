@@ -9,6 +9,7 @@ import {
   type WorkspaceResource,
   type WorkspaceResourceIndex,
 } from "../workspace/resource-index.ts";
+import { canonicalJson } from "../core/canonical-json.ts";
 
 export const A3_PROJECTION_INDEX_PATH = "a3/projections/index.json" as const;
 export const A3_PROJECTION_INDEX_MIME = "application/vnd.intent-map.a3-projections+json" as const;
@@ -102,20 +103,6 @@ export const assertA3ProjectionIndex = (value: unknown): A3ProjectionIndex => {
     throw new Error("a3 projections must be sorted and unique by projectionId");
   }
   return { schemaVersion: A3_PROJECTION_INDEX_SCHEMA_VERSION, projections };
-};
-
-const canonicalJson = (value: unknown): string => {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return JSON.stringify(value);
-  }
-  if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => item === undefined ? "null" : canonicalJson(item)).join(",")}]`;
-  }
-  if (typeof value !== "object") throw new Error("Projection source is not JSON serializable");
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) =>
-    `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
 };
 
 export const a3ProjectionSourceSha256 = (node: IntentNode): Promise<string> =>
