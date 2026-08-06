@@ -78,6 +78,7 @@ await writePackage(
 const capabilityBytes = new Uint8Array(await readFile(
   new URL("../a3/extensions/software-authoring/capability.mjs", import.meta.url),
 ));
+const a3SourceAssets = await collectSourceAssets(projectRoot, ["a3"]);
 await writePackage(
   release.softwareAuthoring,
   {
@@ -92,10 +93,10 @@ await writePackage(
     name: "Software Authoring",
     description: "Business-independent source, build, test and release capability.",
     compiler: "software-authoring/1",
-    assets: [{ path: "source/capability.mjs", mime: "text/javascript; charset=utf-8", bytes: capabilityBytes }],
+    assets: a3SourceAssets,
   }),
   [
     { path: "capability.mjs", mime: "text/javascript; charset=utf-8", bytes: capabilityBytes },
-    { path: "source/capability.mjs", mime: "text/javascript; charset=utf-8", bytes: capabilityBytes },
+    ...a3SourceAssets,
   ],
 );

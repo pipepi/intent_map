@@ -40,4 +40,10 @@ test("the default a2 declares editor kinds and the default a3 declares capabilit
   ), "utf8");
   const packaged = authoring.assets.find((asset) => asset.path === "capability.mjs");
   assert.equal(new TextDecoder().decode(packaged.bytes), source);
+  assert.ok(authoring.assets.some(
+    (asset) => asset.path === "source/a3/workspace/resource-index.ts",
+  ));
+  assert.ok(authoring.assets.some(
+    (asset) => asset.path === "source/a3/workspace/split-workspace.ts",
+  ));
 });
