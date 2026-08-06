@@ -31,6 +31,7 @@ import {
   DEFAULT_PIP_LOADER_SOURCE,
   decodePip,
   encodePip,
+  pipFilename,
   pipSha256,
   type PipAsset,
   type PipManifest,
@@ -128,17 +129,18 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
           createdAt: now.toISOString(),
           contentType: "application/vnd.intent-map.pip",
         };
-      const bytes = await encodePip({
-        manifest: pipProject ? {
+      const exportManifest = pipProject ? {
           ...pipProject.manifest,
           rootNodeId: documentState.rootIntent.id,
-        } : fallbackManifest,
+        } : fallbackManifest;
+      const bytes = await encodePip({
+        manifest: exportManifest,
         loaderSource: pipProject?.loaderSource ?? DEFAULT_PIP_LOADER_SOURCE,
         rootTreeText: serializeIntentDocument(documentState),
         assets: pipProject?.assets ?? [],
       });
       downloadBytes(
-        `a5_intent_map_document_0_1_0_${releaseDate}.pip`,
+        pipFilename(exportManifest),
         bytes,
         "application/vnd.intent-map.pip",
       );

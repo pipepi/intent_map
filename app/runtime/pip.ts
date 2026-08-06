@@ -134,6 +134,11 @@ export const assertPipManifest = (manifest: PipManifest): PipManifest => {
   return manifest;
 };
 
+export const pipFilename = (manifest: PipManifest) => {
+  assertPipManifest(manifest);
+  return `${manifest.layer}_${manifest.artifactName}_${manifest.packageVersion.replaceAll(".", "_")}_${manifest.releaseDate}.pip`;
+};
+
 const align8 = (value: number) => (value + 7) & ~7;
 
 const equalBytes = (left: Uint8Array, right: Uint8Array) =>

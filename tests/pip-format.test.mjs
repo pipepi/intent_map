@@ -5,6 +5,7 @@ import {
   DEFAULT_PIP_LOADER_SOURCE,
   decodePip,
   encodePip,
+  pipFilename,
 } from "../app/runtime/pip.ts";
 import {
   createApplicationDocument,
@@ -67,6 +68,27 @@ test("PIP manifest requires layer, artifact name, semantic version, and release 
       rootTreeText,
       assets: [],
     }), /Invalid PIP manifest/);
+  }
+});
+
+test("PIP export filenames preserve manifest identity across every layer", () => {
+  for (const layer of ["a0", "a1", "a2", "a3", "a4", "a5"]) {
+    const layeredManifest = {
+      ...manifest,
+      layer,
+      artifactName: "crypto_cex_intent",
+      ...(layer === "a2" ? {
+        editorAbi: "pip-editor/1",
+        providedEditorKinds: ["tree-map/1"],
+      } : {}),
+      ...(layer === "a3" ? {
+        providedCapabilities: ["software-authoring/1"],
+      } : {}),
+    };
+    assert.equal(
+      pipFilename(layeredManifest),
+      `${layer}_crypto_cex_intent_0_1_0_20260726.pip`,
+    );
   }
 });
 
