@@ -37,7 +37,7 @@ import {
   type PipIoConfirmationRequest,
   type PipManifest,
 } from "../runtime/pip";
-import { ASK_PIP_IO_POLICY } from "../runtime/pip-io-policy";
+import type { PipIoPolicy } from "../runtime/pip-io-policy";
 
 import { freePanelContext } from "./tree-utils";
 import { downloadBytes } from "./download";
@@ -64,6 +64,8 @@ export interface DocumentIODeps {
   setToast: (message: string) => void;
   pipProject: PipProjectSession | null;
   setPipProject: (project: PipProjectSession | null) => void;
+  pipIoPolicy: PipIoPolicy;
+  setPipIoPolicy: (policy: PipIoPolicy) => void;
 }
 
 export type PipProjectSession = {
@@ -94,6 +96,8 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
     setToast,
     pipProject,
     setPipProject,
+    pipIoPolicy,
+    setPipIoPolicy,
   } = deps;
 
   const confirmPipIo = ({ field, actual, operation }: PipIoConfirmationRequest) =>
@@ -132,7 +136,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
           providedCapabilities: [],
           requiredCapabilities: [],
           requiredAuthoringCapabilities: [],
-          ioPolicy: ASK_PIP_IO_POLICY,
+          ioPolicy: pipIoPolicy,
           authoringKind: "intent-document/1",
           createdAt: now.toISOString(),
           contentType: "application/vnd.intent-map.pip",
@@ -140,6 +144,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
       const exportManifest = pipProject ? {
           ...pipProject.manifest,
           rootNodeId: documentState.rootIntent.id,
+          ioPolicy: pipIoPolicy,
         } : fallbackManifest;
       const bytes = await encodePip(
         {
@@ -174,6 +179,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
       assets: pip.assets,
       sourceHash: await pipSha256(new Uint8Array(bytes)),
     });
+    setPipIoPolicy(pip.manifest.ioPolicy);
     return loadIntentDocument(JSON.parse(pip.rootTreeText) as unknown);
   };
 

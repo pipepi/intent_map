@@ -31,6 +31,8 @@ export function IntentEditor() {
       history: document.model.history,
       future: document.model.future,
       dirty: document.model.dirty,
+      pipIoPolicy: document.model.pipIoPolicy,
+      setPipIoPolicy: document.setPipIoPolicy,
       exportDocument: document.io.exportDocument,
       exportPip: document.io.exportPip,
       updateDocumentNode: document.writes.updateNode,

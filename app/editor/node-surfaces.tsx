@@ -19,6 +19,11 @@ import {
   type ScopeAddress,
 } from "../runtime/model";
 import { resolveRenderer, type RuntimeCommand } from "../runtime/registry";
+import type {
+  PipIoPolicy,
+  PipIoPolicyField,
+  PipLimit,
+} from "../runtime/pip-io-policy";
 import {
   PROJECTION_LOD_THRESHOLD,
   projectIntentTree,
@@ -63,6 +68,8 @@ export type NodeSurfaceDeps = {
   history: IntentDocumentV3[];
   future: IntentDocumentV3[];
   dirty: boolean;
+  pipIoPolicy: PipIoPolicy;
+  setPipIoPolicy: (policy: PipIoPolicy) => void;
   layoutLocked: boolean;
   camera: CameraState;
   search: string;
@@ -197,6 +204,8 @@ export const renderNodeSurface = (
     history,
     future,
     dirty,
+    pipIoPolicy,
+    setPipIoPolicy,
     layoutLocked,
     camera,
     navigationStack,
@@ -309,6 +318,17 @@ export const renderNodeSurface = (
   }
   // 全局工具栏：新建/导入/导出/撤销重做/泳道布局/发布模块/布局锁
   if (key === "global-toolbar") {
+    const policyFields: Array<[PipIoPolicyField, string]> = [
+      ["maxPipBytes", "PIP 文件字节"],
+      ["maxSingleResourceBytes", "单资源字节"],
+      ["maxExpandedBytes", "展开后字节"],
+      ["maxResourceCount", "资源数量"],
+      ["maxCompressionRatio", "压缩比"],
+    ];
+    const updateLimit = (field: PipIoPolicyField, limit: PipLimit) => {
+      setPipIoPolicy({ ...pipIoPolicy, [field]: limit });
+      setToast("容量策略已更新，将保存在下一次导出的 .pip 中");
+    };
     return (
       <div className="global-toolbar-surface">
         <div className="runtime-brand"><i>◈</i><span><strong>Intent Map</strong><small>一切皆管道（节点）· v3</small></span></div>
@@ -322,8 +342,55 @@ export const renderNodeSurface = (
           <button onClick={() => dispatchRuntimeEvent("AUTO_LAYOUT", "global_toolbar")}>泳道布局</button>
           <button onClick={() => dispatchRuntimeEvent("PUBLISH_MODULE", "global_toolbar")}>发布模块</button>
           <button onClick={() => dispatchRuntimeEvent("SET_LAYOUT_LOCK", "global_toolbar", { locked: !layoutLocked })}>{layoutLocked ? "解锁布局" : "锁定布局"}</button>
+          <button onClick={(event) => event.currentTarget.closest(".global-toolbar-surface")?.querySelector("dialog")?.showModal()}>容量策略</button>
         </div>
         <small className="runtime-save-state">{dirty ? "● 未导出" : "○ 已同步到文件"}</small>
+        <dialog className="pip-io-policy-dialog">
+          <form method="dialog">
+            <header><strong>PIP 容量策略</strong><button aria-label="关闭">×</button></header>
+            <p>策略随导出的 .pip 保存；本机或命令行策略仍具有更高优先级。</p>
+            {policyFields.map(([field, label]) => {
+              const limit = pipIoPolicy[field];
+              return (
+                <label key={field}>
+                  <span>{label}</span>
+                  <select
+                    value={limit.mode}
+                    onChange={(event) => {
+                      const mode = event.target.value as PipLimit["mode"];
+                      updateLimit(
+                        field,
+                        mode === "value"
+                          ? { mode, value: limit.mode === "value" ? limit.value : "0" }
+                          : { mode },
+                      );
+                    }}
+                  >
+                    <option value="ask">每次确认</option>
+                    <option value="value">指定值</option>
+                    <option value="unlimited">不限制</option>
+                  </select>
+                  {limit.mode === "value" && (
+                    <input
+                      key={`${field}:${limit.value}`}
+                      inputMode="numeric"
+                      defaultValue={limit.value}
+                      onBlur={(event) => {
+                        const value = event.target.value.trim();
+                        if (/^(0|[1-9]\d*)$/.test(value)) updateLimit(field, { mode: "value", value });
+                        else {
+                          event.target.value = limit.value;
+                          setToast("容量值必须是非负十进制整数");
+                        }
+                      }}
+                    />
+                  )}
+                </label>
+              );
+            })}
+            <footer><button>完成</button></footer>
+          </form>
+        </dialog>
       </div>
     );
   }

@@ -2157,6 +2157,65 @@ code,
   white-space: nowrap;
 }
 
+.pip-io-policy-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid #425187;
+  border-radius: 10px;
+  color: #d9e2ff;
+  background: #10172f;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.pip-io-policy-dialog::backdrop {
+  background: rgba(4, 7, 18, 0.72);
+}
+
+.pip-io-policy-dialog form {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.pip-io-policy-dialog header,
+.pip-io-policy-dialog footer,
+.pip-io-policy-dialog label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pip-io-policy-dialog header,
+.pip-io-policy-dialog footer {
+  justify-content: space-between;
+}
+
+.pip-io-policy-dialog p {
+  margin: 0;
+  color: #8996bd;
+  font-size: 11px;
+}
+
+.pip-io-policy-dialog label > span {
+  flex: 1;
+  font-size: 11px;
+}
+
+.pip-io-policy-dialog select,
+.pip-io-policy-dialog input,
+.pip-io-policy-dialog button {
+  min-height: 30px;
+  border: 1px solid #33406b;
+  border-radius: 5px;
+  color: #c6d2f4;
+  background: #151e3d;
+}
+
+.pip-io-policy-dialog input {
+  width: 132px;
+  padding: 0 8px;
+}
+
 .tree-surface {
   padding: 10px;
 }

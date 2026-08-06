@@ -9,6 +9,10 @@ import {
   type ScopeAddress,
 } from "../runtime/model";
 import { downloadExport, prepareDocumentExport } from "../runtime/export";
+import {
+  ASK_PIP_IO_POLICY,
+  type PipIoPolicy,
+} from "../runtime/pip-io-policy";
 import { createDocumentIO, type PipProjectSession } from "./document-io";
 import { useDocumentHistory } from "./use-document-history";
 import { useRuntimePipeline } from "./use-runtime-pipeline";
@@ -34,6 +38,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
     freePanelContext(sampleDocument()).navigationStack,
   );
   const [pipProject, setPipProject] = useState<PipProjectSession | null>(null);
+  const [pipIoPolicy, setPipIoPolicy] = useState<PipIoPolicy>(ASK_PIP_IO_POLICY);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runtime = useRuntimePipeline({ setDocumentState: updateDocument, setToast });
 
@@ -84,6 +89,8 @@ export function useDocumentSession(setToast: (message: string) => void) {
     setToast,
     pipProject,
     setPipProject,
+    pipIoPolicy,
+    setPipIoPolicy,
   });
 
   const newDocument = () => {
@@ -93,6 +100,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
     ) return;
     const next = sampleDocument();
     setPipProject(null);
+    setPipIoPolicy(ASK_PIP_IO_POLICY);
     const restored = freePanelContext(next);
     loadDocument(next, true);
     setNavigationStack(restored.navigationStack);
@@ -129,7 +137,15 @@ export function useDocumentSession(setToast: (message: string) => void) {
   }, []);
 
   return {
-    model: { document: documentState, history, future, dirty, navigationStack, pipProject },
+    model: {
+      document: documentState,
+      history,
+      future,
+      dirty,
+      navigationStack,
+      pipProject,
+      pipIoPolicy,
+    },
     writes: {
       commitDocumentChange,
       commitViewChange,
@@ -143,6 +159,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
     io: { fileInputRef, exportDocument, newDocument, ...documentIO },
     historyActions: { undo, redo },
     setNavigationStack,
+    setPipIoPolicy,
     runtime,
   };
 }
