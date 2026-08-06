@@ -8,8 +8,76 @@ const PIP_VERSION: u32 = 1;
 const SECTION_COUNT: usize = 4;
 const SECTION_ENTRY_SIZE: usize = 48;
 const HEADER_SIZE: usize = 16 + SECTION_COUNT * SECTION_ENTRY_SIZE;
-const MAX_SECTION_SIZE: usize = 64 * 1024 * 1024;
-const MAX_PACKAGE_SIZE: usize = 128 * 1024 * 1024;
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum PipLimit {
+    Ask,
+    Unlimited,
+    Value { value: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipIoPolicy {
+    pub schema_version: u32,
+    pub max_pip_bytes: PipLimit,
+    pub max_single_resource_bytes: PipLimit,
+    pub max_expanded_bytes: PipLimit,
+    pub max_resource_count: PipLimit,
+    pub max_compression_ratio: PipLimit,
+}
+
+impl PipIoPolicy {
+    pub fn ask() -> Self {
+        Self {
+            schema_version: 1,
+            max_pip_bytes: PipLimit::Ask,
+            max_single_resource_bytes: PipLimit::Ask,
+            max_expanded_bytes: PipLimit::Ask,
+            max_resource_count: PipLimit::Ask,
+            max_compression_ratio: PipLimit::Ask,
+        }
+    }
+
+    pub fn unlimited() -> Self {
+        Self {
+            schema_version: 1,
+            max_pip_bytes: PipLimit::Unlimited,
+            max_single_resource_bytes: PipLimit::Unlimited,
+            max_expanded_bytes: PipLimit::Unlimited,
+            max_resource_count: PipLimit::Unlimited,
+            max_compression_ratio: PipLimit::Unlimited,
+        }
+    }
+
+    fn authorize(&self, field: &str, limit: &PipLimit, actual: u64) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err("unsupported PIP I/O policy version".into());
+        }
+        match limit {
+            PipLimit::Ask => Err(format!(
+                "PIP I/O confirmation required for {field}: {actual}"
+            )),
+            PipLimit::Unlimited => Ok(()),
+            PipLimit::Value { value } => {
+                if value != "0"
+                    && (value.starts_with('0') || !value.bytes().all(|byte| byte.is_ascii_digit()))
+                {
+                    return Err(format!("invalid PIP I/O policy value for {field}"));
+                }
+                let maximum = value
+                    .parse::<u64>()
+                    .map_err(|_| format!("invalid PIP I/O policy value for {field}"))?;
+                if actual <= maximum {
+                    Ok(())
+                } else {
+                    Err(format!("{field} exceeded: {actual}/{maximum}"))
+                }
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Asset {
@@ -73,14 +141,12 @@ fn u64_at(bytes: &[u8], offset: usize) -> Result<u64, String> {
     ))
 }
 
-fn parse_assets(section: &[u8], base: usize) -> Result<Vec<Asset>, String> {
+fn parse_assets(section: &[u8], base: usize, policy: &PipIoPolicy) -> Result<Vec<Asset>, String> {
     if section.is_empty() {
         return Ok(Vec::new());
     }
     let count = u32_at(section, 0)? as usize;
-    if count > 100_000 {
-        return Err("asset count exceeds limit".into());
-    }
+    policy.authorize("maxResourceCount", &policy.max_resource_count, count as u64)?;
     let mut cursor = 4usize;
     let mut seen = HashSet::new();
     let mut assets = Vec::with_capacity(count);
@@ -89,6 +155,11 @@ fn parse_assets(section: &[u8], base: usize) -> Result<Vec<Asset>, String> {
         let mime_len = u16_at(section, cursor + 2)? as usize;
         let data_len = usize::try_from(u64_at(section, cursor + 4)?)
             .map_err(|_| "asset length exceeds platform limit")?;
+        policy.authorize(
+            "maxSingleResourceBytes",
+            &policy.max_single_resource_bytes,
+            data_len as u64,
+        )?;
         cursor = cursor.checked_add(12).ok_or("asset offset overflow")?;
         let metadata_end = cursor
             .checked_add(path_len)
@@ -131,11 +202,13 @@ fn parse_assets(section: &[u8], base: usize) -> Result<Vec<Asset>, String> {
 
 impl Package {
     pub fn parse(bytes: Vec<u8>) -> Result<Self, String> {
+        Self::parse_with_policy(bytes, &PipIoPolicy::unlimited())
+    }
+
+    pub fn parse_with_policy(bytes: Vec<u8>, policy: &PipIoPolicy) -> Result<Self, String> {
+        policy.authorize("maxPipBytes", &policy.max_pip_bytes, bytes.len() as u64)?;
         if bytes.len() < HEADER_SIZE {
             return Err("PIP header is truncated".into());
-        }
-        if bytes.len() > MAX_PACKAGE_SIZE {
-            return Err("PIP package exceeds size limit".into());
         }
         if bytes.get(..8) != Some(PIP_MAGIC) {
             return Err("invalid PIP magic".into());
@@ -149,7 +222,7 @@ impl Package {
             let offset = usize::try_from(u64_at(&bytes, entry)?).map_err(|_| "offset overflow")?;
             let length =
                 usize::try_from(u64_at(&bytes, entry + 8)?).map_err(|_| "length overflow")?;
-            if length > MAX_SECTION_SIZE || offset < HEADER_SIZE || offset % 8 != 0 {
+            if offset < HEADER_SIZE || offset % 8 != 0 {
                 return Err(format!("invalid PIP section {index}"));
             }
             let end = offset.checked_add(length).ok_or("section overflow")?;
@@ -169,6 +242,17 @@ impl Package {
                 return Err("PIP sections overlap".into());
             }
         }
+        let expanded_size = sections_vec.iter().try_fold(0usize, |total, range| {
+            total
+                .checked_add(range.len())
+                .ok_or("expanded size overflow")
+        })?;
+        policy.authorize(
+            "maxExpandedBytes",
+            &policy.max_expanded_bytes,
+            expanded_size as u64,
+        )?;
+        policy.authorize("maxCompressionRatio", &policy.max_compression_ratio, 1)?;
         let sections: [Range<usize>; SECTION_COUNT] = sections_vec
             .try_into()
             .map_err(|_| "invalid PIP section count")?;
@@ -182,7 +266,10 @@ impl Package {
                 return false;
             };
             !name.is_empty()
-                && name.bytes().next().is_some_and(|byte| byte.is_ascii_lowercase())
+                && name
+                    .bytes()
+                    .next()
+                    .is_some_and(|byte| byte.is_ascii_lowercase())
                 && name.bytes().all(|byte| {
                     byte.is_ascii_lowercase()
                         || byte.is_ascii_digit()
@@ -213,8 +300,14 @@ impl Package {
                 .chain(&manifest.required_capabilities)
                 .chain(&manifest.required_authoring_capabilities)
                 .any(|value| value.is_empty())
-            || manifest.authoring_kind.as_deref().is_some_and(str::is_empty)
-            || manifest.authoring_compiler.as_deref().is_some_and(str::is_empty)
+            || manifest
+                .authoring_kind
+                .as_deref()
+                .is_some_and(str::is_empty)
+            || manifest
+                .authoring_compiler
+                .as_deref()
+                .is_some_and(str::is_empty)
             || manifest
                 .provided_capabilities
                 .iter()
@@ -224,12 +317,11 @@ impl Package {
                 && (manifest.editor_abi.as_deref() != Some("pip-editor/1")
                     || manifest.provided_editor_kinds.is_empty()))
             || (layer != crate::PipLayer::Editor && manifest.editor_abi.is_some())
-            || (layer == crate::PipLayer::Functional
-                && manifest.provided_capabilities.is_empty())
+            || (layer == crate::PipLayer::Functional && manifest.provided_capabilities.is_empty())
         {
             return Err("invalid PIP manifest fields".into());
         }
-        let assets = parse_assets(&bytes[sections[3].clone()], sections[3].start)?;
+        let assets = parse_assets(&bytes[sections[3].clone()], sections[3].start, policy)?;
         Ok(Self {
             bytes,
             sections,
@@ -261,7 +353,7 @@ impl Package {
 
 #[cfg(test)]
 mod tests {
-    use super::Package;
+    use super::{Package, PipIoPolicy, PipLimit};
 
     #[test]
     fn reads_typescript_fixed_vector() {
@@ -271,5 +363,23 @@ mod tests {
         assert_eq!(package.assets().len(), 1);
         assert_eq!(package.assets()[0].path, "index.html");
         assert_eq!(package.asset_bytes(&package.assets()[0]), b"<h1>PIP</h1>");
+    }
+
+    #[test]
+    fn policy_asks_by_default_and_accepts_explicit_limits() {
+        let bytes = include_bytes!("../../tests/fixtures/minimal-valid.pip").to_vec();
+        let error = Package::parse_with_policy(bytes.clone(), &PipIoPolicy::ask())
+            .err()
+            .expect("ask policy must require confirmation");
+        assert!(error.contains("maxPipBytes"));
+
+        let mut policy = PipIoPolicy::unlimited();
+        policy.max_pip_bytes = PipLimit::Value {
+            value: (bytes.len() - 1).to_string(),
+        };
+        let error = Package::parse_with_policy(bytes, &policy)
+            .err()
+            .expect("small limit must reject package");
+        assert!(error.contains("maxPipBytes exceeded"));
     }
 }
