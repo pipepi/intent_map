@@ -82,3 +82,30 @@ test("opens the split workspace lazily and verifies only a focused resource", as
   await assert.rejects(() => session.read("backend/main.rs"), /byte length changed/);
   await assert.rejects(() => session.read("not-indexed.txt"), /not indexed/);
 });
+
+test("resource edits update the small intent index without bundling the files", async () => {
+  const index = await createWorkspaceResourceIndex(resources);
+  const store = new MemoryWorkspaceResourceStore(resources);
+  const session = openWorkspaceResourceSession(
+    { assets: [workspaceResourceIndexAsset(index)] },
+    store,
+  );
+
+  await session.write({
+    path: "api/openapi.json",
+    mediaType: "application/json",
+    bytes: new TextEncoder().encode("{}"),
+  });
+  assert.equal(session.dirty, true);
+  assert.deepEqual(session.list().map((entry) => entry.path), [
+    "api/openapi.json",
+    "backend/main.rs",
+    "ui/images/logo.bin",
+  ]);
+  assert.deepEqual((await session.read("api/openapi.json")).bytes, new TextEncoder().encode("{}"));
+
+  await session.remove("ui/images/logo.bin");
+  assert.equal(session.entry("ui/images/logo.bin"), undefined);
+  session.markSaved();
+  assert.equal(session.dirty, false);
+});

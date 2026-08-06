@@ -9,7 +9,11 @@ import {
 } from "../app/runtime/pip.ts";
 import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
 import { MemoryWorkspaceResourceStore } from "../a3/workspace/resource-store.ts";
-import { openSplitWorkspace, splitPipWorkspace } from "../a3/workspace/split-workspace.ts";
+import {
+  openSplitWorkspace,
+  saveSplitWorkspaceIntent,
+  splitPipWorkspace,
+} from "../a3/workspace/split-workspace.ts";
 
 const io = { policy: UNLIMITED_PIP_IO_POLICY };
 
@@ -71,4 +75,14 @@ test("splits bundle assets out of intent.pip and reopens them lazily", async () 
   assert.equal(store.readCount, 0);
   assert.deepEqual((await opened.resources.read("ui/large.bin")).bytes, source.assets[0].bytes);
   assert.equal(store.readCount, 1);
+
+  await opened.resources.write({
+    path: "db/schema.sql",
+    mediaType: "text/plain",
+    bytes: new TextEncoder().encode("create table example(id int);"),
+  });
+  const saved = await saveSplitWorkspaceIntent(opened.pip, opened.resources.index, io);
+  const reopened = await openSplitWorkspace(saved, store, io);
+  assert.ok(reopened.resources.entry("db/schema.sql"));
+  assert.equal(reopened.pip.assets.length, 1);
 });

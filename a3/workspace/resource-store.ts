@@ -2,6 +2,7 @@ import type { PipPackage } from "../../app/runtime/pip.ts";
 import { pipSha256 } from "../../app/runtime/pip.ts";
 import {
   assertWorkspaceResourcePath,
+  createWorkspaceResourceIndex,
   readWorkspaceResourceIndex,
   type WorkspaceResource,
   type WorkspaceResourceEntry,
@@ -15,18 +16,27 @@ export interface WorkspaceResourceStore {
 }
 
 export class WorkspaceResourceSession {
-  readonly index: WorkspaceResourceIndex;
+  #index: WorkspaceResourceIndex;
   readonly #store: WorkspaceResourceStore;
-  readonly #entries: Map<string, WorkspaceResourceEntry>;
+  #entries: Map<string, WorkspaceResourceEntry>;
+  #dirty = false;
 
   constructor(index: WorkspaceResourceIndex, store: WorkspaceResourceStore) {
-    this.index = index;
+    this.#index = structuredClone(index);
     this.#store = store;
     this.#entries = new Map(index.resources.map((entry) => [entry.path, entry]));
   }
 
+  get index(): WorkspaceResourceIndex {
+    return structuredClone(this.#index);
+  }
+
+  get dirty(): boolean {
+    return this.#dirty;
+  }
+
   list(): readonly WorkspaceResourceEntry[] {
-    return this.index.resources;
+    return structuredClone(this.#index.resources);
   }
 
   entry(path: string): WorkspaceResourceEntry | undefined {
@@ -45,6 +55,34 @@ export class WorkspaceResourceSession {
       throw new Error(`${normalized}: resource SHA-256 changed`);
     }
     return { path: normalized, mediaType: entry.mediaType, bytes };
+  }
+
+  async write(resource: WorkspaceResource): Promise<void> {
+    const [entry] = (await createWorkspaceResourceIndex([resource])).resources;
+    await this.#store.write({ ...resource, path: entry.path });
+    const resources = [
+      ...this.#index.resources.filter((candidate) => candidate.path !== entry.path),
+      entry,
+    ].sort((left, right) => left.path.localeCompare(right.path));
+    this.#index = { ...this.#index, resources };
+    this.#entries = new Map(resources.map((candidate) => [candidate.path, candidate]));
+    this.#dirty = true;
+  }
+
+  async remove(path: string): Promise<void> {
+    const normalized = assertWorkspaceResourcePath(path);
+    if (!this.#entries.has(normalized)) {
+      throw new Error(`Resource is not indexed by intent.pip: ${normalized}`);
+    }
+    await this.#store.remove(normalized);
+    const resources = this.#index.resources.filter((entry) => entry.path !== normalized);
+    this.#index = { ...this.#index, resources };
+    this.#entries = new Map(resources.map((entry) => [entry.path, entry]));
+    this.#dirty = true;
+  }
+
+  markSaved(): void {
+    this.#dirty = false;
   }
 }
 
