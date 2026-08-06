@@ -314,6 +314,7 @@ test("builds distributable PIP assets from a clean and coherent static export", 
     new URL("scripts/build-pip.mjs", root),
     "utf8",
   );
+  const nextConfig = await readFile(new URL("next.config.ts", root), "utf8");
 
   assert.match(cleanBuild, /rm\(path\.join\(root, "\.next"\)/);
   assert.match(cleanBuild, /next", "dist", "bin", "next"/);
@@ -321,6 +322,9 @@ test("builds distributable PIP assets from a clean and coherent static export", 
   assert.match(pipBuild, /\.workspace-v3/);
   assert.match(pipBuild, /\.workspace-panel/);
   assert.match(pipBuild, /\.workspace-surface/);
+  assert.match(nextConfig, /generateBuildId/);
+  assert.match(nextConfig, /release\.intentMap\.version/);
+  assert.match(nextConfig, /release\.intentMap\.releaseDate/);
 });
 
 test("derives and aggregates root pipes without persisting edges", async () => {
