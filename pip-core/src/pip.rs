@@ -17,6 +17,25 @@ pub enum PipLimit {
     Value { value: String },
 }
 
+impl PipLimit {
+    fn from_cli(value: &str, option: &str) -> Result<Self, String> {
+        match value {
+            "ask" => Ok(Self::Ask),
+            "unlimited" => Ok(Self::Unlimited),
+            _ if value == "0"
+                || (!value.starts_with('0') && value.bytes().all(|byte| byte.is_ascii_digit())) =>
+            {
+                Ok(Self::Value {
+                    value: value.to_string(),
+                })
+            }
+            _ => Err(format!(
+                "{option} requires a non-negative integer, ask, or unlimited"
+            )),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PipIoPolicy {
@@ -48,6 +67,63 @@ impl PipIoPolicy {
             max_expanded_bytes: PipLimit::Unlimited,
             max_resource_count: PipLimit::Unlimited,
             max_compression_ratio: PipLimit::Unlimited,
+        }
+    }
+
+    pub fn from_cli_args(args: &[String]) -> Result<Self, String> {
+        let mut policy = Self::ask();
+        for (option, target) in [
+            ("--max-pip-size", &mut policy.max_pip_bytes),
+            ("--max-resource-size", &mut policy.max_single_resource_bytes),
+            ("--max-expanded-size", &mut policy.max_expanded_bytes),
+            ("--max-resource-count", &mut policy.max_resource_count),
+            ("--max-compression-ratio", &mut policy.max_compression_ratio),
+        ] {
+            let positions: Vec<_> = args
+                .iter()
+                .enumerate()
+                .filter_map(|(index, value)| (value == option).then_some(index))
+                .collect();
+            if positions.len() > 1 {
+                return Err(format!("{option} may only be provided once"));
+            }
+            if let Some(index) = positions.first() {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| format!("{option} requires a value"))?;
+                *target = PipLimit::from_cli(value, option)?;
+            }
+        }
+        if args.iter().any(|value| value == "--allow-package-limits") {
+            policy.allow_asked();
+        }
+        policy.validate()?;
+        Ok(policy)
+    }
+
+    pub fn requires_confirmation(&self) -> bool {
+        [
+            &self.max_pip_bytes,
+            &self.max_single_resource_bytes,
+            &self.max_expanded_bytes,
+            &self.max_resource_count,
+            &self.max_compression_ratio,
+        ]
+        .into_iter()
+        .any(|limit| matches!(limit, PipLimit::Ask))
+    }
+
+    pub fn allow_asked(&mut self) {
+        for limit in [
+            &mut self.max_pip_bytes,
+            &mut self.max_single_resource_bytes,
+            &mut self.max_expanded_bytes,
+            &mut self.max_resource_count,
+            &mut self.max_compression_ratio,
+        ] {
+            if matches!(limit, PipLimit::Ask) {
+                *limit = PipLimit::Unlimited;
+            }
         }
     }
 
@@ -405,5 +481,34 @@ mod tests {
             .err()
             .expect("small limit must reject package");
         assert!(error.contains("maxPipBytes exceeded"));
+    }
+
+    #[test]
+    fn parses_cli_policy_without_hidden_defaults() {
+        let args =
+            ["--max-pip-size", "1024", "--max-resource-size", "unlimited"].map(str::to_string);
+        let policy = PipIoPolicy::from_cli_args(&args).expect("valid policy");
+        assert_eq!(
+            policy.max_pip_bytes,
+            PipLimit::Value {
+                value: "1024".into()
+            }
+        );
+        assert_eq!(policy.max_single_resource_bytes, PipLimit::Unlimited);
+        assert!(policy.requires_confirmation());
+
+        let allowed = PipIoPolicy::from_cli_args(&["--allow-package-limits".into()])
+            .expect("explicit consent");
+        assert!(!allowed.requires_confirmation());
+        assert!(PipIoPolicy::from_cli_args(&["--max-pip-size".into()]).is_err());
+        assert!(
+            PipIoPolicy::from_cli_args(&[
+                "--max-pip-size".into(),
+                "1".into(),
+                "--max-pip-size".into(),
+                "2".into(),
+            ])
+            .is_err()
+        );
     }
 }
