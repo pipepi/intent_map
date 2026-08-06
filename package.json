@@ -14,11 +14,13 @@
     "test:pip": "node --test tests/pip-format.test.mjs && cargo test --manifest-path pip-core/Cargo.toml && cargo test --manifest-path pip-seed/Cargo.toml && cargo check --manifest-path pip-seed-tauri/Cargo.toml",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "pip:build": "node scripts/build-static.mjs && node scripts/build-pip.mjs",
-    "pip:verify": "node scripts/verify-pip.mjs dist/pip/intent-map.pip",
-    "pip:host": "cargo run --manifest-path pip-seed/Cargo.toml -- --pip dist/pip/intent-map.pip",
-    "pip:desktop": "cargo run --manifest-path pip-seed-tauri/Cargo.toml -- --pip dist/pip/intent-map.pip",
+    "pip:verify": "node scripts/verify-pip.mjs",
+    "pip:host": "node scripts/run-pip-host.mjs",
+    "pip:desktop": "node scripts/run-pip-desktop.mjs",
     "pip:cli": "node scripts/build-pip-cli.mjs",
-    "pip:exe": "npm run pip:build && node scripts/build-pip-exe.mjs",
+    "pip:seed": "node scripts/build-pip-seed.mjs",
+    "pip:loader": "node scripts/build-loader.mjs",
+    "pip:dist": "node scripts/build-pip-dist.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@tailwindcss/postcss": "4.2.1",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

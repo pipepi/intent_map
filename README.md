@@ -103,39 +103,45 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run build`: verify the vinext build output
 - `npm test`: build the starter and verify its rendered loading skeleton
 - `npm run pip:build`: build the static application and deterministic `.pip`
-- `npm run pip:exe`: build the windowed Tauri `intent-map.pip.exe`
-- `npm run pip:cli`: build the diagnostic `pip-seed-cli.exe`
+- `npm run pip:dist`: build the layered Seed, Loader, and application distribution
+- `npm run pip:cli`: build the versioned diagnostic Seed CLI under `dist/pip-runtime/tools/`
 - `npm run pip:verify`: verify the generated `.pip`
 - `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
-## Current PIP Desktop Prototype
+## Layered PIP Runtime
 
-The current build can still produce the legacy `dist/pip/intent-map.pip.exe`
-overlay prototype. The target architecture does not embed a PIP in the native
-executable: Seed and `.pip` remain separate files.
-
-In the target architecture, only the minimal, stateless Seed is a native
-double-clickable executable. Evolving capabilities are separate `.pip` files:
+Seed and `.pip` are separate files. Every artifact carries its architecture
+layer, semantic version, and release date in the filename:
 
 ```text
-Seed executable
-→ loader.pip
-→ intent-map.pip
-→ capability and application PIPs
+dist/pip-runtime/
+├── a0_pip_seed_1_0_0_20260806.app  # macOS; Windows uses .exe
+├── a1_loader_1_0_0_20260806.pip
+└── pip/
+    └── a2_intent_map_1_0_0_20260806.pip
 ```
 
-Without an explicit startup path, Seed automatically loads a `.pip` only when
-exactly one exists beside it. If the directory contains none or multiple PIPs,
-the user must provide a startup argument or select one through the minimal UI.
-
-The package format and executable overlay are implemented by `pip-core`.
-`pip-seed-cli.exe` remains a separate recovery tool:
+Seed loads the unique `a1` Loader beside it. The Loader discovers `a2`–`a5`
+applications in `pip/`. When the configured default resolves to exactly one
+valid package, Seed activates it before creating the window, so the application
+opens without flashing the Loader screen. Otherwise, or with `--select-app`,
+the Loader list is shown. The CLI Seed verifies external PIPs and never extracts an
+embedded payload:
 
 ```powershell
-.\dist\pip\pip-seed-cli.exe --verify .\dist\pip\intent-map.pip
-.\dist\pip\pip-seed-cli.exe --extract .\dist\pip\intent-map.pip.exe .\recovered.pip
+.\dist\pip-runtime\tools\a0_pip_seed_cli_1_0_0_20260806.exe --verify .\dist\pip-runtime\pip\a2_intent_map_1_0_0_20260806.pip
 ```
+
+On macOS, double-click the versioned `.app` to launch without Terminal. Desktop
+arguments remain available through Launch Services:
+
+```bash
+open -n dist/pip-runtime/a0_pip_seed_1_0_0_20260806.app --args \
+  --pip "$PWD/dist/pip-runtime/a1_loader_1_0_0_20260806.pip" --select-app
+```
+
+Use `npm run pip:cli` for terminal hosting and `--verify` diagnostics.
 
 ## Learn More
 

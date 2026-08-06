@@ -7,6 +7,12 @@ import {
   encodePip,
 } from "../app/runtime/pip.ts";
 import {
+  applicationDirectory,
+  artifactFilename,
+  createdAtFor,
+  readReleaseConfig,
+} from "./pip-release.mjs";
+import {
   createApplicationDocument,
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
@@ -14,9 +20,9 @@ import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts
 
 const root = path.resolve(import.meta.dirname, "..");
 
-const option = (name, fallback) => {
+const option = (name) => {
   const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : fallback;
+  return index >= 0 ? process.argv[index + 1] : undefined;
 };
 
 const mimeFor = (file) => {
@@ -62,8 +68,9 @@ const collectAssets = async (directory, relative = "") => {
 };
 
 const treePath = option("--tree");
-const assetsDirectory = path.resolve(root, option("--assets", "out"));
-const output = path.resolve(root, option("--output", "dist/pip/intent-map.pip"));
+const assetsDirectory = path.resolve(root, option("--assets") ?? "out");
+const release = (await readReleaseConfig()).intentMap;
+const output = path.join(applicationDirectory, artifactFilename(release));
 const tree = treePath
   ? JSON.parse(await readFile(path.resolve(root, treePath), "utf8"))
   : createApplicationDocument(createSampleBusinessRoot());
@@ -102,16 +109,18 @@ if (
     "PIP static export is inconsistent: v3 workspace HTML is paired with stale CSS",
   );
 }
-const createdAt = new Date(Number(process.env.SOURCE_DATE_EPOCH ?? "0") * 1000).toISOString();
 const bytes = await encodePip({
   manifest: {
-    packageId: "intent-map.seed",
-    name: "Intent Map",
-    packageVersion: "0.1.0",
+    packageId: release.packageId,
+    layer: release.layer,
+    artifactName: release.artifactName,
+    name: release.name,
+    packageVersion: release.version,
+    releaseDate: release.releaseDate,
     rootNodeId: tree.rootIntent.id,
     loaderAbi: "pip-loader/1",
     requiredCapabilities: [],
-    createdAt,
+    createdAt: createdAtFor(release),
     contentType: "application/vnd.intent-map.pip",
   },
   loaderSource: DEFAULT_PIP_LOADER_SOURCE,

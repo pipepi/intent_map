@@ -1,0 +1,30 @@
+{
+  "seed": {
+    "layer": "a0",
+    "artifactName": "pip_seed",
+    "version": "1.0.0",
+    "releaseDate": "20260806"
+  },
+  "seedCli": {
+    "layer": "a0",
+    "artifactName": "pip_seed_cli",
+    "version": "1.0.0",
+    "releaseDate": "20260806"
+  },
+  "loader": {
+    "layer": "a1",
+    "artifactName": "loader",
+    "packageId": "pip-loader",
+    "name": "PIP Loader",
+    "version": "1.0.0",
+    "releaseDate": "20260806"
+  },
+  "intentMap": {
+    "layer": "a2",
+    "artifactName": "intent_map",
+    "packageId": "intent-map",
+    "name": "Intent Map",
+    "version": "1.0.0",
+    "releaseDate": "20260806"
+  }
+}

@@ -20,10 +20,15 @@ export async function load(api) {
 }
 `.trim();
 
+export type PipLayer = "a1" | "a2" | "a3" | "a4" | "a5";
+
 export type PipManifest = {
   packageId: string;
+  layer: PipLayer;
+  artifactName: string;
   name: string;
   packageVersion: string;
+  releaseDate: string;
   rootNodeId: string;
   loaderAbi: "pip-loader/1";
   requiredCapabilities: string[];
@@ -52,6 +57,33 @@ type PipSection = {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const artifactNamePattern = /^[a-z][a-z0-9_]*$/;
+const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+const validReleaseDate = (value: string) => {
+  if (!/^\d{8}$/.test(value)) return false;
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(4, 6));
+  const day = Number(value.slice(6, 8));
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+
+export const assertPipManifest = (manifest: PipManifest): PipManifest => {
+  if (
+    !manifest ||
+    !["a1", "a2", "a3", "a4", "a5"].includes(manifest.layer) ||
+    !artifactNamePattern.test(manifest.artifactName) ||
+    !versionPattern.test(manifest.packageVersion) ||
+    !validReleaseDate(manifest.releaseDate) ||
+    !manifest.packageId ||
+    !manifest.name ||
+    !manifest.rootNodeId ||
+    manifest.loaderAbi !== "pip-loader/1" ||
+    manifest.contentType !== "application/vnd.intent-map.pip"
+  ) throw new Error("Invalid PIP manifest");
+  return manifest;
+};
 
 const align8 = (value: number) => (value + 7) & ~7;
 
@@ -148,6 +180,7 @@ export const decodePipAssets = (bytes: Uint8Array): PipAsset[] => {
 };
 
 export const encodePip = async (input: PipPackage): Promise<Uint8Array> => {
+  assertPipManifest(input.manifest);
   const sections = [
     textEncoder.encode(JSON.stringify(input.manifest)),
     textEncoder.encode(input.loaderSource),
@@ -209,15 +242,7 @@ export const decodePip = async (source: ArrayBuffer | Uint8Array): Promise<PipPa
     if (!equalBytes(await sha256(payload), section.hash)) throw new Error(`PIP section ${index} hash mismatch`);
     payloads.push(payload);
   }
-  const manifest = JSON.parse(textDecoder.decode(payloads[0])) as PipManifest;
-  if (
-    !manifest ||
-    manifest.loaderAbi !== "pip-loader/1" ||
-    typeof manifest.packageId !== "string" ||
-    typeof manifest.rootNodeId !== "string"
-  ) {
-    throw new Error("Invalid PIP manifest");
-  }
+  const manifest = assertPipManifest(JSON.parse(textDecoder.decode(payloads[0])) as PipManifest);
   return {
     manifest,
     loaderSource: textDecoder.decode(payloads[1]),

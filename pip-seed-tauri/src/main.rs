@@ -1,125 +1,104 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use pip_core::Package;
+use pip_core::{
+    Package, PipDiscovery, catalog_entries, discover_loader_pip, load_catalog_package,
+    load_default_catalog_package, validate_package_filename,
+};
+use serde_json::json;
 use std::borrow::Cow;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use tauri::http::{Method, Request, Response, StatusCode, header};
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
+struct RuntimeState {
+    package: RwLock<Package>,
+    applications: PathBuf,
+    force_selection: bool,
+    loader: pip_core::Manifest,
+}
+
 #[derive(Debug, PartialEq)]
 enum OneShotCommand {
-    Verify(Option<PathBuf>),
-    Extract(PathBuf),
+    Verify(PathBuf),
 }
 
 fn parse_one_shot_command(args: &[String]) -> Result<Option<OneShotCommand>, String> {
     match args.first().map(String::as_str) {
-        Some("--verify") => {
-            if args.len() > 2 {
-                return Err("--verify accepts at most one PIP path".into());
-            }
-            Ok(Some(OneShotCommand::Verify(args.get(1).map(PathBuf::from))))
+        Some("--verify") if args.len() == 2 => {
+            Ok(Some(OneShotCommand::Verify(PathBuf::from(&args[1]))))
         }
-        Some("--extract") => {
-            if args.len() != 2 {
-                return Err("--extract requires exactly one destination path".into());
-            }
-            Ok(Some(OneShotCommand::Extract(PathBuf::from(&args[1]))))
-        }
+        Some("--verify") => Err("--verify requires exactly one PIP path".into()),
         _ => Ok(None),
     }
-}
-
-fn embedded_payload() -> Result<Vec<u8>, String> {
-    let executable =
-        env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
-    pip_core::envelope::extract_from_file(&executable)
 }
 
 fn run_one_shot(command: OneShotCommand) -> Result<(), String> {
     match command {
         OneShotCommand::Verify(path) => {
-            let bytes = match path {
-                Some(path) => {
-                    fs::read(&path).map_err(|error| format!("cannot read PIP: {error}"))?
-                }
-                None => embedded_payload()?,
-            };
-            Package::parse(bytes)?;
-        }
-        OneShotCommand::Extract(destination) => {
-            fs::write(&destination, embedded_payload()?)
-                .map_err(|error| format!("cannot write extracted PIP: {error}"))?;
+            let package = Package::parse(
+                fs::read(&path).map_err(|error| format!("cannot read PIP: {error}"))?,
+            )?;
+            validate_package_filename(&path, &package)
         }
     }
-    Ok(())
 }
 
-fn load_payload() -> Result<Vec<u8>, String> {
-    let args: Vec<String> = env::args().skip(1).collect();
-    if let Some(index) = args.iter().position(|argument| argument == "--pip") {
-        let path = args.get(index + 1).ok_or("--pip requires a path")?;
-        return fs::read(path).map_err(|error| format!("cannot read PIP: {error}"));
-    }
-    embedded_payload()
-}
-
-fn package_response(package: &Package, request: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
-    if request.method() != Method::GET && request.method() != Method::HEAD {
-        return response(
-            StatusCode::METHOD_NOT_ALLOWED,
-            "text/plain; charset=utf-8",
-            b"method not allowed".to_vec(),
-            request.method() == Method::HEAD,
-        );
-    }
-    let raw_path = request.uri().path();
-    if raw_path.contains("..") || raw_path.contains('\\') {
-        return response(
-            StatusCode::BAD_REQUEST,
-            "text/plain; charset=utf-8",
-            b"unsafe path".to_vec(),
-            request.method() == Method::HEAD,
-        );
-    }
-    if raw_path == "/__pip/package" {
-        return response(
-            StatusCode::OK,
-            "application/vnd.intent-map.pip",
-            package.bytes().to_vec(),
-            request.method() == Method::HEAD,
-        );
-    }
-    if raw_path == "/__pip/manifest" {
-        return response(
-            StatusCode::OK,
-            "application/json; charset=utf-8",
-            package.manifest().to_vec(),
-            request.method() == Method::HEAD,
-        );
-    }
-    let path = if raw_path == "/" {
-        "index.html"
-    } else {
-        raw_path.trim_start_matches('/')
+fn argument_path(args: &[String], name: &str) -> Result<Option<PathBuf>, String> {
+    let Some(index) = args.iter().position(|argument| argument == name) else {
+        return Ok(None);
     };
-    if let Some(asset) = package.assets().iter().find(|asset| asset.path == path) {
-        response(
-            StatusCode::OK,
-            &asset.mime,
-            package.asset_bytes(asset).to_vec(),
-            request.method() == Method::HEAD,
-        )
+    Ok(Some(PathBuf::from(
+        args.get(index + 1)
+            .ok_or_else(|| format!("{name} requires a path"))?,
+    )))
+}
+
+fn choose_loader(directory: &Path) -> Result<Option<PathBuf>, String> {
+    Ok(rfd::FileDialog::new()
+        .set_directory(directory)
+        .add_filter("PIP Loader", &["pip"])
+        .pick_file())
+}
+
+fn seed_artifact(executable: &Path) -> PathBuf {
+    let Some(macos) = executable.parent() else {
+        return executable.to_path_buf();
+    };
+    let Some(contents) = macos.parent() else {
+        return executable.to_path_buf();
+    };
+    let Some(bundle) = contents.parent() else {
+        return executable.to_path_buf();
+    };
+    if macos.file_name().is_some_and(|name| name == "MacOS")
+        && contents.file_name().is_some_and(|name| name == "Contents")
+        && bundle
+            .extension()
+            .is_some_and(|extension| extension == "app")
+    {
+        bundle.to_path_buf()
     } else {
-        response(
-            StatusCode::NOT_FOUND,
-            "text/plain; charset=utf-8",
-            b"not found".to_vec(),
-            request.method() == Method::HEAD,
-        )
+        executable.to_path_buf()
+    }
+}
+
+fn resolve_loader(args: &[String], seed: &Path) -> Result<Option<PathBuf>, String> {
+    let explicit = argument_path(args, "--pip")?;
+    match discover_loader_pip(explicit.as_deref(), seed)? {
+        PipDiscovery::Selected(path) => Ok(Some(path)),
+        PipDiscovery::NeedsSelection(_) => {
+            let directory = seed.parent().ok_or("Seed artifact has no parent")?;
+            let Some(path) = choose_loader(directory)? else {
+                return Ok(None);
+            };
+            match discover_loader_pip(Some(&path), seed)? {
+                PipDiscovery::Selected(path) => Ok(Some(path)),
+                PipDiscovery::NeedsSelection(_) => unreachable!(),
+            }
+        }
     }
 }
 
@@ -144,8 +123,148 @@ fn response(
         .expect("static PIP response must be valid")
 }
 
-fn run() -> Result<(), String> {
-    let package = Arc::new(Package::parse(load_payload()?)?);
+fn package_response(
+    state: &RuntimeState,
+    request: &Request<Vec<u8>>,
+) -> Response<Cow<'static, [u8]>> {
+    let raw_path = request.uri().path();
+    if raw_path.contains("..") || raw_path.contains('\\') || raw_path.contains('%') {
+        return response(
+            StatusCode::BAD_REQUEST,
+            "text/plain",
+            b"unsafe path".to_vec(),
+            false,
+        );
+    }
+    if request.method() == Method::GET && raw_path == "/__pip/catalog" {
+        return match catalog_entries(&state.applications).and_then(|apps| {
+            serde_json::to_vec(&json!({
+                "forceSelection": state.force_selection,
+                "loader": {
+                    "layer": state.loader.layer,
+                    "artifactName": state.loader.artifact_name,
+                    "packageVersion": state.loader.package_version,
+                    "releaseDate": state.loader.release_date,
+                },
+                "apps": apps,
+            }))
+            .map_err(|error| error.to_string())
+        }) {
+            Ok(body) => response(
+                StatusCode::OK,
+                "application/json; charset=utf-8",
+                body,
+                false,
+            ),
+            Err(error) => response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
+        };
+    }
+    if request.method() == Method::POST && raw_path == "/__pip/activate" {
+        let result = serde_json::from_slice::<serde_json::Value>(request.body())
+            .map_err(|error| format!("invalid activation request: {error}"))
+            .and_then(|value| {
+                value
+                    .get("file")
+                    .and_then(|item| item.as_str())
+                    .map(str::to_owned)
+                    .ok_or_else(|| "activation request requires file".into())
+            })
+            .and_then(|file| {
+                load_catalog_package(&state.applications, &file).map(|(_, package)| package)
+            })
+            .and_then(|package| {
+                state
+                    .package
+                    .write()
+                    .map_err(|_| "package lock poisoned".to_string())
+                    .map(|mut active| *active = package)
+            });
+        return match result {
+            Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
+            Err(error) => response(
+                StatusCode::BAD_REQUEST,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
+        };
+    }
+    if request.method() != Method::GET && request.method() != Method::HEAD {
+        return response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "text/plain",
+            b"method not allowed".to_vec(),
+            false,
+        );
+    }
+    let head_only = request.method() == Method::HEAD;
+    let package = match state.package.read() {
+        Ok(package) => package,
+        Err(_) => {
+            return response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "text/plain",
+                b"package lock poisoned".to_vec(),
+                head_only,
+            );
+        }
+    };
+    if raw_path == "/__pip/package" {
+        return response(
+            StatusCode::OK,
+            "application/vnd.intent-map.pip",
+            package.bytes().to_vec(),
+            head_only,
+        );
+    }
+    if raw_path == "/__pip/manifest" {
+        return response(
+            StatusCode::OK,
+            "application/json; charset=utf-8",
+            package.manifest().to_vec(),
+            head_only,
+        );
+    }
+    let asset_path = if raw_path == "/" {
+        "index.html"
+    } else {
+        raw_path.trim_start_matches('/')
+    };
+    match package
+        .assets()
+        .iter()
+        .find(|asset| asset.path == asset_path)
+    {
+        Some(asset) => response(
+            StatusCode::OK,
+            &asset.mime,
+            package.asset_bytes(asset).to_vec(),
+            head_only,
+        ),
+        None => response(
+            StatusCode::NOT_FOUND,
+            "text/plain",
+            b"not found".to_vec(),
+            head_only,
+        ),
+    }
+}
+
+fn run(args: &[String]) -> Result<(), String> {
+    let executable =
+        env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
+    let seed = seed_artifact(&executable);
+    let Some(loader_path) = resolve_loader(args, &seed)? else {
+        return Ok(());
+    };
+    let package = Package::parse(
+        fs::read(&loader_path).map_err(|error| format!("cannot read PIP: {error}"))?,
+    )?;
     if !package
         .assets()
         .iter()
@@ -153,22 +272,33 @@ fn run() -> Result<(), String> {
     {
         return Err("PIP package has no index.html asset".into());
     }
-    let protocol_package = Arc::clone(&package);
+    let loader = package.manifest_data().clone();
+    let applications = loader_path
+        .parent()
+        .ok_or("Loader PIP has no parent directory")?
+        .join("pip");
+    let force_selection = args.iter().any(|argument| argument == "--select-app");
+    let package =
+        load_default_catalog_package(&package, &applications, force_selection)?.unwrap_or(package);
+    let state = Arc::new(RuntimeState {
+        package: RwLock::new(package),
+        applications,
+        force_selection,
+        loader,
+    });
+    let protocol_state = Arc::clone(&state);
     tauri::Builder::default()
         .register_uri_scheme_protocol("pip", move |_context, request| {
-            package_response(&protocol_package, &request)
+            package_response(&protocol_state, &request)
         })
         .setup(|app| {
-            let url = "pip://localhost/index.html?token=desktop"
+            let url = "pip://localhost/index.html"
                 .parse()
                 .map_err(|error| format!("invalid desktop URL: {error}"))?;
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("Intent Map")
+                .title("PIP Runtime")
                 .inner_size(1440.0, 900.0)
                 .min_inner_size(960.0, 640.0)
-                // WebView2 must expose precision-touchpad pinch as Ctrl+wheel.
-                // The application cancels its page-zoom default in a non-passive
-                // capture listener, then routes it to the focused canvas camera.
                 .zoom_hotkeys_enabled(true)
                 .build()?;
             Ok(())
@@ -181,7 +311,6 @@ fn run() -> Result<(), String> {
 fn show_fatal(message: &str) {
     use std::os::windows::ffi::OsStrExt;
     use std::{ffi::OsStr, ptr};
-
     #[link(name = "user32")]
     unsafe extern "system" {
         fn MessageBoxW(
@@ -191,9 +320,8 @@ fn show_fatal(message: &str) {
             kind: u32,
         ) -> i32;
     }
-
     let text: Vec<u16> = OsStr::new(message).encode_wide().chain(Some(0)).collect();
-    let caption: Vec<u16> = OsStr::new("Intent Map PIP")
+    let caption: Vec<u16> = OsStr::new("PIP Runtime")
         .encode_wide()
         .chain(Some(0))
         .collect();
@@ -215,83 +343,51 @@ fn main() {
                 show_fatal(&error);
                 std::process::exit(1);
             }
-            return;
         }
         Err(error) => {
             show_fatal(&error);
             std::process::exit(1);
         }
-        Ok(None) => {}
-    }
-    if let Err(error) = run() {
-        show_fatal(&error);
-        std::process::exit(1);
+        Ok(None) => {
+            if let Err(error) = run(&args) {
+                show_fatal(&error);
+                std::process::exit(1);
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{OneShotCommand, package_response, parse_one_shot_command};
-    use pip_core::Package;
+    use super::{OneShotCommand, parse_one_shot_command, seed_artifact};
     use std::path::PathBuf;
-    use tauri::http::{Method, Request, StatusCode};
 
-    fn fixture() -> Package {
-        Package::parse(include_bytes!("../../tests/fixtures/minimal-valid.pip").to_vec())
-            .expect("shared PIP fixture must be valid")
-    }
-
-    fn request(method: Method, path: &str) -> Request<Vec<u8>> {
-        Request::builder()
-            .method(method)
-            .uri(format!("pip://localhost{path}"))
-            .body(Vec::new())
-            .unwrap()
+    #[test]
+    fn parses_only_external_verify_command() {
+        assert_eq!(
+            parse_one_shot_command(&["--verify".into(), "a1_loader_1_0_0_20260806.pip".into()])
+                .unwrap(),
+            Some(OneShotCommand::Verify(PathBuf::from(
+                "a1_loader_1_0_0_20260806.pip"
+            )))
+        );
+        assert!(parse_one_shot_command(&["--verify".into()]).is_err());
     }
 
     #[test]
-    fn serves_assets_and_package_from_memory() {
-        let package = fixture();
-        let index = package_response(&package, &request(Method::GET, "/index.html"));
-        assert_eq!(index.status(), StatusCode::OK);
-        assert_eq!(index.body().as_ref(), b"<h1>PIP</h1>");
-
-        let payload = package_response(&package, &request(Method::GET, "/__pip/package"));
-        assert_eq!(payload.status(), StatusCode::OK);
-        assert_eq!(payload.body().as_ref(), package.bytes());
-    }
-
-    #[test]
-    fn rejects_writes_and_path_traversal() {
-        let package = fixture();
+    fn resolves_the_outer_app_as_the_seed_artifact() {
         assert_eq!(
-            package_response(&package, &request(Method::POST, "/index.html")).status(),
-            StatusCode::METHOD_NOT_ALLOWED
+            seed_artifact(
+                PathBuf::from(
+                    "/runtime/a0_pip_seed_1_0_0_20260806.app/Contents/MacOS/pip-seed-tauri"
+                )
+                .as_path()
+            ),
+            PathBuf::from("/runtime/a0_pip_seed_1_0_0_20260806.app")
         );
         assert_eq!(
-            package_response(&package, &request(Method::GET, "/../secret")).status(),
-            StatusCode::BAD_REQUEST
-        );
-    }
-
-    #[test]
-    fn routes_verify_and_extract_before_starting_tauri() {
-        assert_eq!(
-            parse_one_shot_command(&["--verify".into()]).unwrap(),
-            Some(OneShotCommand::Verify(None))
-        );
-        assert_eq!(
-            parse_one_shot_command(&["--verify".into(), "test.pip".into()]).unwrap(),
-            Some(OneShotCommand::Verify(Some(PathBuf::from("test.pip"))))
-        );
-        assert_eq!(
-            parse_one_shot_command(&["--extract".into(), "out.pip".into()]).unwrap(),
-            Some(OneShotCommand::Extract(PathBuf::from("out.pip")))
-        );
-        assert!(parse_one_shot_command(&["--extract".into()]).is_err());
-        assert_eq!(
-            parse_one_shot_command(&["--pip".into(), "test.pip".into()]).unwrap(),
-            None
+            seed_artifact(PathBuf::from("/runtime/pip-seed-tauri").as_path()),
+            PathBuf::from("/runtime/pip-seed-tauri")
         );
     }
 }

@@ -1,60 +1,29 @@
 mod platform;
 mod server;
 
+use pip_core::{Package, PipDiscovery, discover_loader_pip, validate_package_filename};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn embedded_payload() -> Result<Vec<u8>, String> {
-    let executable =
-        env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
-    pip_core::envelope::extract_from_file(&executable)
-}
-
 fn usage() {
     eprintln!(
-        "Usage:\n  pip-seed-cli.exe\n  pip-seed-cli.exe --no-open\n  pip-seed-cli.exe --verify [file.pip]\n  pip-seed-cli.exe --extract <destination.pip>\n  pip-seed-cli.exe --extract <seed.exe> <destination.pip>\n  pip-seed-cli.exe --pip <file.pip> [--no-open]"
+        "Usage:\n  pip-seed-cli [--pip <a1_loader.pip>] [--no-open] [--select-app]\n  pip-seed-cli --verify <file.pip>"
     );
+}
+
+fn argument_value(args: &[String], name: &str) -> Result<Option<PathBuf>, String> {
+    let Some(index) = args.iter().position(|argument| argument == name) else {
+        return Ok(None);
+    };
+    let value = args
+        .get(index + 1)
+        .ok_or_else(|| format!("{name} requires a path"))?;
+    Ok(Some(PathBuf::from(value)))
 }
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
-    if args.first().map(String::as_str) == Some("--verify") {
-        let bytes = if let Some(path) = args.get(1) {
-            fs::read(path).map_err(|error| format!("cannot read PIP: {error}"))?
-        } else {
-            embedded_payload()?
-        };
-        let package = pip_core::Package::parse(bytes)?;
-        println!(
-            "valid PIP: {} bytes, {} assets",
-            package.bytes().len(),
-            package.assets().len()
-        );
-        return Ok(());
-    }
-    if args.first().map(String::as_str) == Some("--extract") {
-        let first_path = args.get(1).ok_or("--extract requires a destination path")?;
-        let (payload, destination) = if let Some(destination) = args.get(2) {
-            (
-                pip_core::envelope::extract_from_file(Path::new(first_path))?,
-                destination,
-            )
-        } else {
-            (embedded_payload()?, first_path)
-        };
-        fs::write(destination, payload)
-            .map_err(|error| format!("cannot write extracted PIP: {error}"))?;
-        println!("{}", Path::new(destination).display());
-        return Ok(());
-    }
-    let external_index = args.iter().position(|argument| argument == "--pip");
-    let bytes = if let Some(index) = external_index {
-        let path = args.get(index + 1).ok_or("--pip requires a path")?;
-        fs::read(PathBuf::from(path)).map_err(|error| format!("cannot read PIP: {error}"))?
-    } else {
-        embedded_payload()?
-    };
     if args
         .iter()
         .any(|argument| argument == "--help" || argument == "-h")
@@ -62,10 +31,46 @@ fn run() -> Result<(), String> {
         usage();
         return Ok(());
     }
-    let package = pip_core::Package::parse(bytes)?;
+    if args.first().map(String::as_str) == Some("--verify") {
+        if args.len() != 2 {
+            return Err("--verify requires exactly one PIP path".into());
+        }
+        let path = Path::new(&args[1]);
+        let package =
+            Package::parse(fs::read(path).map_err(|error| format!("cannot read PIP: {error}"))?)?;
+        validate_package_filename(path, &package)?;
+        println!(
+            "valid PIP: {} · {} · {} bytes · {} assets",
+            package.manifest_data().layer,
+            package.manifest_data().package_version,
+            package.bytes().len(),
+            package.assets().len()
+        );
+        return Ok(());
+    }
+    let explicit = argument_value(&args, "--pip")?;
+    let executable =
+        env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
+    let path = match discover_loader_pip(explicit.as_deref(), &executable)? {
+        PipDiscovery::Selected(path) => path,
+        PipDiscovery::NeedsSelection(candidates) => {
+            return Err(format!(
+                "expected exactly one a1 Loader PIP beside Seed, found {}; use --pip <path>",
+                candidates.len()
+            ));
+        }
+    };
+    let package =
+        Package::parse(fs::read(&path).map_err(|error| format!("cannot read PIP: {error}"))?)?;
     let token = platform::random_token()?;
+    let application_directory = path
+        .parent()
+        .ok_or("Loader PIP has no parent directory")?
+        .join("pip");
     server::serve(
         package,
+        application_directory,
+        args.iter().any(|argument| argument == "--select-app"),
         token,
         !args.iter().any(|argument| argument == "--no-open"),
     )

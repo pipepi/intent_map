@@ -19,16 +19,21 @@ Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应�
 ## 系统关系
 
 ```text
-loader_0（原生种皮）
+loader_0（a0 原生种皮）
         ↓ 加载
-loader_n.pip（可演进加载器）
+a1_loader_{major}_{minor}_{patch}_{YYYYMMDD}.pip（可演进加载器）
         ↓ 加载
-intent_map.pip（通用节点编辑器）
+a2_intent_map_{major}_{minor}_{patch}_{YYYYMMDD}.pip（通用节点编辑器）
         ↓ 编辑和运行
-software_authoring.pip（软件开发掌控能力）
+a3_software_authoring_{major}_{minor}_{patch}_{YYYYMMDD}.pip（软件开发掌控能力）
         ↓ 应用于
-crypto_cex.pip（Crypto 交易所案例）
+a4_crypto_cex_{major}_{minor}_{patch}_{YYYYMMDD}.pip（Crypto 交易所案例）
 ```
+
+架构层级固定为 `a0` Seed、`a1` Loader、`a2` Editor、`a3` Functional、
+`a4` Business、`a5` Other。PIP 文件统一命名为
+`{layer}_{name}_{major}_{minor}_{patch}_{YYYYMMDD}.pip`；原生 Seed 使用
+相同结构但不带 `.pip` 扩展名（Windows 为 `.exe`）。
 
 五个部分彼此分层，但不构成领域耦合：
 

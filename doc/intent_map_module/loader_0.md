@@ -43,17 +43,18 @@ Loader 0 与 `.pip` 始终是相互独立的文件。Loader 0 不内嵌默认应
 
 1. 如果启动参数显式提供 `.pip` 路径，加载该文件；
 2. 否则扫描 Loader 0 可执行文件所在目录；
-3. 同目录恰好存在一个 `.pip` 时，自动加载它；
-4. 同目录不存在 `.pip` 时，要求用户通过启动参数提供，或打开最小文件选择界面；
-5. 同目录存在多个 `.pip` 时，不猜测默认项，要求用户通过启动参数指定，或在界面中选择。
+3. 同目录只接受命名和 manifest 均有效的 `a1` Loader PIP；
+4. 恰好存在一个有效 `a1` PIP 时，自动加载它；
+5. 不存在或存在多个有效 `a1` PIP 时，CLI 报错，桌面 Seed 打开最小文件选择界面；
+6. 不扫描同目录的 `pip/` 子目录，显式路径也必须是有效 `a1` Loader PIP。
 
 ```text
 显式 .pip 参数？
 ├── 是 → 加载指定文件
 └── 否 → 扫描 Loader 0 同目录
-          ├── 1 个 .pip → 自动加载
-          ├── 0 个 .pip → 参数提示或文件选择
-          └── 多个 .pip → 参数提示或文件选择
+          ├── 1 个有效 a1 PIP → 自动加载
+          ├── 0 个有效 a1 PIP → 参数提示或文件选择
+          └── 多个有效 a1 PIP → 参数提示或文件选择
 ```
 
 显式参数始终优先，这使脚本、快捷方式和自动化环境能够确定性启动指定应用。同目录自动发现只服务于“一个 Seed + 一个 PIP”的最简双击分发体验。
@@ -82,19 +83,33 @@ Loader 0 只提供最小加载机制；文件选择、版本管理、更新、�
 
 ```text
 Loader 0
-→ loader_n.pip
+→ a1_loader_{major}_{minor}_{patch}_{YYYYMMDD}.pip
 → 其他 .pip
 ```
 
 推荐的最简分发目录是两个独立文件：
 
 ```text
-application/
-├── pip-seed.exe
-└── loader_n.pip
+pip-runtime/
+├── a0_pip_seed_1_0_0_20260806.app  # macOS；Windows 为 .exe
+├── a1_loader_1_0_0_20260806.pip
+└── pip/
+    └── a2_intent_map_1_0_0_20260806.pip
 ```
 
-双击 `pip-seed.exe` 时，因为同目录只有一个 `.pip`，Loader 0 可以直接启动 `loader_n.pip`。后续替换加载器只需替换 `.pip`，不需要修改 Seed。
+macOS 双击版本化 `.app` 时不会打开 Terminal；Windows 双击版本化 `.exe`。
+因为分发根目录只有一个有效 `a1` PIP，Loader 0 可以直接启动它。macOS
+Seed 从 `.app/Contents/MacOS/` 向外定位到 `.app` 的父目录，因此 Loader
+和 `a2` 至 `a5` 应用仍保持外置、可替换。
+
+macOS 命令行参数通过 `open -n` 保留：
+
+```bash
+open -n a0_pip_seed_1_0_0_20260806.app --args \
+  --pip "$PWD/a1_loader_1_0_0_20260806.pip" --select-app
+```
+
+验证和终端宿主继续使用 `tools/a0_pip_seed_cli_{version}_{date}`。
 
 ## 实现映射
 
@@ -113,8 +128,9 @@ application/
 - 相同输入产生稳定的验证结果；
 - 能启动最小有效 `.pip`；
 - 显式参数能确定性覆盖同目录自动发现；
-- 同目录恰好一个 `.pip` 时能够直接双击启动；
-- 同目录为零个或多个 `.pip` 时不会擅自选择，并能要求参数或提供选择界面；
+- 同目录恰好一个有效 `a1` PIP 时能够直接双击启动；
+- 同目录为零个或多个有效 `a1` PIP 时不会擅自选择，并能要求参数或提供选择界面；
+- 不扫描 `pip/`，也不接受 `a2` 至 `a5` 作为 Loader；
 - Loader 0 可执行文件中不包含内嵌 `.pip`；
 - 能拒绝损坏或不受支持的包；
 - 上层 `.pip` 更新不要求同步修改 Loader 0；

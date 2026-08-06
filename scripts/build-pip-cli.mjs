@@ -3,7 +3,15 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 
-const root = path.resolve(import.meta.dirname, "..");
+import {
+  artifactFilename,
+  projectRoot,
+  readReleaseConfig,
+  runtimeDirectory,
+} from "./pip-release.mjs";
+
+const root = projectRoot;
+const release = (await readReleaseConfig()).seedCli;
 const cargo = spawnSync(
   "cargo",
   ["build", "--release", "--manifest-path", path.join(root, "pip-seed", "Cargo.toml")],
@@ -19,7 +27,11 @@ const source = path.join(
   "release",
   `pip-seed-cli${extension}`,
 );
-const destination = path.join(root, "dist", "pip", `pip-seed-cli${extension}`);
+const destination = path.join(
+  runtimeDirectory,
+  "tools",
+  artifactFilename(release, extension.slice(1)),
+);
 await mkdir(path.dirname(destination), { recursive: true });
 await copyFile(source, destination);
 process.stdout.write(`${destination}\n`);

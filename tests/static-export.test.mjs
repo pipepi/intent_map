@@ -292,6 +292,19 @@ test("routes pinch gestures to canvas cameras instead of WebView zoom", async ()
   );
 });
 
+test("keeps Seed external to layered PIP packages", async () => {
+  const [core, cli, desktop] = await Promise.all([
+    readFile(new URL("pip-core/src/lib.rs", root), "utf8"),
+    readFile(new URL("pip-seed/src/main.rs", root), "utf8"),
+    readFile(new URL("pip-seed-tauri/src/main.rs", root), "utf8"),
+  ]);
+  for (const source of [core, cli, desktop]) {
+    assert.doesNotMatch(source, /embedded_payload|envelope::extract|PIPEXE/);
+  }
+  assert.match(cli, /discover_loader_pip/);
+  assert.match(desktop, /discover_loader_pip/);
+});
+
 test("builds distributable PIP assets from a clean and coherent static export", async () => {
   const cleanBuild = await readFile(
     new URL("scripts/build-static.mjs", root),

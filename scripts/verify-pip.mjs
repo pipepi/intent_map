@@ -3,8 +3,10 @@ import path from "node:path";
 
 import { decodePip } from "../app/runtime/pip.ts";
 import { loadIntentDocument } from "../app/runtime/model.ts";
+import { applicationDirectory, artifactFilename, readReleaseConfig } from "./pip-release.mjs";
 
-const input = process.argv[2] ?? "dist/pip/intent-map.pip";
+const release = (await readReleaseConfig()).intentMap;
+const input = process.argv[2] ?? path.join(applicationDirectory, artifactFilename(release));
 const pip = await decodePip(new Uint8Array(await readFile(path.resolve(input))));
 const document = loadIntentDocument(JSON.parse(pip.rootTreeText));
 process.stdout.write(

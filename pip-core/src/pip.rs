@@ -1,4 +1,5 @@
 use crate::sha256;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::ops::Range;
 
@@ -22,6 +23,23 @@ pub struct Package {
     bytes: Vec<u8>,
     sections: [Range<usize>; SECTION_COUNT],
     assets: Vec<Asset>,
+    manifest: Manifest,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Manifest {
+    pub package_id: String,
+    pub layer: String,
+    pub artifact_name: String,
+    pub name: String,
+    pub package_version: String,
+    pub release_date: String,
+    pub root_node_id: String,
+    pub loader_abi: String,
+    pub required_capabilities: Vec<String>,
+    pub created_at: String,
+    pub content_type: String,
 }
 
 fn u16_at(bytes: &[u8], offset: usize) -> Result<u16, String> {
@@ -144,11 +162,26 @@ impl Package {
         let sections: [Range<usize>; SECTION_COUNT] = sections_vec
             .try_into()
             .map_err(|_| "invalid PIP section count")?;
+        let manifest: Manifest = serde_json::from_slice(&bytes[sections[0].clone()])
+            .map_err(|error| format!("invalid PIP manifest: {error}"))?;
+        crate::PipLayer::parse(&manifest.layer)?;
+        crate::Version::parse(&manifest.package_version)?;
+        crate::ReleaseDate::parse(&manifest.release_date)?;
+        if manifest.package_id.is_empty()
+            || manifest.artifact_name.is_empty()
+            || manifest.name.is_empty()
+            || manifest.root_node_id.is_empty()
+            || manifest.loader_abi != "pip-loader/1"
+            || manifest.content_type != "application/vnd.intent-map.pip"
+        {
+            return Err("invalid PIP manifest fields".into());
+        }
         let assets = parse_assets(&bytes[sections[3].clone()], sections[3].start)?;
         Ok(Self {
             bytes,
             sections,
             assets,
+            manifest,
         })
     }
 
@@ -158,6 +191,10 @@ impl Package {
 
     pub fn manifest(&self) -> &[u8] {
         &self.bytes[self.sections[0].clone()]
+    }
+
+    pub fn manifest_data(&self) -> &Manifest {
+        &self.manifest
     }
 
     pub fn assets(&self) -> &[Asset] {

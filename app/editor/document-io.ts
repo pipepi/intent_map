@@ -92,22 +92,31 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
 
   const exportPip = async () => {
     try {
+      const now = new Date();
+      const releaseDate = now.toISOString().slice(0, 10).replaceAll("-", "");
       const bytes = await encodePip({
         manifest: {
           packageId: "intent-map.document",
+          layer: "a5",
+          artifactName: "intent_map_document",
           name: "Intent Map",
           packageVersion: "0.1.0",
+          releaseDate,
           rootNodeId: documentState.rootIntent.id,
           loaderAbi: "pip-loader/1",
           requiredCapabilities: [],
-          createdAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
           contentType: "application/vnd.intent-map.pip",
         },
         loaderSource: DEFAULT_PIP_LOADER_SOURCE,
         rootTreeText: serializeIntentDocument(documentState),
         assets: [],
       });
-      downloadBytes("intent-map.pip", bytes, "application/vnd.intent-map.pip");
+      downloadBytes(
+        `a5_intent_map_document_0_1_0_${releaseDate}.pip`,
+        bytes,
+        "application/vnd.intent-map.pip",
+      );
       markClean();
       setToast("PIP 种子已导出");
     } catch (error) {

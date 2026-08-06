@@ -15,8 +15,11 @@ import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts
 
 const manifest = {
   packageId: "intent-map.test",
+  layer: "a5",
+  artifactName: "intent_map_test",
   name: "Intent Map Test",
   packageVersion: "0.1.0",
+  releaseDate: "20260726",
   rootNodeId: "application_root",
   loaderAbi: "pip-loader/1",
   requiredCapabilities: [],
@@ -42,6 +45,22 @@ test("PIP v1 encodes deterministically and round-trips", async () => {
   const second = await encodePip(input);
   assert.deepEqual(first, second);
   assert.deepEqual(await decodePip(first), input);
+});
+
+test("PIP manifest requires layer, artifact name, semantic version, and release date", async () => {
+  for (const invalid of [
+    { ...manifest, layer: "a0" },
+    { ...manifest, artifactName: "Intent-Map" },
+    { ...manifest, packageVersion: "1.0" },
+    { ...manifest, releaseDate: "20260230" },
+  ]) {
+    await assert.rejects(() => encodePip({
+      manifest: invalid,
+      loaderSource: DEFAULT_PIP_LOADER_SOURCE,
+      rootTreeText,
+      assets: [],
+    }), /Invalid PIP manifest/);
+  }
 });
 
 test("PIP v1 rejects corruption, truncation, and overlapping sections", async () => {

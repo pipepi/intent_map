@@ -32,7 +32,7 @@ pub fn random_token() -> Result<String, String> {
             .as_nanos(),
         std::thread::current().id()
     );
-    Ok(crate::sha256::hex(&crate::sha256::digest(seed.as_bytes())))
+    Ok(pip_core::sha256_hex(seed.as_bytes()))
 }
 
 #[cfg(windows)]

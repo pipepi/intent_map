@@ -8,9 +8,13 @@ Loader N 是由 Loader 0 启动的可演进加载器，本身以 `.pip` 形式�
 
 ```text
 Loader 0
-→ loader_n.pip
+→ a1_loader_{major}_{minor}_{patch}_{YYYYMMDD}.pip
 → 选择、获取并启动目标 .pip
 ```
+
+当前分发中 Loader 扫描 Seed 同目录的 `pip/` 直接子级，只把层级为 `a2` 至
+`a5`、文件名与 manifest 一致的包加入 catalog。默认应用以稳定
+`packageId` 查找；同一 `packageId` 出现多个版本时不自动选择。
 
 ## 核心职责
 
@@ -63,6 +67,10 @@ Intent Map 可以由 Loader N 启动，但 Loader N 也应能够启动不依赖 
 - 权限确认和错误恢复 UI；
 - PIP 启动入口注册；
 - 对 Loader 0 能力的调用适配。
+
+当前 Seed 为 Loader 暴露 `GET /__pip/catalog` 与 `POST /__pip/activate`。
+激活请求使用 catalog 返回的完整文件名；宿主会拒绝路径逃逸、错误层级、
+未登记文件以及激活前重新校验失败的包。
 
 原生宿主只暴露必要能力，具体加载流程和 UI 尽量在 Loader N 中实现。
 
