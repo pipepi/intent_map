@@ -114,7 +114,18 @@ export const verifyWorkspaceResources = async (
 ): Promise<void> => {
   const expected = assertWorkspaceResourceIndex(index);
   const actual = await createWorkspaceResourceIndex(resources);
-  if (JSON.stringify(actual.resources) !== JSON.stringify(expected.resources)) {
+  if (!workspaceResourceEntriesEqual(actual.resources, expected.resources)) {
     throw new Error("Workspace resources do not match intent.pip resource index");
   }
 };
+
+export const workspaceResourceEntriesEqual = (
+  left: readonly WorkspaceResourceEntry[],
+  right: readonly WorkspaceResourceEntry[],
+) => left.length === right.length && left.every((entry, index) => {
+  const candidate = right[index];
+  return entry.path === candidate.path
+    && entry.mediaType === candidate.mediaType
+    && entry.byteLength === candidate.byteLength
+    && entry.sha256 === candidate.sha256;
+});

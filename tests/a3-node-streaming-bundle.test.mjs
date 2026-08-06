@@ -9,6 +9,7 @@ import { DEFAULT_PIP_LOADER_SOURCE, decodePip } from "../app/runtime/pip.ts";
 import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
 import { bundleSplitWorkspace } from "../a3/bundle/workspace-bundle.ts";
 import { streamNodeWorkspaceBundle } from "../a3/bundle/node-streaming-bundle.ts";
+import { streamUnbundleNodeWorkspace } from "../a3/bundle/node-streaming-unbundle.ts";
 import { NodeDirectoryResourceStore } from "../a3/workspace/node-directory-store.ts";
 import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../a3/workspace/resource-index.ts";
 import { openWorkspaceResourceSession } from "../a3/workspace/resource-store.ts";
@@ -76,11 +77,30 @@ test("node streaming Bundle is byte-identical without aggregating resources thro
   const expected = await bundleSplitWorkspace(pip, session, io);
   store.read = async () => { throw new Error("streaming bundler must not call read()"); };
 
-  const destination = path.join(temporary, "bundle.pip");
+  const destination = path.join(temporary, "a5_stream_bundle_test_1_0_0_20260807.pip");
   const result = await streamNodeWorkspaceBundle({ pip, session, store, destination, options: io });
   const actual = new Uint8Array(await readFile(destination));
   assert.equal(result.byteLength, actual.byteLength.toString());
   assert.deepEqual(actual, expected);
   const decoded = await decodePip(actual, io);
   assert.equal(decoded.assets.length, 3);
+
+  const restored = path.join(temporary, "restored");
+  const unpacked = await streamUnbundleNodeWorkspace({
+    bundle: destination,
+    destination: restored,
+    options: io,
+  });
+  assert.equal(unpacked.resourceCount, 2);
+  assert.deepEqual(
+    new Uint8Array(await readFile(path.join(restored, "resources/ui/large.bin"))),
+    resources[1].bytes,
+  );
+  const restoredIntent = await decodePip(
+    new Uint8Array(await readFile(path.join(restored, "intent.pip"))),
+    io,
+  );
+  assert.deepEqual(restoredIntent.assets.map((asset) => asset.path), [
+    "a3/workspace/resources.json",
+  ]);
 });
