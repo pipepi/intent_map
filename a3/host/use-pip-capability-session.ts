@@ -7,11 +7,17 @@ import {
   capabilitySource,
   PipCapabilityWorker,
   resolveCapabilitySet,
-} from "../../a3/core/pip-capabilities";
-import { readHostCatalog, readHostPackage } from "../runtime/pip-host-client";
-import { decodePip, type PipPackageRef } from "../runtime/pip";
-import { entryMatchesRef } from "../runtime/pip-profile";
-import type { PipProjectSession } from "./document-io";
+} from "../core/pip-capabilities";
+import {
+  readHostCatalog,
+  readHostPackage,
+} from "../../app/runtime/pip-host-client";
+import {
+  decodePip,
+  type PipManifest,
+  type PipPackageRef,
+} from "../../app/runtime/pip";
+import { entryMatchesRef } from "../../app/runtime/pip-profile";
 
 export type PipCapabilityState = {
   capability: string;
@@ -20,7 +26,9 @@ export type PipCapabilityState = {
   error?: string;
 };
 
-export const usePipCapabilitySession = (project: PipProjectSession | null) => {
+type CapabilityProject = { manifest: PipManifest };
+
+export const usePipCapabilitySession = (project: CapabilityProject | null) => {
   const [states, setStates] = useState<PipCapabilityState[]>([]);
   const required = useMemo(
     () => project?.manifest.requiredAuthoringCapabilities ?? [],

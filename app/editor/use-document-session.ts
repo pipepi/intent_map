@@ -9,10 +9,10 @@ import {
   type ScopeAddress,
 } from "../runtime/model";
 import { downloadExport, prepareDocumentExport } from "../runtime/export";
+import { usePipCapabilitySession } from "../../a3/host/use-pip-capability-session";
 import { createDocumentIO, type PipProjectSession } from "./document-io";
 import { useDocumentHistory } from "./use-document-history";
 import { useRuntimePipeline } from "./use-runtime-pipeline";
-import { usePipCapabilitySession } from "./use-pip-capability-session";
 import { freePanelContext, sampleDocument, updateNode } from "./tree-utils";
 
 export function useDocumentSession(setToast: (message: string) => void) {
