@@ -33,7 +33,7 @@ branch:   codex/a2-a3-workspace-refactor
 | 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | complete |
 | 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | complete |
 | 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | complete |
-| 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | pending |
+| 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | complete |
 | 6 | a3 自定义节点和投影工作区 | `checkpoint/a3-projection-workspace-v1` | pending |
 | 7 | Software Authoring | `checkpoint/software-authoring-v1` | pending |
 | 8 | a0–a3 自举闭环 | `checkpoint/pip-self-hosting-v1` | pending |
@@ -52,9 +52,15 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 5 将在拆分工作区之上实现默认单文件 Bundle。打包与解包复用 Phase 4 的
-资源索引和逐文件存储边界，并把大文件路径推进为流式读写；Bundle 只用于交换和
-分发，不取代 `intent.pip + resources/` 的工作区权威副本。
+Phase 6 将建立 a3 自定义节点和投影工作区。a3 只通过 a2 的不透明扩展信封和公共
+命令边界关联第二层内树；UI、DB、API、代码等外树资源继续留在拆分工作区，a2
+不解释这些内容。该阶段先固化扩展注册、投影身份和补丁协议，再增加工作区界面。
+
+Phase 5 已完成可逆 Bundle。Node/CLI 和 Web File System Access 路径都逐块读取、
+写入并计算 SHA-256；打包结果与标准 PIP 编码逐字节一致，解包恢复小型
+`intent.pip + resources/` 权威工作区。CLI 提供不覆盖目标的 `bundle` 与
+`unbundle` 命令，Web 使用用户授权的文件和空目录句柄。连续 a2 构建也通过基于
+release 配置的稳定 Build ID 得到相同 SHA。
 
 Phase 4 已建立 `intent.pip + resources/` 工作区。`intent.pip` 只保存内树、资源
 索引和完整性引用，UI、DB、API、代码、图片等外树内容保留为可逐文件读写和 Git
@@ -73,6 +79,10 @@ Phase 3 检查点已通过 `npm run lint`、`npm test`、`npm run test:pip`、
 Phase 4 检查点已通过相同的 lint、100 项工程测试、PIP/Rust 测试和完整 macOS
 分发。默认 a3 PIP 已收录根目录 `a3/` 工作区实现源树；a2 保持不导入 a3，系统
 分发仍只包含选定的 a0–a3，不包含任何用户工作区或 a4/a5 资源。
+
+Phase 5 检查点已通过 lint、110 项工程测试、8 项 TypeScript PIP 测试、13 项
+Rust Core 测试、Seed/Tauri 编译与完整 macOS 分发。系统 a2 与 a3 权威 PIP 已
+刷新，分发清单仍只有系统 a0–a3；大型测试资源只在临时目录生成，不进入 Git。
 
 ---
 
