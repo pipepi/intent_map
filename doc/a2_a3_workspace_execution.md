@@ -29,8 +29,8 @@ branch:   codex/a2-a3-workspace-refactor
 | Phase | Deliverable | Checkpoint | Status |
 |---|---|---|---|
 | 0 | 稳定行为基线与执行台账 | `checkpoint/workspace-refactor-baseline` | complete |
-| 1 | a2/a3 单向依赖边界 | `checkpoint/a2-a3-boundary-v1` | in progress |
-| 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | pending |
+| 1 | a2/a3 单向依赖边界 | `checkpoint/a2-a3-boundary-v1` | complete |
+| 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | in progress |
 | 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | pending |
 | 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | pending |
 | 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | pending |
@@ -52,9 +52,9 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 1 把 capability runtime、会话和 Software Authoring 移出 a2。迁移提交只改变
-模块归属，不改变协议与运行行为；随后删除 a2 文档会话对 a3 生命周期的依赖，并
-用静态导入测试固定 `a3 → a2` 的单向关系。
+Phase 2 清理 a2 文档模型和界面中属于外树或富内容创作的职责，只保留通用节点、
+纯文本意图、层级、关系、历史与无损 PIP envelope。每项删除先由行为测试锁定真正
+需要保留的通用编辑能力。
 
 ---
 

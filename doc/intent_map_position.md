@@ -27,9 +27,9 @@ loader_0（a0 原生种皮）
 a1 Loader（选择一个主 a2）
         ↓
 一个 a2 Editor（Intent Map 或其他通用编辑器）
-        ↓ 组合
-零到多个 a3 Capability（Software Authoring 等）
-        ↓ 应用于
+        ↑ 编辑第二层纯意图内树
+零到多个 a3 Extension（Software Authoring 等）
+        ↓ 管理外树资源并应用于
 用户 a4/a5 PIP
 ```
 
@@ -48,7 +48,7 @@ a1 Loader（选择一个主 a2）
 - 人、Agent、脚本和其他工具都是可选操作者。
 
 系统默认 a0–a3 由本仓库跟踪；用户自定义 a0–a3 和全部 a4/a5 位于用户
-Registry/Workspace。精确版本、一个主 a2 与多个 a3 由
+Registry/Workspace。精确版本、一个主 a2 与 a3 扩展集合由
 [Runtime Profile](intent_map_module/pip_runtime_profiles.md) 选择。
 
 ## `.pip` 统一范式

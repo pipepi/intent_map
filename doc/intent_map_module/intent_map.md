@@ -19,7 +19,7 @@ a2 是编辑器类别而不是单一实现：用户可以选择表格、表单�
 - 导入、导出、观察和运行节点应用；
 - 将编辑结果保存为新的 `.pip`。
 - 根据目标文档类型列出兼容 a2，并在用户确认后用新窗口打开；
-- 根据目标声明组合零到多个 a3 能力。
+- 不透明保存 a3 自定义节点数据，但不加载或解释 a3。
 
 ## 业务无关边界
 
@@ -31,7 +31,8 @@ Intent Map 内核不应认识：
 - Crypto 交易所；
 - Agent 任务、提示词或模型供应商。
 
-这些概念由业务节点、能力 PIP 或外部操作者提供。通用编辑器只认识节点、端口、连接、容器、作用域、投影和运行。
+这些概念由 a3 自定义节点、外树资源或外部操作者提供。通用编辑器只认识纯意图、
+节点、端口、连接、容器、作用域和编辑历史；a3 生命周期由外层工作区宿主管理。
 
 ## 产品形态
 
@@ -72,7 +73,7 @@ Canvas（高性能节点地图）
 - [Crypto CEX](crypto_cex.md) 使用 Software Authoring 表达真实业务；
 - [Bevy Canvas Runtime](bevy_canvas_runtime.md) 是可选渲染投影，不进入文档语义；
 - MCP 可以让 Agent 操作 Intent Map，但属于可选接入方式。
-- [Runtime Profile](pip_runtime_profiles.md) 精确选择 a1、一个主 a2 和多个 a3。
+- [Runtime Profile](pip_runtime_profiles.md) 精确选择 a1、一个主 a2 和 a3 扩展集合。
 
 ## `.pip` 自举关系
 

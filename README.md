@@ -131,7 +131,8 @@ dist/pip-runtime/
 ```
 
 Seed loads the unique `a1` Loader from `pip/`. The Loader selects exactly one
-`a2` generic editor; the active editor may compose multiple `a3` capabilities.
+`a2` generic editor. An optional `a3` workspace host can compose capabilities
+around that editor, while `a2` itself neither imports nor starts `a3`.
 System defaults are Git-tracked under `packages/system/`. User a0–a5 packages,
 profiles, trust decisions, and workspaces live in the platform user-data directory.
 Use `--profile`, `--editor`, or `--select-editor` to override defaults without

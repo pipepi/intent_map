@@ -8,7 +8,7 @@
 应用数据目录，可以安装 a0–a5；全部 a4/a5 和用户自定义 a0–a3 都属于用户数据。
 
 ```text
-a0 native → 一个 a1 → 一个主 a2 → 零到多个 a3 → 编辑 a0–a5
+a0 native → 一个 a1 → 一个主 a2；可选 a3 workspace 在外层组合扩展
 ```
 
 ## 精确选择
@@ -27,7 +27,8 @@ Runtime Profile 使用 `origin + packageId + version + releaseDate + sha256` 引
 a2 通过 `pip-editor/1` 声明编辑器类型与支持的文档类型。一个窗口只运行一个
 主 a2；不兼容目标文档时可以保存并用另一 a2 新开窗口。
 
-a3 通过 `pip-capability/1` 在独立 Worker 中运行。Profile 中的用户提供者优先，
+a3 由独立于 a2 的 workspace host 通过 `pip-capability/1` 在 Worker 中运行。
+Profile 中的用户提供者优先，
 系统默认只补齐未指定能力。同一 ABI 不自动选择最高版本，也不同时组合多个主
 提供者。Worker 只返回声明式命令、诊断和文档补丁，不能直接注入 React 或访问
 文件系统。
