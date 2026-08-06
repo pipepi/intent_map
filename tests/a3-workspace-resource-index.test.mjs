@@ -9,6 +9,10 @@ import {
   verifyWorkspaceResources,
   workspaceResourceIndexAsset,
 } from "../a3/workspace/resource-index.ts";
+import {
+  MemoryWorkspaceResourceStore,
+  openWorkspaceResourceSession,
+} from "../a3/workspace/resource-store.ts";
 
 const resources = [
   {
@@ -59,4 +63,22 @@ test("rejects unsafe, duplicate, unsorted, missing, and changed resources", asyn
     }),
     /Unsafe/,
   );
+});
+
+test("opens the split workspace lazily and verifies only a focused resource", async () => {
+  const index = await createWorkspaceResourceIndex(resources);
+  const store = new MemoryWorkspaceResourceStore(resources);
+  const session = openWorkspaceResourceSession(
+    { assets: [workspaceResourceIndexAsset(index)] },
+    store,
+  );
+
+  assert.equal(store.readCount, 0);
+  assert.deepEqual(session.list(), index.resources);
+  assert.equal((await session.read("backend/main.rs")).mediaType, "text/plain; charset=utf-8");
+  assert.equal(store.readCount, 1);
+
+  await store.write({ ...resources[1], bytes: new TextEncoder().encode("changed") });
+  await assert.rejects(() => session.read("backend/main.rs"), /byte length changed/);
+  await assert.rejects(() => session.read("not-indexed.txt"), /not indexed/);
 });
