@@ -1,12 +1,14 @@
 # Intent Map
 
-Intent Map 是面向 Agent 时代的软件创作与掌控工作台。它将实现无关的业务核心物流动场景和约束沉淀为分形内树，让人与 Agent 在合适颗粒度的树枝上达成共识；UI、DB Tables、API、代码、外围系统、分发和分利润等层级均可按需披露，并可选择手工、人机协作或 Agent 代理实现。
+Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应用的形式运行，用于构建、观察、编辑、组合和导出其他节点应用。
 
-Agent 的每次输出被限制在可理解、可修改、可接管或可重来的局部范围，并收敛为可视、可聚焦、可继续协作的 `.pip`。Intent Map 既接收和组织多 Agent 输出，也通过 PIP MCP Server 为 Agent 提供编辑、填充、导入和导出 `.pip` 的标准工具。
+系统中只有无状态且长期稳定的初始加载器 Seed 是原生可执行文件；新版加载器、Intent Map、软件开发复杂度掌控能力和实际应用都分别以可演进的 `.pip` 存在。`.pip` 既是可运行和可分发的应用包，也是可继续编辑和组合的创作单元。
 
-> **核心价值：通过分形边界、逐层披露和局部填充，获得对软件复杂度的超强掌控力。**
+软件开发复杂度掌控是 Intent Map 上的一组可选业务节点能力，Crypto 交易所是其实际应用案例。人工、团队、Agent、脚本和其他工具都可以按需参与；Agent 可选择通过 PIP MCP Server 编辑、填充、导入和导出 `.pip`，但不是系统成立的前提。
 
-完整的方案、产品定位、八层模型、`.pip` 范式与 MCP 架构参见：[Intent Map：方案与产品定位](doc/intent_map_position.md)。
+> **核心结构：Seed 负责启动，`.pip` 负责一切演进；Intent Map 负责通用节点编辑，具体能力由节点应用提供。**
+
+完整的系统定位、递归 PIP 架构、软件开发能力、Crypto 交易所案例与可选 MCP 接入参见：[Intent Map：方案与产品定位](doc/intent_map_position.md)。
 
 ## Implementation
 
@@ -107,11 +109,22 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
-## PIP Desktop Seed
+## Current PIP Desktop Prototype
 
-`dist/pip/intent-map.pip.exe` is a Windows GUI application. Double-clicking it
-opens the embedded Intent Map in a native Tauri/WebView2 window without a
+The current build can produce `dist/pip/intent-map.pip.exe`, a convenience
+prototype that combines the native seed with an embedded Intent Map PIP.
+Double-clicking it opens Intent Map in a native Tauri/WebView2 window without a
 console window, external browser, loopback port, or Node.js runtime.
+
+In the target architecture, only the minimal, stateless Seed is a native
+double-clickable executable. Evolving capabilities are separate `.pip` files:
+
+```text
+Seed executable
+→ loader.pip
+→ intent-map.pip
+→ capability and application PIPs
+```
 
 The package format and executable overlay are implemented by `pip-core`.
 `pip-seed-cli.exe` remains a separate recovery tool:
