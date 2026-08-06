@@ -28,8 +28,8 @@ branch:   codex/a2-a3-workspace-refactor
 
 | Phase | Deliverable | Checkpoint | Status |
 |---|---|---|---|
-| 0 | 稳定行为基线与执行台账 | `checkpoint/workspace-refactor-baseline` | in progress |
-| 1 | a2/a3 单向依赖边界 | `checkpoint/a2-a3-boundary-v1` | pending |
+| 0 | 稳定行为基线与执行台账 | `checkpoint/workspace-refactor-baseline` | complete |
+| 1 | a2/a3 单向依赖边界 | `checkpoint/a2-a3-boundary-v1` | in progress |
 | 2 | a2 纯意图编辑器 | `checkpoint/a2-pure-intent-editor-v1` | pending |
 | 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | pending |
 | 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | pending |
@@ -52,8 +52,9 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 0 只冻结现有行为，不改变运行时。完成条件：关键 PIP、系统包、Profile、
-能力解析和信任边界均有基线测试，且完整测试在 `fa0cd6e` 行为上通过。
+Phase 1 把 capability runtime、会话和 Software Authoring 移出 a2。迁移提交只改变
+模块归属，不改变协议与运行行为；随后删除 a2 文档会话对 a3 生命周期的依赖，并
+用静态导入测试固定 `a3 → a2` 的单向关系。
 
 ---
 
