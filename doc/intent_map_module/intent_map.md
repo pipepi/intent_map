@@ -44,12 +44,29 @@ Intent Map 更接近 Blender 或 Photoshop，而不是固定领域的应用生�
 | `.blend` / `.psd` | `.pip` |
 | 渲染与导出 | 运行、组合和分发 |
 
+## 可选 Bevy 画布运行时
+
+Intent Map 可以将 [Bevy Canvas Runtime](bevy_canvas_runtime.md) 作为可选高性能画布投影：React 继续拥有 Intent Document、工作台、表单、Undo/Redo 和 DOM 交互，Bevy 编译为 WASM，只负责 Canvas 内的 ECS、节点与连线渲染、Camera、LOD、Picking、拖动和动画。
+
+```text
+Intent Document / React（唯一真相源）
+        ↓ 首次快照 + 增量命令
+Bevy ECS / WASM（可重建投影）
+        ↓
+Canvas（高性能节点地图）
+```
+
+第一阶段可把 Bevy WASM 作为 `a2_intent_map` 的静态资产；通信契约稳定后，再按需拆成 `a3_bevy_canvas_runtime_*.pip`。Bevy 缺失或禁用时，Intent Map 必须能够回退现有画布实现。
+
+[查看完整的 React × Bevy 融合方案 →](bevy_canvas_runtime.md)
+
 ## 与其他子系统的边界
 
 - [Loader N](loader_n.md) 负责选择和启动 `intent_map.pip`；
 - Intent Map 提供通用节点编辑，不实现加载器产品体验；
 - [Software Authoring](software_authoring.md) 通过业务节点使用 Intent Map；
 - [Crypto CEX](crypto_cex.md) 使用 Software Authoring 表达真实业务；
+- [Bevy Canvas Runtime](bevy_canvas_runtime.md) 是可选渲染投影，不进入文档语义；
 - MCP 可以让 Agent 操作 Intent Map，但属于可选接入方式。
 
 ## `.pip` 自举关系
@@ -72,6 +89,7 @@ Intent Map 自身也可以作为被编辑对象，但必须避免把某个具体
 - Workspace、Panel、Surface 与作用域；
 - 节点、端口、边和投影渲染；
 - 相机、拖动、缩放和布局；
+- 可选画布运行时及其稳定投影接口；
 - 撤销、重做、导入和导出；
 - 通用节点运行时与能力注册；
 - Intent Map 自身的 `.pip` 构建。
@@ -89,4 +107,4 @@ Intent Map 自身也可以作为被编辑对象，但必须避免把某个具体
 
 ---
 
-[← 上一篇：Loader N](loader_n.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Software Authoring →](software_authoring.md)
+[← 上一篇：Loader N](loader_n.md) · [Bevy Canvas Runtime](bevy_canvas_runtime.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Software Authoring →](software_authoring.md)
