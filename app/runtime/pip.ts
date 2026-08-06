@@ -66,6 +66,7 @@ export type PipManifest = {
   providedCapabilities: string[];
   requiredCapabilities: string[];
   requiredAuthoringCapabilities: string[];
+  ioPolicy: PipIoPolicy;
   authoringKind?: string;
   authoringCompiler?: string;
   createdAt: string;
@@ -129,6 +130,11 @@ const validReleaseDate = (value: string) => {
 
 export const assertPipManifest = (manifest: PipManifest): PipManifest => {
   if (!manifest) throw new Error("Invalid PIP manifest");
+  try {
+    assertPipIoPolicy(manifest.ioPolicy);
+  } catch {
+    throw new Error("Invalid PIP manifest");
+  }
   const stringArrays = [
     manifest.providedEditorKinds,
     manifest.supportedDocumentKinds,

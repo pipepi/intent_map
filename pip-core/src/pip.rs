@@ -51,24 +51,46 @@ impl PipIoPolicy {
         }
     }
 
-    fn authorize(&self, field: &str, limit: &PipLimit, actual: u64) -> Result<(), String> {
+    fn limit_value(field: &str, limit: &PipLimit) -> Result<Option<u64>, String> {
+        let PipLimit::Value { value } = limit else {
+            return Ok(None);
+        };
+        if value != "0"
+            && (value.starts_with('0') || !value.bytes().all(|byte| byte.is_ascii_digit()))
+        {
+            return Err(format!("invalid PIP I/O policy value for {field}"));
+        }
+        value
+            .parse::<u64>()
+            .map(Some)
+            .map_err(|_| format!("invalid PIP I/O policy value for {field}"))
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != 1 {
             return Err("unsupported PIP I/O policy version".into());
         }
+        for (field, limit) in [
+            ("maxPipBytes", &self.max_pip_bytes),
+            ("maxSingleResourceBytes", &self.max_single_resource_bytes),
+            ("maxExpandedBytes", &self.max_expanded_bytes),
+            ("maxResourceCount", &self.max_resource_count),
+            ("maxCompressionRatio", &self.max_compression_ratio),
+        ] {
+            Self::limit_value(field, limit)?;
+        }
+        Ok(())
+    }
+
+    fn authorize(&self, field: &str, limit: &PipLimit, actual: u64) -> Result<(), String> {
+        self.validate()?;
         match limit {
             PipLimit::Ask => Err(format!(
                 "PIP I/O confirmation required for {field}: {actual}"
             )),
             PipLimit::Unlimited => Ok(()),
-            PipLimit::Value { value } => {
-                if value != "0"
-                    && (value.starts_with('0') || !value.bytes().all(|byte| byte.is_ascii_digit()))
-                {
-                    return Err(format!("invalid PIP I/O policy value for {field}"));
-                }
-                let maximum = value
-                    .parse::<u64>()
-                    .map_err(|_| format!("invalid PIP I/O policy value for {field}"))?;
+            PipLimit::Value { .. } => {
+                let maximum = Self::limit_value(field, limit)?.expect("value limit");
                 if actual <= maximum {
                     Ok(())
                 } else {
@@ -114,6 +136,7 @@ pub struct Manifest {
     pub provided_capabilities: Vec<String>,
     pub required_capabilities: Vec<String>,
     pub required_authoring_capabilities: Vec<String>,
+    pub io_policy: PipIoPolicy,
     pub authoring_kind: Option<String>,
     pub authoring_compiler: Option<String>,
     pub created_at: String,
@@ -290,6 +313,7 @@ impl Package {
                 "authoring-source" | "runtime" | "source-and-runtime"
             )
             || manifest.content_type != "application/vnd.intent-map.pip"
+            || manifest.io_policy.validate().is_err()
             || manifest
                 .provided_editor_kinds
                 .iter()

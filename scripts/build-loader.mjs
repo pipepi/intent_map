@@ -10,7 +10,7 @@ import {
   systemPackagePath,
 } from "./pip-release.mjs";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
-import { trustedBuildPipIo } from "./pip-io-policy.mjs";
+import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
@@ -54,6 +54,7 @@ const bytes = await encodePip({
     providedCapabilities: [],
     requiredCapabilities: ["pip.catalog", "pip.activate"],
     requiredAuthoringCapabilities: ["software-authoring/1"],
+    ioPolicy: packagedPipIoPolicy,
     authoringKind: "software-project/1",
     authoringCompiler: "pip-loader-ui/1",
     createdAt: createdAtFor(release),

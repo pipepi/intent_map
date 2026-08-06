@@ -8,7 +8,7 @@ import {
 import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
 import { createdAtFor, projectRoot, readReleaseConfig, systemPackagePath } from "./pip-release.mjs";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
-import { trustedBuildPipIo } from "./pip-io-policy.mjs";
+import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
@@ -29,6 +29,7 @@ const writePackage = async (release, manifest, root, assets) => {
       preferredEditorKinds: [],
       requiredEditorCapabilities: [],
       requiredCapabilities: [],
+      ioPolicy: packagedPipIoPolicy,
       createdAt: createdAtFor(release),
       contentType: "application/vnd.intent-map.pip",
       ...manifest,

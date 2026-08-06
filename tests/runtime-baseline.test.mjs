@@ -6,7 +6,10 @@ import {
   decodePip as decodePipWithPolicy,
   encodePip as encodePipWithPolicy,
 } from "../app/runtime/pip.ts";
-import { UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
+import {
+  ASK_PIP_IO_POLICY,
+  UNLIMITED_PIP_IO_POLICY,
+} from "../app/runtime/pip-io-policy.ts";
 import {
   assertCapabilityProvider,
   resolveCapabilitySet,
@@ -40,6 +43,7 @@ const manifest = (overrides = {}) => ({
   providedCapabilities: [],
   requiredCapabilities: [],
   requiredAuthoringCapabilities: [],
+  ioPolicy: ASK_PIP_IO_POLICY,
   createdAt: "2026-08-07T00:00:00.000Z",
   contentType: "application/vnd.intent-map.pip",
   ...overrides,

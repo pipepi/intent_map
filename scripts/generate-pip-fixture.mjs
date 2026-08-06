@@ -5,7 +5,7 @@ import {
   DEFAULT_PIP_LOADER_SOURCE,
   encodePip as encodePipWithPolicy,
 } from "../app/runtime/pip.ts";
-import { trustedBuildPipIo } from "./pip-io-policy.mjs";
+import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
@@ -31,6 +31,7 @@ const common = {
   providedCapabilities: [],
   requiredCapabilities: [],
   requiredAuthoringCapabilities: [],
+  ioPolicy: packagedPipIoPolicy,
   createdAt: "2026-07-26T00:00:00.000Z",
   contentType: "application/vnd.intent-map.pip",
 };

@@ -37,6 +37,7 @@ import {
   type PipIoConfirmationRequest,
   type PipManifest,
 } from "../runtime/pip";
+import { ASK_PIP_IO_POLICY } from "../runtime/pip-io-policy";
 
 import { freePanelContext } from "./tree-utils";
 import { downloadBytes } from "./download";
@@ -131,6 +132,7 @@ export function createDocumentIO(deps: DocumentIODeps): DocumentIOOps {
           providedCapabilities: [],
           requiredCapabilities: [],
           requiredAuthoringCapabilities: [],
+          ioPolicy: ASK_PIP_IO_POLICY,
           authoringKind: "intent-document/1",
           createdAt: now.toISOString(),
           contentType: "application/vnd.intent-map.pip",

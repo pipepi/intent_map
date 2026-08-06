@@ -16,7 +16,7 @@ import {
   serializeIntentDocument,
 } from "../app/runtime/model.ts";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
-import { trustedBuildPipIo } from "./pip-io-policy.mjs";
+import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
@@ -148,6 +148,7 @@ const bytes = await encodePip({
     providedCapabilities: [],
     requiredCapabilities: [],
     requiredAuthoringCapabilities: ["software-authoring/1"],
+    ioPolicy: packagedPipIoPolicy,
     authoringKind: "software-project/1",
     authoringCompiler: "intent-map-app/1",
     createdAt: createdAtFor(release),

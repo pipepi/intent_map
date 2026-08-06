@@ -1,4 +1,9 @@
-import { UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
+import {
+  ASK_PIP_IO_POLICY,
+  UNLIMITED_PIP_IO_POLICY,
+} from "../app/runtime/pip-io-policy.ts";
+
+export const packagedPipIoPolicy = ASK_PIP_IO_POLICY;
 
 // Repository builds and tests operate on trusted, locally generated inputs.
 // User-facing entry points must instead supply CLI/Profile policy or confirmation.

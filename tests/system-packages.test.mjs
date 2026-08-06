@@ -22,6 +22,8 @@ test("the Git-tracked system registry contains a0 through a3 source packages", a
   assert.deepEqual(packages.map((pip) => pip.manifest.layer), ["a0", "a1", "a2", "a3"]);
   packages.forEach((pip) => {
     assert.ok(pip.assets.some((asset) => asset.path.startsWith("source/")), `${pip.manifest.packageId} has source assets`);
+    assert.equal(pip.manifest.ioPolicy.schemaVersion, 1);
+    assert.equal(pip.manifest.ioPolicy.maxPipBytes.mode, "ask");
   });
 });
 

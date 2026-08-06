@@ -8,6 +8,7 @@ import {
   pipFilename,
 } from "../app/runtime/pip.ts";
 import {
+  ASK_PIP_IO_POLICY,
   UNLIMITED_PIP_IO_POLICY,
   pipLimit,
 } from "../app/runtime/pip-io-policy.ts";
@@ -35,6 +36,7 @@ const manifest = {
   providedCapabilities: [],
   requiredCapabilities: [],
   requiredAuthoringCapabilities: [],
+  ioPolicy: ASK_PIP_IO_POLICY,
   createdAt: "2026-07-26T00:00:00.000Z",
   contentType: "application/vnd.intent-map.pip",
 };
@@ -69,6 +71,7 @@ test("PIP manifest requires layer, artifact name, semantic version, and release 
     { ...manifest, artifactName: "Intent-Map" },
     { ...manifest, packageVersion: "1.0" },
     { ...manifest, releaseDate: "20260230" },
+    { ...manifest, ioPolicy: undefined },
   ]) {
     await assert.rejects(() => encodePip({
       manifest: invalid,
@@ -77,6 +80,10 @@ test("PIP manifest requires layer, artifact name, semantic version, and release 
       assets: [],
     }), /Invalid PIP manifest/);
   }
+});
+
+test("PIP manifest carries its exportable I/O policy", () => {
+  assert.deepEqual(manifest.ioPolicy, ASK_PIP_IO_POLICY);
 });
 
 test("PIP export filenames preserve manifest identity across every layer", () => {
