@@ -26,6 +26,7 @@
     "pip:promote-system": "node scripts/promote-system-pip.mjs",
     "pip:workspace:split": "node scripts/split-pip-workspace.mjs",
     "pip:workspace:bundle": "node scripts/bundle-pip-workspace.mjs",
+    "pip:workspace:unbundle": "node scripts/unbundle-pip-workspace.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
