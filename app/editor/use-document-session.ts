@@ -9,7 +9,6 @@ import {
   type ScopeAddress,
 } from "../runtime/model";
 import { downloadExport, prepareDocumentExport } from "../runtime/export";
-import { usePipCapabilitySession } from "../../a3/host/use-pip-capability-session";
 import { createDocumentIO, type PipProjectSession } from "./document-io";
 import { useDocumentHistory } from "./use-document-history";
 import { useRuntimePipeline } from "./use-runtime-pipeline";
@@ -35,7 +34,6 @@ export function useDocumentSession(setToast: (message: string) => void) {
     freePanelContext(sampleDocument()).navigationStack,
   );
   const [pipProject, setPipProject] = useState<PipProjectSession | null>(null);
-  const capabilities = usePipCapabilitySession(pipProject);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const runtime = useRuntimePipeline({ setDocumentState: updateDocument, setToast });
 
@@ -131,7 +129,7 @@ export function useDocumentSession(setToast: (message: string) => void) {
   }, []);
 
   return {
-    model: { document: documentState, history, future, dirty, navigationStack, pipProject, capabilities },
+    model: { document: documentState, history, future, dirty, navigationStack, pipProject },
     writes: {
       commitDocumentChange,
       commitViewChange,

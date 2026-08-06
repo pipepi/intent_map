@@ -76,6 +76,7 @@ HomePage
 - 新增 RuntimeCommand 时，必须同步扩充 `SupportedRuntimeCommand` 与执行 action 映射。
 - 领域 controller 可以组合既有小 hooks，但不得复制其算法或反向依赖视图容器。
 - 组合根只消费 capability，不得重新展开底层 refs、工厂 deps 或命令映射。
+- a2 不导入或启动根目录 `a3/` 的扩展；a3 生命周期由外层工作区宿主管理。
 
 ## 验证
 
