@@ -28,4 +28,10 @@ test("the default a2 declares editor kinds and the default a3 declares capabilit
   assert.deepEqual(editor.manifest.providedEditorKinds, ["tree-map/1", "graph/1"]);
   assert.deepEqual(authoring.manifest.providedCapabilities, ["software-authoring/1"]);
   assert.ok(authoring.assets.some((asset) => asset.path === "capability.mjs"));
+  const source = await readFile(new URL(
+    "../a3/extensions/software-authoring/capability.mjs",
+    import.meta.url,
+  ), "utf8");
+  const packaged = authoring.assets.find((asset) => asset.path === "capability.mjs");
+  assert.equal(new TextDecoder().decode(packaged.bytes), source);
 });

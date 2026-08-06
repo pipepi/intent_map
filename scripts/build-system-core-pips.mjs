@@ -69,7 +69,7 @@ await writePackage(
 );
 
 const capabilityBytes = new Uint8Array(await readFile(
-  new URL("../capabilities/software-authoring.mjs", import.meta.url),
+  new URL("../a3/extensions/software-authoring/capability.mjs", import.meta.url),
 ));
 await writePackage(
   release.softwareAuthoring,
