@@ -1,13 +1,13 @@
 export const descriptor = Object.freeze({
   abi: "pip-capability/1",
   capabilities: ["software-authoring/1"],
-  commands: ["describe-project", "validate-project"],
+  commands: ["describe-project", "plan-specification", "validate-project"],
   customNodeKinds: [
     "business-constraint/1",
     "business-flow-scenario/1",
     "software-intent-goal/1",
   ],
-  projectionKinds: [],
+  projectionKinds: ["software-specification/1"],
 });
 
 const customNamespace = "intent-map.a3.custom-node";
@@ -63,6 +63,82 @@ const validateTree = (root) => {
   return diagnostics;
 };
 
+const safeId = (value, label) => {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9._-]*$/.test(value)) {
+    throw new Error(`${label} must use lowercase identifier characters`);
+  }
+  return value;
+};
+
+const safeResourcePath = (value) => {
+  if (typeof value !== "string" || value.startsWith("/") || value.includes("\\")) {
+    throw new Error("Specification resource path is unsafe");
+  }
+  const segments = value.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error("Specification resource path is unsafe");
+  }
+  return value;
+};
+
+const markdown = (node) => {
+  const data = node.extension.data;
+  const settings = data.settings;
+  const lines = [`# ${node.name || node.id}`, "", node.description || "", ""];
+  if (data.kind === "software-intent-goal/1") {
+    lines.push("## Objective", "", settings.objective, "");
+    if (settings.deepGoal) lines.push("## Deep goal", "", settings.deepGoal, "");
+  } else if (data.kind === "business-flow-scenario/1") {
+    lines.push("## Scenario", "", settings.scenario, "");
+    if (settings.trigger) lines.push("## Trigger", "", settings.trigger, "");
+    lines.push("## Outcome", "", settings.outcome, "");
+    if (settings.constraints?.length) {
+      lines.push("## Constraints", "", ...settings.constraints.map((item) => `- ${item}`), "");
+    }
+  } else if (data.kind === "business-constraint/1") {
+    lines.push("## Constraint", "", settings.statement, "");
+    if (settings.rationale) lines.push("## Rationale", "", settings.rationale, "");
+  }
+  return `${lines.join("\n").trim()}\n`;
+};
+
+const planSpecification = (payload) => {
+  const node = payload?.node;
+  if (!node || typeof node !== "object" || !node.extension) {
+    throw new Error("Specification projection requires one custom intent node");
+  }
+  const extension = node.extension;
+  if (
+    extension.namespace !== customNamespace
+    || extension.schemaVersion !== 1
+    || extension.data?.capability !== "software-authoring/1"
+  ) {
+    throw new Error("Specification source is not a Software Authoring custom node");
+  }
+  const diagnostics = validateSettings(extension.data.kind, extension.data.settings, node.id ?? "");
+  const errors = diagnostics.filter(({ level }) => level === "error");
+  if (errors.length) throw new Error(errors.map(({ message }) => message).join("; "));
+  if (!descriptor.customNodeKinds.includes(extension.data.kind)) {
+    throw new Error(`Unsupported specification source: ${extension.data.kind}`);
+  }
+  const normalizedNodeId = String(node.id).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z]+/, "");
+  const suffix = normalizedNodeId || "intent";
+  const projectionId = safeId(payload?.projectionId ?? `spec-${suffix}`, "projectionId");
+  const resourcePath = safeResourcePath(payload?.resourcePath ?? `docs/${suffix}.md`);
+  return {
+    schemaVersion: 1,
+    projectionId,
+    kind: "software-specification/1",
+    sourceNodeId: node.id,
+    capability: "software-authoring/1",
+    resources: [{
+      path: resourcePath,
+      mediaType: "text/markdown; charset=utf-8",
+      bytes: new TextEncoder().encode(markdown(node)),
+    }],
+  };
+};
+
 export async function invoke(request) {
   if (request?.command === "describe-project") {
     return {
@@ -71,6 +147,9 @@ export async function invoke(request) {
       projectionKinds: descriptor.projectionKinds,
       surfaces: ["inner-intent", "projection-diagnostics"],
     };
+  }
+  if (request?.command === "plan-specification") {
+    return planSpecification(request.payload);
   }
   if (request?.command === "validate-project") {
     return {

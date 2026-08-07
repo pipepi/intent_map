@@ -12,15 +12,15 @@ import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts
 
 test("software authoring declares deterministic worker commands and inner node kinds", () => {
   assert.deepEqual(assertPipCapabilityDescriptor(descriptor), descriptor);
-  assert.deepEqual(descriptor.commands, ["describe-project", "validate-project"]);
-  assert.deepEqual(descriptor.projectionKinds, []);
+  assert.deepEqual(descriptor.commands, ["describe-project", "plan-specification", "validate-project"]);
+  assert.deepEqual(descriptor.projectionKinds, ["software-specification/1"]);
 });
 
 test("software authoring worker describes only implemented authoring surfaces", async () => {
   assert.deepEqual(await invoke({ command: "describe-project", payload: {} }), {
     authoringKind: "software-project/1",
     customNodeKinds: descriptor.customNodeKinds,
-    projectionKinds: [],
+    projectionKinds: ["software-specification/1"],
     surfaces: ["inner-intent", "projection-diagnostics"],
   });
 });
