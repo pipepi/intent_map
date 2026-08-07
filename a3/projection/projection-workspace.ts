@@ -70,6 +70,46 @@ export class A3ProjectionWorkspaceSession {
     return this.#resources.read(resourcePath);
   }
 
+  async writeResource(
+    projectionId: string,
+    resource: WorkspaceResource,
+    {
+      attach = false,
+      origin = "manual",
+    }: { attach?: boolean; origin?: "generated" | "manual" } = {},
+  ): Promise<void> {
+    const projection = this.projection(projectionId);
+    if (!projection) throw new Error(`Projection does not exist: ${projectionId}`);
+    const owner = this.#index.projections.find((candidate) =>
+      candidate.resourcePaths.includes(resource.path));
+    if (owner && owner.projectionId !== projectionId) {
+      throw new Error(`${resource.path} is already owned by ${owner.projectionId}`);
+    }
+    if (!owner && !attach) {
+      throw new Error(`${resource.path} must be explicitly attached to ${projectionId}`);
+    }
+    await this.#resources.write(resource);
+    const resourcePaths = owner
+      ? projection.resourcePaths
+      : [...projection.resourcePaths, resource.path].sort((left, right) => left.localeCompare(right));
+    const materialization = origin === "manual" && projection.materialization === "generated"
+      ? "mixed"
+      : projection.materialization;
+    this.upsert({ ...projection, resourcePaths, materialization });
+  }
+
+  detachResource(projectionId: string, resourcePath: string): void {
+    const projection = this.projection(projectionId);
+    if (!projection) throw new Error(`Projection does not exist: ${projectionId}`);
+    if (!projection.resourcePaths.includes(resourcePath)) {
+      throw new Error(`${resourcePath} is not owned by ${projectionId}`);
+    }
+    this.upsert({
+      ...projection,
+      resourcePaths: projection.resourcePaths.filter((path) => path !== resourcePath),
+    });
+  }
+
   upsert(entry: A3ProjectionEntry): void {
     const projections = [
       ...this.#index.projections.filter(({ projectionId }) => projectionId !== entry.projectionId),

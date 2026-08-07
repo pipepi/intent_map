@@ -108,3 +108,43 @@ test("a3 projection workspace starts empty and persists an explicit projection",
   await workspace.save();
   assert.ok(resources.entry("a3/projections/index.json"));
 });
+
+test("a3 projection workspace edits one owned resource and preserves ordinary files on detach", async () => {
+  const { root, projected, resources } = await fixture("generated");
+  const workspace = await openA3ProjectionWorkspace(root, resources);
+  const changed = {
+    ...projected,
+    bytes: new TextEncoder().encode("export const Order = () => 'manual';\n"),
+  };
+  await workspace.writeResource("order-ui", changed);
+  assert.equal(workspace.projection("order-ui").materialization, "mixed");
+  assert.deepEqual((await resources.read(projected.path)).bytes, changed.bytes);
+
+  workspace.detachResource("order-ui", projected.path);
+  assert.deepEqual(workspace.projection("order-ui").resourcePaths, []);
+  assert.ok(resources.entry(projected.path), "detach does not delete the user resource");
+});
+
+test("a3 projection workspace requires explicit attachment and rejects ownership conflicts", async () => {
+  const { root, projection, resources } = await fixture();
+  const workspace = await openA3ProjectionWorkspace(root, resources);
+  workspace.upsert({
+    ...projection,
+    projectionId: "second-ui",
+    resourcePaths: [],
+  });
+  const newResource = {
+    path: "frontend/extra.tsx",
+    mediaType: "text/plain; charset=utf-8",
+    bytes: new TextEncoder().encode("export const Extra = true;\n"),
+  };
+  await assert.rejects(
+    () => workspace.writeResource("second-ui", newResource),
+    /explicitly attached/,
+  );
+  await workspace.writeResource("second-ui", newResource, { attach: true });
+  await assert.rejects(
+    () => workspace.writeResource("order-ui", newResource),
+    /already owned by second-ui/,
+  );
+});
