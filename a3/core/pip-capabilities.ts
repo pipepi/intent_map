@@ -11,6 +11,39 @@ export type PipCapabilityDescriptor = {
   abi: typeof PIP_CAPABILITY_ABI;
   capabilities: string[];
   commands: string[];
+  customNodeKinds: string[];
+  projectionKinds: string[];
+};
+
+const capabilityPattern = /^[a-z][a-z0-9.-]*\/[1-9]\d*$/;
+const commandPattern = /^[a-z][a-z0-9-]*$/;
+const sortedUnique = (values: readonly string[]) =>
+  values.length > 0 && values.every((value, index) =>
+    index === 0 || values[index - 1].localeCompare(value) < 0);
+
+export const assertPipCapabilityDescriptor = (
+  value: unknown,
+): PipCapabilityDescriptor => {
+  const descriptor = value as Partial<PipCapabilityDescriptor> | null;
+  if (
+    !descriptor
+    || descriptor.abi !== PIP_CAPABILITY_ABI
+    || !Array.isArray(descriptor.capabilities)
+    || !sortedUnique(descriptor.capabilities)
+    || descriptor.capabilities.some((capability) => !capabilityPattern.test(capability))
+    || !Array.isArray(descriptor.commands)
+    || !sortedUnique(descriptor.commands)
+    || descriptor.commands.some((command) => !commandPattern.test(command))
+    || !Array.isArray(descriptor.customNodeKinds)
+    || (descriptor.customNodeKinds.length > 0 && !sortedUnique(descriptor.customNodeKinds))
+    || descriptor.customNodeKinds.some((kind) => !capabilityPattern.test(kind))
+    || !Array.isArray(descriptor.projectionKinds)
+    || (descriptor.projectionKinds.length > 0 && !sortedUnique(descriptor.projectionKinds))
+    || descriptor.projectionKinds.some((kind) => !capabilityPattern.test(kind))
+  ) {
+    throw new Error("Invalid pip-capability/1 descriptor");
+  }
+  return structuredClone(descriptor as PipCapabilityDescriptor);
 };
 
 export type PipCapabilityRequest = {
@@ -66,6 +99,7 @@ export class PipCapabilityWorker {
   #nextId = 0;
   #pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   #ready: Promise<void>;
+  #descriptor?: PipCapabilityDescriptor;
 
   constructor(source: string, expectedCapability: string) {
     const bootstrap = `
@@ -76,13 +110,17 @@ self.onmessage = async (event) => {
     if (message.type === "init") {
       moduleUrl = URL.createObjectURL(new Blob([message.source], { type: "text/javascript" }));
       const provider = await import(moduleUrl);
-      if (provider.descriptor?.abi !== "pip-capability/1") throw new Error("Unsupported capability ABI");
-      if (!provider.descriptor.capabilities?.includes(message.expectedCapability)) throw new Error("Capability identity mismatch");
+      const descriptor = provider.descriptor;
+      const isSortedUnique = (values) => Array.isArray(values) && values.length > 0 && values.every((value, index) => typeof value === "string" && (index === 0 || values[index - 1].localeCompare(value) < 0));
+      if (descriptor?.abi !== "pip-capability/1" || !isSortedUnique(descriptor.capabilities) || !isSortedUnique(descriptor.commands) || !Array.isArray(descriptor.customNodeKinds) || !Array.isArray(descriptor.projectionKinds)) throw new Error("Unsupported capability descriptor");
+      if (!descriptor.capabilities.includes(message.expectedCapability)) throw new Error("Capability identity mismatch");
       self.provider = provider;
-      self.postMessage({ type: "ready", descriptor: provider.descriptor });
+      self.descriptor = descriptor;
+      self.postMessage({ type: "ready", descriptor });
       return;
     }
     if (message.type === "invoke") {
+      if (!self.descriptor.commands.includes(message.command)) throw new Error("Undeclared capability command");
       const result = await self.provider.invoke({ command: message.command, payload: message.payload });
       self.postMessage({ type: "result", id: message.id, result });
     }
@@ -100,7 +138,12 @@ self.onmessage = async (event) => {
     });
     this.#worker.onmessage = (event) => {
       if (event.data?.type === "ready") {
-        resolveReady();
+        try {
+          this.#descriptor = assertPipCapabilityDescriptor(event.data.descriptor);
+          resolveReady();
+        } catch (error) {
+          rejectReady(error instanceof Error ? error : new Error("Invalid capability descriptor"));
+        }
         return;
       }
       if (event.data?.type === "error" && !event.data?.id) {
@@ -129,6 +172,10 @@ self.onmessage = async (event) => {
 
   ready() {
     return this.#ready;
+  }
+
+  descriptor(): Promise<PipCapabilityDescriptor> {
+    return this.#ready.then(() => structuredClone(this.#descriptor as PipCapabilityDescriptor));
   }
 
   dispose(reason = new Error("Capability worker disposed")) {
