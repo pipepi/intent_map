@@ -170,7 +170,15 @@ test("PIP preserves the v3 multi-panel workspace and four-level tree", async () 
     loaded.workspaceState.panels[0].surfaces.filter(
       (surface) => surface.kind === "feature-panel",
     ).length,
-    2,
+    3,
+  );
+  assert.equal(
+    loaded.workspaceState.panels[0].surfaces.some(
+      (surface) =>
+        surface.kind === "feature-panel" &&
+        surface.featureNodeId === "global_toolbar",
+    ),
+    true,
   );
   assert.equal(
     loaded.rootIntent.children

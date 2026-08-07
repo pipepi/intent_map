@@ -79,7 +79,7 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
     primaryNodeId: "business_root",
     revision: 0,
   });
-  assert.equal(workbench.surfaces.length, 3);
+  assert.equal(workbench.surfaces.length, 4);
   assert.equal(
     workbench.surfaces.filter((surface) => surface.kind === "current-container")
       .length,
@@ -89,7 +89,10 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
     workbench.surfaces
       .filter((surface) => surface.kind === "feature-panel")
       .map((surface) => surface.featureNodeId),
-    ["intent_tree", "properties"],
+    ["global_toolbar", "intent_tree", "properties"],
+  );
+  const globalToolbar = workbench.surfaces.find(
+    (surface) => surface.id === "workbench-global-toolbar",
   );
   const container = workbench.surfaces.find(
     (surface) => surface.kind === "current-container",
@@ -102,9 +105,15 @@ test("creates the v3 root, views, panels, and dual surface types", () => {
   );
   assert.deepEqual(container.frame, {
     x: 0.245,
+    y: 0.24,
+    width: 0.745,
+    height: 0.74,
+  });
+  assert.deepEqual(globalToolbar.frame, {
+    x: 0.245,
     y: 0.02,
     width: 0.745,
-    height: 0.96,
+    height: 0.2,
   });
   assert.equal(
     container.projections["business:business_root"].camera.scale,

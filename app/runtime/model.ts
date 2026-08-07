@@ -687,7 +687,7 @@ export const createDefaultViews = (
   const workbenchContainer = defaultContainerSurface(
     "workbench-container",
     "当前容器",
-    { x: 0.245, y: 0.02, width: 0.745, height: 0.96 },
+    { x: 0.245, y: 0.24, width: 0.745, height: 0.74 },
     businessRootId,
   );
   workbenchContainer.projections[`business:${businessRootId}`].camera.scale =
@@ -718,6 +718,12 @@ export const createDefaultViews = (
       kind: "workbench",
       layoutLocked: false,
       surfaceTemplates: [
+        defaultFeatureSurface(
+          "workbench-global-toolbar",
+          "顶栏与全局命令",
+          "global_toolbar",
+          { x: 0.245, y: 0.02, width: 0.745, height: 0.2 },
+        ),
         workbenchContainer,
         defaultFeatureSurface(
           "workbench-tree",

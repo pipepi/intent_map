@@ -91,14 +91,15 @@ test("exports the system a2 editor as a static page", async () => {
   assert.doesNotMatch(html, /next\/headers|x-forwarded-host|codex-preview/);
 });
 
-test("renders free-layout and a three-surface workbench", async () => {
+test("renders free-layout and a four-surface workbench", async () => {
   const html = await readFile(new URL("out/system-editor/index.html", root), "utf8");
   assert.match(html, /工作台/);
   assert.match(html, /自由布局/);
   assert.match(html, /节点树/);
   assert.match(html, /属性编辑器/);
+  assert.match(html, /顶栏与全局命令/);
   assert.equal((html.match(/class="workspace-panel /g) ?? []).length, 2);
-  assert.equal((html.match(/class="workspace-surface /g) ?? []).length, 4);
+  assert.equal((html.match(/class="workspace-surface /g) ?? []).length, 5);
 });
 
 test("implements panel selection and both surface binding dimensions", async () => {

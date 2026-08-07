@@ -54,6 +54,52 @@ Software Authoring v1 使用三种 a3 custom-node 表达这一层：
 这些节点只校验结构是否可理解，不判断业务选择是否正确。刻意矛盾、非常规或为了
 深层目标而“不正确”的内容仍可保存。a2 只原样往返统一扩展信封，不解释这些类型。
 
+## a3 节点插件模型
+
+a3 不通过新增工作区 Surface 进入 a2。它更接近 Blender、ComfyUI 的第三方节点
+插件：a2 保持同一个通用画布和属性编辑器，已加载的 a3 PIP 向运行时 Registry
+注册节点预制件。用户点击“添加业务节点”时，在 a2 内置通用节点之外选择这些
+预制件。
+
+```text
+a2 通用节点编辑器
+└── 添加业务节点
+    ├── a2：通用容器、通用操作
+    └── a3 Software Authoring
+        ├── Software Intent Goal
+        ├── Business Flow Scenario
+        └── Business Constraint
+```
+
+a3 PIP 提供节点类型 ID、名称、分类、默认实例数据、声明式属性字段、结构校验以及
+可选命令和投影能力。a2 负责节点 ID、位置、层级、连接、选择、通用卡片渲染和
+属性表单，不允许 a3 直接注入 React 或改写整个文档。选择预制件后仍创建普通
+`IntentNode`，a3 专有部分只保存在不透明 extension 中。
+
+```text
+IntentNode（a2 所有）
+├── id / name / description / children / ports / position
+└── extension（a2 只校验并完整往返）
+    └── kind / capability / settings（a3 解释）
+```
+
+因此 a4 业务 PIP 保存的是“使用了哪个插件节点及其实例参数”，类似 ComfyUI
+workflow 保存节点类型和配置；它不复制 a3 PIP 的节点定义、Worker 或实现代码。
+a3 PIP 是可独立替换和加载的插件包，a4 PIP 是使用这些插件节点组成的业务工程。
+
+缺少对应 a3 时，a2 仍显示节点名称、描述、层级和通用端口，并原样保留 extension；
+节点标记为“插件未加载”，不能编辑 a3 专有字段或执行相关命令，但仍可移动、连接、
+删除和继续编辑纯意图。重新加载匹配 a3 后，声明式属性和能力恢复，不需要迁移 a4。
+
+加载流程应保持单向边界：Runtime Host 校验 a3 PIP、容量策略、SHA 和信任状态，
+在隔离 Worker 中启动能力，再把声明式预制件 Registry 提供给 a2。a2 本身不导入
+或启动 a3 源码。插件启用与状态可以放在全局设置中，但不是新的业务工作区 Surface。
+
+当前实现已经具备 `pip-capability/1` descriptor、三种 `customNodeKinds`、隔离
+Worker 和不透明 extension 往返；尚未完成的是把 a3 Host 挂接到应用组合根、把
+预制件 Registry 接入“添加业务节点”，以及在属性编辑器中渲染 a3 声明式字段。
+在这条最小界面闭环完成前，导入 a3 PIP 只会把它当普通文档显示，不能启用节点插件。
+
 ## 可选外树
 
 UI、DB Tables、API 和代码等是内树的可选投影：
@@ -121,8 +167,8 @@ Software Authoring：怎样用节点掌控软件开发复杂度
 ```
 
 用户 Runtime Profile 指定的 a3 提供者优先于系统默认。一个能力 ABI 只能有
-一个主提供者；不同能力可以由多个隔离 Worker 同时提供。缺失或崩溃的能力
-只禁用相关编辑面，不影响基础节点编辑。
+一个主提供者；不同能力可以由多个隔离 Worker 同时提供。缺失或崩溃的能力只会
+移除对应节点预制件、专有属性和命令，不影响已有实例的数据保留与基础节点编辑。
 
 [查看多编辑器、多能力和用户版本选择规则 →](pip_runtime_profiles.md)
 
@@ -145,6 +191,8 @@ Software Authoring 的构建、测试与发布边界已用于验证系统自身�
 
 - `a3/extensions/software-authoring/custom-nodes.ts`：纯内树节点结构；
 - `a3/extensions/software-authoring/capability.mjs`：隔离 Worker 描述、诊断和 proposal；
+- `a3/core/pip-capabilities.ts`：插件 descriptor、能力解析和隔离 Worker；
+- `a3/host/use-pip-capability-session.ts`：待接入应用组合根的 a3 Host 会话；
 - `a3/projection/projection-proposals.ts`：Provider 输出的 Host 校验边界；
 - `scripts/project-software-specification.mjs`：系统默认能力的端到端 CLI。
 
@@ -156,6 +204,8 @@ Software Authoring 的构建、测试与发布边界已用于验证系统自身�
 - 大树枝可以继续细分到可理解范围；
 - 外树可以手工修正或局部重来；
 - 同一工作可以在人、Agent和其他工具间接管；
+- 已加载的 a3 节点预制件出现在 a2 的统一“添加业务节点”选择器中；
+- 缺少 a3 时已有插件节点以通用意图降级显示且不丢失实例数据；
 - 能作为独立 `.pip` 被 Intent Map 打开和编辑。
 
 ---
