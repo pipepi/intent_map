@@ -29,6 +29,7 @@
     "pip:workspace:unbundle": "node scripts/unbundle-pip-workspace.mjs",
     "pip:projection:audit": "node scripts/audit-pip-projections.mjs",
     "pip:software:spec": "node scripts/project-software-specification.mjs",
+    "pip:self:audit": "node scripts/audit-system-sources.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
