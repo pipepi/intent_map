@@ -4,7 +4,9 @@ import path from "node:path";
 export const projectRoot = path.resolve(import.meta.dirname, "..");
 export const runtimeDirectory = path.join(projectRoot, "dist", "pip-runtime");
 export const applicationDirectory = path.join(runtimeDirectory, "pip");
-export const systemPackagesDirectory = path.join(projectRoot, "packages", "system");
+export const systemPackagesDirectory = process.env.PIP_SYSTEM_PACKAGES_DIR
+  ? path.resolve(process.env.PIP_SYSTEM_PACKAGES_DIR)
+  : path.join(projectRoot, "packages", "system");
 
 const artifactPattern = /^[a-z][a-z0-9_]*$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;

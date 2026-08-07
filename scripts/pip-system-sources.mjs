@@ -14,9 +14,11 @@ const entries = {
   "pip-loader": ["loader-n"],
   "intent-map": [
     "app",
+    "public",
     "package.json",
     "package-lock.json",
     "next.config.ts",
+    "postcss.config.mjs",
     "tsconfig.json",
   ],
   "software-authoring": [

@@ -4,13 +4,16 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 
 const root = path.resolve(import.meta.dirname, "..");
+const toolchainRoot = process.env.PIP_TOOLCHAIN_ROOT
+  ? path.resolve(process.env.PIP_TOOLCHAIN_ROOT)
+  : root;
 
 // A clean cache is required for distributable builds. Next can otherwise reuse
 // an older CSS module while regenerating index.html, producing a valid-looking
 // but internally inconsistent static export.
 await rm(path.join(root, ".next"), { recursive: true, force: true });
 
-const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
+const nextBin = path.join(toolchainRoot, "node_modules", "next", "dist", "bin", "next");
 const exitCode = await new Promise((resolve, reject) => {
   const child = spawn(process.execPath, [nextBin, "build", "--webpack"], {
     cwd: root,

@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 const excludedDirectories = new Set(["node_modules", "target", ".next", "out", "dist", ".git"]);
+const excludedFiles = new Set([".DS_Store"]);
 
 const mimeFor = (file) => ({
   ".css": "text/css; charset=utf-8",
@@ -32,6 +33,7 @@ export const collectSourceAssets = async (root, entries, prefix = "source") => {
       }
       return;
     }
+    if (excludedFiles.has(path.basename(relative))) return;
     if (!info.isFile()) return;
     assets.push({
       path: `${prefix}/${relative.split(path.sep).join("/")}`,

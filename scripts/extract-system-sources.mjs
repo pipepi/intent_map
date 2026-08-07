@@ -13,7 +13,6 @@ import { decodePip } from "../app/runtime/pip.ts";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 import {
   artifactFilename,
-  projectRoot,
   readReleaseConfig,
   systemPackagePath,
 } from "./pip-release.mjs";
