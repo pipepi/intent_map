@@ -3,6 +3,7 @@ export * from "./core/custom-nodes";
 export * from "./core/custom-node-patches";
 export * from "./projection/projection-index";
 export * from "./projection/projection-workspace";
+export * from "./projection/projection-proposals";
 export * from "./extensions/software-authoring/custom-nodes";
 export * from "./workspace/resource-index";
 export * from "./workspace/resource-store";
