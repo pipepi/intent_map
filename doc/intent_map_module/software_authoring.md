@@ -5,6 +5,8 @@
 Software Authoring 的 UI、DB、API 和代码等原始产物使用
 [Split Workspace](split_workspace.md) 保存在 `resources/`；`intent.pip` 只保存内树
 与资源完整性索引。
+[a3 Projection Workspace](a3_projection_workspace.md) 定义 custom-node、来源身份、
+手工修正和可重建外树的通用边界。
 
 ## 定位
 
@@ -125,4 +127,4 @@ Software Authoring：怎样用节点掌控软件开发复杂度
 
 ---
 
-[← 上一篇：Intent Map](intent_map.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Crypto CEX →](crypto_cex.md)
+[← 上一篇：Intent Map](intent_map.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Crypto CEX →](crypto_cex.md)

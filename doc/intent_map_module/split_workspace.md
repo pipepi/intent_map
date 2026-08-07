@@ -1,6 +1,6 @@
 # Split Workspace：`intent.pip + resources/`
 
-[← 返回项目 README](../../README.md) · [Intent Map](intent_map.md) · [Software Authoring](software_authoring.md) · [返回总体方案](../intent_map_position.md)
+[← 返回项目 README](../../README.md) · [Intent Map](intent_map.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [Software Authoring](software_authoring.md) · [返回总体方案](../intent_map_position.md)
 
 ## 定位
 
@@ -91,4 +91,4 @@ Node/CLI 和 Web File System Access 路径都按块读取、写入和计算 SHA-
 
 ---
 
-[← 返回项目 README](../../README.md) · [Intent Map](intent_map.md) · [Software Authoring](software_authoring.md) · [返回总体方案](../intent_map_position.md)
+[← 返回项目 README](../../README.md) · [Intent Map](intent_map.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [Software Authoring](software_authoring.md) · [返回总体方案](../intent_map_position.md)

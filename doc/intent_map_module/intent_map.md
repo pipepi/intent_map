@@ -75,6 +75,7 @@ Canvas（高性能节点地图）
 - MCP 可以让 Agent 操作 Intent Map，但属于可选接入方式。
 - [Runtime Profile](pip_runtime_profiles.md) 精确选择 a1、一个主 a2 和 a3 扩展集合。
 - [Split Workspace](split_workspace.md) 由 a3 保存外树资源，a2 只编辑其中的内树。
+- [a3 Projection Workspace](a3_projection_workspace.md) 解释 custom-node、不透明补丁和可选外树诊断。
 
 ## `.pip` 自举关系
 
@@ -114,4 +115,4 @@ Intent Map 自身也可以作为被编辑对象，但必须避免把某个具体
 
 ---
 
-[← 上一篇：Loader N](loader_n.md) · [Bevy Canvas Runtime](bevy_canvas_runtime.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Software Authoring →](software_authoring.md)
+[← 上一篇：Loader N](loader_n.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [Bevy Canvas Runtime](bevy_canvas_runtime.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Software Authoring →](software_authoring.md)

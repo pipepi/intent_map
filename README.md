@@ -14,6 +14,8 @@ Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应�
 [a2/a3 Workspace Refactor Execution Ledger](doc/a2_a3_workspace_execution.md)。
 已实现的 `intent.pip + resources/` 创作存储契约参见：
 [Split Workspace](doc/intent_map_module/split_workspace.md)。
+已实现的 a3 custom-node、可选外树投影和乐观一致性诊断参见：
+[a3 Custom Node 与可选投影工作区](doc/intent_map_module/a3_projection_workspace.md)。
 
 ## Implementation
 
@@ -115,6 +117,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run pip:workspace:split -- <bundle.pip> <new-directory> --allow-package-limits`: create a non-overwriting split workspace
 - `npm run pip:workspace:bundle -- <workspace-directory> <versioned.pip> --allow-package-limits`: stream a split workspace into one exchange Bundle
 - `npm run pip:workspace:unbundle -- <versioned.pip> <new-directory> --allow-package-limits`: stream a Bundle back into a split workspace
+- `npm run pip:projection:audit -- <workspace-directory> --allow-package-limits`: inspect optional a3 projections without modifying the workspace
 - `npm run pip:cli`: build the versioned diagnostic Seed CLI under `dist/pip-runtime/tools/`
 - `npm run pip:verify`: verify the generated `.pip`
 - `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
