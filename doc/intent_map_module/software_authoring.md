@@ -45,6 +45,15 @@ Authoring；数据库设计、API 设计、Bevy 画布和测试生成都可以�
 
 内树不要求包含 UI、数据库、API、框架或部署平台。没有任何外树时，内树仍然是独立有效的产物。
 
+Software Authoring v1 使用三种 a3 custom-node 表达这一层：
+
+- `software-intent-goal/1`：目标和可选深层目标；
+- `business-flow-scenario/1`：场景、触发、结果和约束；
+- `business-constraint/1`：约束陈述和可选理由。
+
+这些节点只校验结构是否可理解，不判断业务选择是否正确。刻意矛盾、非常规或为了
+深层目标而“不正确”的内容仍可保存。a2 只原样往返统一扩展信封，不解释这些类型。
+
 ## 可选外树
 
 UI、DB Tables、API 和代码等是内树的可选投影：
@@ -59,6 +68,19 @@ UI、DB Tables、API 和代码等是内树的可选投影：
 ```
 
 外树可以不存在、局部生成、拥有多个候选版本，也可以被删除、手工修改或重新生成。系统不要求所有外树永久一致；发现偏差时，支持乐观地局部修正或推倒重来。
+
+当前第一个可执行投影是 `software-specification/1`：能力 Worker 把单个目标、场景
+或约束规划成小型 Markdown proposal，a3 Host 校验来源、能力、路径、所有权和
+手工内容保护后才写入 `resources/docs/`。该投影证明完整边界，不代表 UI、DB、
+API 或代码已经实现。
+
+```bash
+npm run pip:software:spec -- ./my-workspace <node-id> --allow-package-limits
+npm run pip:projection:audit -- ./my-workspace --allow-package-limits
+```
+
+重新生成不会自动删除旧文件；不再被引用的文件作为 orphan 保留。覆盖 `manual`
+或 `mixed` 投影需要显式 `--allow-manual-overwrite`。
 
 ## 八层渐进式披露
 
@@ -114,6 +136,13 @@ Software Authoring：怎样用节点掌控软件开发复杂度
 - 人工、团队和自动化操作入口；
 - 可选 PIP MCP Server；
 - `software_authoring.pip` 的构建与分发。
+
+当前代码映射：
+
+- `a3/extensions/software-authoring/custom-nodes.ts`：纯内树节点结构；
+- `a3/extensions/software-authoring/capability.mjs`：隔离 Worker 描述、诊断和 proposal；
+- `a3/projection/projection-proposals.ts`：Provider 输出的 Host 校验边界；
+- `scripts/project-software-specification.mjs`：系统默认能力的端到端 CLI。
 
 ## 验收条件
 

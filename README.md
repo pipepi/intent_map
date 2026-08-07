@@ -118,6 +118,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run pip:workspace:bundle -- <workspace-directory> <versioned.pip> --allow-package-limits`: stream a split workspace into one exchange Bundle
 - `npm run pip:workspace:unbundle -- <versioned.pip> <new-directory> --allow-package-limits`: stream a Bundle back into a split workspace
 - `npm run pip:projection:audit -- <workspace-directory> --allow-package-limits`: inspect optional a3 projections without modifying the workspace
+- `npm run pip:software:spec -- <workspace-directory> <node-id> --allow-package-limits`: materialize one validated Software Authoring specification
 - `npm run pip:cli`: build the versioned diagnostic Seed CLI under `dist/pip-runtime/tools/`
 - `npm run pip:verify`: verify the generated `.pip`
 - `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
