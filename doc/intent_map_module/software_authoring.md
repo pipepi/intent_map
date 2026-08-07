@@ -10,11 +10,22 @@ Software Authoring 的 UI、DB、API 和代码等原始产物使用
 
 ## 定位
 
-Software Authoring 是默认系统 a3 之一，通过 `software-authoring/1` 提供源码、
-构建、测试和发布能力。a3 是可组合的业务无关能力类别，不限于 Software
-Authoring；数据库设计、API 设计、Bevy 画布和测试生成都可以由不同 a3 提供。
+Software Authoring 是默认系统 a3 之一。它不是独立编辑器，而是加载到 a2 公共
+扩展边界中的节点预制件与预设模板地图：通过 `software-authoring/1` 描述软件需求、
+业务核心流、约束、外树投影、实现、发布和反馈。a3 是可组合的业务无关扩展类别，
+不限于 Software Authoring；其他领域可以提供自己的节点类型、模板、规则和命令。
 
-它不属于 Intent Map 内核，也不依赖 Agent。其核心价值是通过分形边界、逐层披露和局部填充，让人获得对软件开发复杂度的掌控力。
+它不属于 Intent Map 内核，也不依赖 Agent。其核心价值是把软件生产与反馈过程变成
+可视化、可逐层披露的节点地图，通过分形边界和局部填充让人获得对软件开发复杂度
+的掌控力。
+
+```text
+a2 Intent Map：通用节点编辑器基础设施
+        +
+a3 Software Authoring：软件节点预制件 + 预设模板地图
+        =
+可视化的软件生产与复杂度掌控工作台
+```
 
 ## 核心策略
 
@@ -145,6 +156,11 @@ npm run pip:projection:audit -- ./my-workspace --allow-package-limits
 
 ## 实现方式
 
+Software Authoring 服务的是软件生产方式，而不是某一种自动编程方式。传统人工
+流程可以完整使用它：梳理需求内树，设计 UI，设计 Tables 与 API，分别完成后端和
+前端，实现外围系统，发布和推广，再记录反馈与收益分配。每一步的实施者都可以是
+个人、团队或既有工具。
+
 每个局部都可以选择：
 
 - 完全手工实现；
@@ -155,15 +171,19 @@ npm run pip:projection:audit -- ./my-workspace --allow-package-limits
 - 完全委托 Agent；
 - 挂接已有外部实现。
 
-当 Agent 参与时，单次任务应绑定到明确树枝、目标层、允许范围和少量输出。PIP MCP Server 可以提供节点读取、编辑、填充、导入和导出工具，但只是可选适配层。
+Agent 只是上述实施者中的可选项。Agent 参与时，单次任务应绑定到明确树枝、目标层、
+允许范围和完整的局部上下文；PIP MCP Server 可以提供节点读取、编辑、填充、导入
+和导出工具，但只是可选适配层。移除 Agent 后，节点模型、模板、人工流程和产物仍然
+完整成立。
 
 ## 与 Intent Map 的边界
 
-[Intent Map](intent_map.md) 提供通用节点和画布能力；Software Authoring 提供内树、外树、八层披露和软件创作方法。
+[Intent Map](intent_map.md) 提供通用节点编辑基础设施；Software Authoring 以 a3
+节点预制件、模板地图和规则提供内树、外树、八层披露和软件创作方法。
 
 ```text
-Intent Map：怎样编辑节点应用
-Software Authoring：怎样用节点掌控软件开发复杂度
+Intent Map：怎样编辑任意节点地图
+Software Authoring：提供哪些软件创作节点和模板，以及怎样用它们掌控复杂度
 ```
 
 用户 Runtime Profile 指定的 a3 提供者优先于系统默认。一个能力 ABI 只能有

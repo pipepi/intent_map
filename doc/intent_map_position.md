@@ -6,8 +6,10 @@
 
 ## 总体定位
 
-Intent Map 是系统默认提供的业务无关分形节点编辑器。a2 是可扩展的通用编辑器
-类别，Intent Map 只是默认实现；a3 是可组合的业务无关能力类别。
+Intent Map 是系统默认提供的业务无关分形节点编辑器基础设施。a2 是可扩展的通用
+编辑器类别，Intent Map 只是默认实现；它不自带软件开发复杂度掌控能力。
+Software Authoring 是一个可选 a3 节点扩展，通过节点预制件、预设模板地图、规则
+和命令提供这项能力。a3 还可以存在其他互不相关的通用节点扩展。
 
 整个体系拆分为五个可以分别实现和演进的部分：
 
@@ -16,7 +18,7 @@ Intent Map 是系统默认提供的业务无关分形节点编辑器。a2 是可
 | 1 | Loader 0 | 唯一原生、无状态且稳定的初始加载器（种皮） | [loader_0.md](intent_map_module/loader_0.md) |
 | 2 | Loader N | 由 `.pip` 承载、可以持续升级的加载器 | [loader_n.md](intent_map_module/loader_n.md) |
 | 3 | a2 Editors | Intent Map 等可替代通用节点编辑器 | [intent_map.md](intent_map_module/intent_map.md) |
-| 4 | a3 Capabilities | Software Authoring 等可组合业务无关能力 | [software_authoring.md](intent_map_module/software_authoring.md) |
+| 4 | a3 Extensions | Software Authoring 等节点预制件、模板与可组合能力 | [software_authoring.md](intent_map_module/software_authoring.md) |
 | 5 | Crypto CEX | 验证 Software Authoring 的真实交易所案例 | [crypto_cex.md](intent_map_module/crypto_cex.md) |
 
 ## 系统关系
@@ -26,11 +28,11 @@ loader_0（a0 原生种皮）
         ↓ 加载
 a1 Loader（选择一个主 a2）
         ↓
-一个 a2 Editor（Intent Map 或其他通用编辑器）
-        ↑ 编辑第二层纯意图内树
+一个 a2 Editor（通用节点编辑基础设施）
+        ↑ 注册预制件、模板、规则与命令
 零到多个 a3 Extension（Software Authoring 等）
-        ↓ 管理外树资源并应用于
-用户 a4/a5 PIP
+        ↓ 供用户选择并创建领域节点
+用户 a4/a5 节点地图
 ```
 
 架构层级固定为 `a0` Seed、`a1` Loader、`a2` Editor、`a3` Functional、
@@ -43,9 +45,14 @@ a1 Loader（选择一个主 a2）
 - Loader 0 不认识任何业务，只负责验证和启动 `.pip`；
 - Loader N 负责可演进的加载体验，不承担节点编辑；
 - Intent Map 不认识软件开发、交易所或 Agent；
-- Software Authoring 是一种可选节点应用，不是编辑器内核；
+- Software Authoring 是可选 a3 节点扩展，不是 Intent Map 自带功能；
 - Crypto CEX 是 Software Authoring 的案例，不是通用能力的一部分；
 - 人、Agent、脚本和其他工具都是可选操作者。
+
+对软件生产而言，共识主线仍可完全由人完成：需求内树 → UI / Tables / API →
+后端与前端 → 外围系统 → 发布与推广 → 反馈与收益分配。Software Authoring 负责
+把这条生产与反馈链表达成可视化节点预制件和模板地图；Agent 只是在用户指定的
+树枝和上下文范围内可选参与，不是 Intent Map 或 Software Authoring 的依赖。
 
 系统默认 a0–a3 由本仓库跟踪；用户自定义 a0–a3 和全部 a4/a5 位于用户
 Registry/Workspace。精确版本、一个主 a2 与 a3 扩展集合由
@@ -90,7 +97,7 @@ Intent Map 编辑 .pip
 2. Loader N、Intent Map、能力包和案例均以 `.pip` 独立演进。
 3. Intent Map 保持业务无关。
 4. `.pip` 可以递归加载、编辑、组合和分发。
-5. 软件开发只是 Intent Map 的一个应用方向。
+5. 软件开发只是 a3 Software Authoring 在 Intent Map 上提供的一个应用方向。
 6. Crypto CEX 是实际验证案例，不反向限定通用能力。
 7. 人工、团队、Agent、脚本和外部工具可以自由切换。
 8. Agent 与 MCP 是可选能力，不是系统成立的前提。

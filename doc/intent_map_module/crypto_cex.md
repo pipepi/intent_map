@@ -4,9 +4,12 @@
 
 ## 定位
 
-Crypto CEX 是使用 Software Authoring 构建的中心化数字货币交易所案例，可作为 `crypto_cex.pip` 独立实现和分发。
+Crypto CEX 是使用 Software Authoring 节点预制件和模板地图构建的中心化数字货币
+交易所案例，可作为 `crypto_cex.pip` 独立实现和分发。
 
-它不是 Intent Map 的内置业务，也不是 Software Authoring 的通用模型，而是用于验证这两层能力能否承载真实的大型软件。
+它不是 Intent Map 的内置业务，也不是 Software Authoring 的通用模型，而是用于
+验证“a2 通用编辑基础设施 + a3 软件创作扩展”能否支持人主导或可选 Agent 参与的
+真实大型软件生产与反馈过程。
 
 ## 为什么选择交易所
 

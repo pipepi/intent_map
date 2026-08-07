@@ -4,9 +4,13 @@
 
 ## 定位
 
-Intent Map 是系统默认提供的一个 a2 通用节点编辑器，提供树形地图和图视图。
+Intent Map 是系统默认提供的一个 a2 通用节点编辑器基础设施，提供树形地图和图视图。
 a2 是编辑器类别而不是单一实现：用户可以选择表格、表单、空间画布或其他
 兼容 `pip-editor/1` 的编辑器。一个窗口只运行一个主 a2。
+
+Intent Map 的产品能力止于通用节点编辑。它不会因为安装了 Software Authoring
+就变成软件开发专用编辑器；a3 只是在其公共扩展边界上注册可选择的节点预制件、
+模板、声明式属性和命令。
 
 ## 核心能力
 
@@ -69,7 +73,7 @@ Canvas（高性能节点地图）
 
 - [Loader N](loader_n.md) 负责选择和启动 `intent_map.pip`；
 - Intent Map 提供通用节点编辑，不实现加载器产品体验；
-- [Software Authoring](software_authoring.md) 通过业务节点使用 Intent Map；
+- [Software Authoring](software_authoring.md) 通过 a3 节点预制件和模板地图使用 Intent Map；
 - [Crypto CEX](crypto_cex.md) 使用 Software Authoring 表达真实业务；
 - [Bevy Canvas Runtime](bevy_canvas_runtime.md) 是可选渲染投影，不进入文档语义；
 - MCP 可以让 Agent 操作 Intent Map，但属于可选接入方式。
@@ -115,6 +119,7 @@ Intent Map 自身也可以作为被编辑对象，但必须避免把某个具体
 - 能导入、修改并导出有效 `.pip`；
 - 不加载 Software Authoring 时仍完整可用；
 - 不使用 Agent 时仍完整可用；
+- 不把软件需求、UI、Tables、API、代码、发布或收益分配预制件内置到 a2；
 - 能用自身继续编辑或构建自身。
 
 ---
