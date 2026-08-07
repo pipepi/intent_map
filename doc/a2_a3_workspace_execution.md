@@ -36,7 +36,7 @@ branch:   codex/a2-a3-workspace-refactor
 | 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | complete |
 | 6 | a3 自定义节点和投影工作区 | `checkpoint/a3-projection-workspace-v1` | complete |
 | 7 | Software Authoring | `checkpoint/software-authoring-v1` | complete |
-| 8 | a0–a3 自举闭环 | `checkpoint/pip-self-hosting-v1` | pending |
+| 8 | a0–a3 自举闭环 | `checkpoint/pip-self-hosting-v1` | complete |
 | 9 | 独立用户仓库 Crypto CEX 试验 | `checkpoint/crypto-cex-pilot-v1` | pending |
 
 ## Commit and rollback discipline
@@ -52,9 +52,13 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 8 将用当前稳定的 a2、Software Authoring 和构建命令验证 a0–a3 自举闭环。
-重点是从权威 source PIP 或拆分工作区产生候选、独立构建测试、记录来源 SHA，
-再通过显式 promote 更新系统包；任何阶段都不允许运行中的包原地覆盖自身。
+Phase 8 已完成 a0–a3 自举闭环。系统 source PIP 可以被稳定审计并重建为普通源码；
+编辑后必须 seal 候选源码，隔离构建会产生四个确定性候选和工具链/来源 receipt，
+promote 重新验证完整候选集合后才以非覆盖方式写入系统 Registry。任何阶段都不允许
+运行中的包原地覆盖自身。
+
+Phase 9 将在独立用户仓库试验 Crypto CEX。该仓库属于用户 a4 数据，不进入本仓库
+系统默认包或官方分发；开始前需要确定独立仓库位置和用户 Registry/Workspace 边界。
 
 Phase 7 已实现 Software Authoring v1。三种纯内树 custom-node 表达目标、业务流
 场景和业务约束；Worker 只执行声明命令并提供结构诊断，不判断业务正确性。首个
@@ -101,6 +105,14 @@ a3；官方分发仍只包含系统 a0–a3，不包含用户 a4/a5 或用户工
 Phase 7 检查点已通过 lint、145 项工程测试、8 项 TypeScript PIP 测试、13 项
 Rust Core 测试、Seed/Tauri 编译与完整 macOS 分发。a2 构建保持确定性，系统 a3
 PIP 包含 Worker 与 Software Authoring 源码；默认分发仍没有任何 a4/a5 数据。
+
+Phase 8 已实现源码边界审计、非覆盖重建、编辑后 seal、隔离确定性候选构建和
+receipt-gated promote。候选构建运行重建源码内的脚本，复用 lockfile 对应工具链；
+同一封存源码重复构建得到相同四包 receipt，篡改和未封存漂移都会失败。
+
+Phase 8 检查点已通过 lint、152 项工程测试、8 项 TypeScript PIP 测试、13 项
+Rust Core 测试、Seed CLI、Tauri 编译和完整 macOS `.app` 分发。源码审计为 clean，
+分发清单只包含系统 a0–a3，不包含 a4/a5、用户 Registry 或用户 Workspace。
 
 ---
 

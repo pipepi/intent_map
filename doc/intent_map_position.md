@@ -113,6 +113,7 @@ Intent Map 编辑 .pip
 - [Software Authoring：软件开发复杂度掌控](intent_map_module/software_authoring.md)
 - [Crypto CEX：实际应用案例](intent_map_module/crypto_cex.md)
 - [Runtime Profile：多编辑器、多能力与用户版本](intent_map_module/pip_runtime_profiles.md)
+- [PIP Self-Hosting：a0–a3 可审计升级闭环](intent_map_module/pip_self_hosting.md)
 
 ---
 

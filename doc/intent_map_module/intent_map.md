@@ -89,6 +89,10 @@ intent_map.pip 由 Loader N 打开
 
 Intent Map 自身也可以作为被编辑对象，但必须避免把某个具体应用的业务语义反向固化进通用内核。
 
+系统 a0–a3 的源码 PIP 已形成“审计 → 重建 → 编辑与封存 → 隔离候选构建 →
+显式发布”的非覆盖闭环。完整命令、receipt 和回退边界参见
+[PIP Self-Hosting](pip_self_hosting.md)。
+
 ## 实现映射
 
 该文档应对应以下类型的代码：
@@ -115,4 +119,4 @@ Intent Map 自身也可以作为被编辑对象，但必须避免把某个具体
 
 ---
 
-[← 上一篇：Loader N](loader_n.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [Bevy Canvas Runtime](bevy_canvas_runtime.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Software Authoring →](software_authoring.md)
+[← 上一篇：Loader N](loader_n.md) · [PIP Self-Hosting](pip_self_hosting.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [Bevy Canvas Runtime](bevy_canvas_runtime.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Software Authoring →](software_authoring.md)

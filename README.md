@@ -16,6 +16,8 @@ Intent Map 是一个业务无关的分形节点地图编辑器，以 `.pip` 应�
 [Split Workspace](doc/intent_map_module/split_workspace.md)。
 已实现的 a3 custom-node、可选外树投影和乐观一致性诊断参见：
 [a3 Custom Node 与可选投影工作区](doc/intent_map_module/a3_projection_workspace.md)。
+已实现的 a0–a3 源码审计、重建、候选构建和显式发布闭环参见：
+[PIP Self-Hosting](doc/intent_map_module/pip_self_hosting.md)。
 
 ## Implementation
 
@@ -113,7 +115,11 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run pip:dist`: build the layered Seed, Loader, and application distribution
 - `npm run pip:system`: rebuild the Git-tracked default a0–a3 source packages
 - `npm run pip:install-user -- <file.pip>`: install an immutable version into the user Registry
-- `npm run pip:promote-system -- <file.pip>`: promote a validated maintained a0–a3 candidate
+- `npm run pip:self:audit`: compare every maintained source PIP with its repository boundary
+- `npm run pip:self:extract -- <new-source-directory>`: reconstruct ordinary source files without overwriting
+- `npm run pip:self:seal -- <edited-source-directory>`: seal an edited candidate source tree
+- `npm run pip:self:build -- <source-directory> <new-candidate-directory>`: build isolated a0–a3 candidates and a receipt
+- `npm run pip:promote-system -- <candidate-directory> <package-id> --allow-package-limits`: promote one receipt-verified maintained candidate
 - `npm run pip:workspace:split -- <bundle.pip> <new-directory> --allow-package-limits`: create a non-overwriting split workspace
 - `npm run pip:workspace:bundle -- <workspace-directory> <versioned.pip> --allow-package-limits`: stream a split workspace into one exchange Bundle
 - `npm run pip:workspace:unbundle -- <versioned.pip> <new-directory> --allow-package-limits`: stream a Bundle back into a split workspace

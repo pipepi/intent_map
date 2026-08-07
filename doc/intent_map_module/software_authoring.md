@@ -126,6 +126,10 @@ Software Authoring：怎样用节点掌控软件开发复杂度
 
 [查看多编辑器、多能力和用户版本选择规则 →](pip_runtime_profiles.md)
 
+Software Authoring 的构建、测试与发布边界已用于验证系统自身：a0–a3 source PIP
+能够恢复普通源码，编辑后以 receipt 封存，在隔离目录生成候选，再经显式 promote
+进入下一版本系统 Registry。参见 [PIP Self-Hosting](pip_self_hosting.md)。
+
 ## 实现映射
 
 该文档应对应：
@@ -156,4 +160,4 @@ Software Authoring：怎样用节点掌控软件开发复杂度
 
 ---
 
-[← 上一篇：Intent Map](intent_map.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Crypto CEX →](crypto_cex.md)
+[← 上一篇：Intent Map](intent_map.md) · [PIP Self-Hosting](pip_self_hosting.md) · [a3 Projection Workspace](a3_projection_workspace.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Crypto CEX →](crypto_cex.md)
