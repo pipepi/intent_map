@@ -17,6 +17,7 @@ import {
 } from "../app/runtime/model.ts";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
+import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
@@ -82,13 +83,10 @@ const runtimeAssets = [
   ...collectedRuntimeAssets.filter((asset) => asset.path !== "index.html"),
   { ...systemEditorIndex, path: "index.html" },
 ];
-const sourceAssets = await collectSourceAssets(root, [
-  "app",
-  "package.json",
-  "package-lock.json",
-  "next.config.ts",
-  "tsconfig.json",
-]);
+const sourceAssets = await collectSourceAssets(
+  root,
+  systemSourceEntriesFor(release.packageId),
+);
 const assets = [...runtimeAssets, ...sourceAssets];
 const tree = treePath
   ? JSON.parse(await readFile(path.resolve(root, treePath), "utf8"))

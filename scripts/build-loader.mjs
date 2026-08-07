@@ -11,6 +11,7 @@ import {
 } from "./pip-release.mjs";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
+import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
@@ -27,7 +28,10 @@ const runtimeAssets = await Promise.all(files.map(async ([assetPath, mime]) => (
   mime,
   bytes: new Uint8Array(await readFile(path.join(source, assetPath))),
 })));
-const sourceAssets = await collectSourceAssets(projectRoot, ["loader-n"]);
+const sourceAssets = await collectSourceAssets(
+  projectRoot,
+  systemSourceEntriesFor(release.packageId),
+);
 const assets = [...runtimeAssets, ...sourceAssets];
 const root = softwareProjectRoot({
   id: "loader_root",

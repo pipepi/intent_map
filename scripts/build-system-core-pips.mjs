@@ -9,6 +9,7 @@ import { createApplicationDocument, serializeIntentDocument } from "../app/runti
 import { createdAtFor, projectRoot, readReleaseConfig, systemPackagePath } from "./pip-release.mjs";
 import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
+import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
@@ -44,18 +45,10 @@ const writePackage = async (release, manifest, root, assets) => {
 };
 
 const release = await readReleaseConfig();
-const seedAssets = await collectSourceAssets(projectRoot, [
-  "pip-core/Cargo.toml",
-  "pip-core/src",
-  "pip-seed/Cargo.toml",
-  "pip-seed/Cargo.lock",
-  "pip-seed/src",
-  "pip-seed-tauri/Cargo.toml",
-  "pip-seed-tauri/Cargo.lock",
-  "pip-seed-tauri/build.rs",
-  "pip-seed-tauri/src",
-  "pip-seed-tauri/tauri.conf.json",
-]);
+const seedAssets = await collectSourceAssets(
+  projectRoot,
+  systemSourceEntriesFor(release.seed.packageId),
+);
 await writePackage(
   release.seed,
   {
@@ -78,7 +71,10 @@ await writePackage(
 const capabilityBytes = new Uint8Array(await readFile(
   new URL("../a3/extensions/software-authoring/capability.mjs", import.meta.url),
 ));
-const a3SourceAssets = await collectSourceAssets(projectRoot, ["a3"]);
+const a3SourceAssets = await collectSourceAssets(
+  projectRoot,
+  systemSourceEntriesFor(release.softwareAuthoring.packageId),
+);
 await writePackage(
   release.softwareAuthoring,
   {
