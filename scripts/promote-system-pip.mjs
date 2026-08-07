@@ -28,7 +28,7 @@ if (
   !Array.isArray(receipt.artifacts) ||
   receipt.artifacts.length !== 4 ||
   !/^[a-f0-9]{64}$/.test(receipt.sourceReceiptSha256 ?? "") ||
-  !/^[a-f0-9]{64}$/.test(receipt.reconstructedSourceTreeSha256 ?? "")
+  !/^[a-f0-9]{64}$/.test(receipt.sourceTreeSha256 ?? "")
 ) {
   throw new Error("Invalid self-hosting build receipt");
 }

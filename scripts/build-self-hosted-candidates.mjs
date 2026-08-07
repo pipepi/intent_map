@@ -45,17 +45,30 @@ const assertMissing = async (target, label) => {
   throw new Error(`${label} already exists: ${target}`);
 };
 
-const sourceReceiptBytes = await readFile(
-  path.join(source, ".pip", "self-hosting-source-receipt.json"),
-);
+const receiptDirectory = path.join(source, ".pip");
+let sourceReceiptBytes;
+try {
+  sourceReceiptBytes = await readFile(
+    path.join(receiptDirectory, "self-hosting-candidate-source-receipt.json"),
+  );
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+  sourceReceiptBytes = await readFile(path.join(receiptDirectory, "self-hosting-source-receipt.json"));
+}
 const sourceReceipt = JSON.parse(sourceReceiptBytes);
-if (sourceReceipt.kind !== "pip-self-hosting-source/1") {
+if (![
+  "pip-self-hosting-source/1",
+  "pip-self-hosting-candidate-source/1",
+].includes(sourceReceipt.kind)) {
   throw new Error("Unsupported self-hosting source receipt");
 }
 const sourceAssets = await collectReconstructedSources(source);
+const expectedSourceTreeSha256 = sourceReceipt.kind === "pip-self-hosting-source/1"
+  ? sourceReceipt.reconstructedSourceTreeSha256
+  : sourceReceipt.sourceTreeSha256;
 if (
   sourceAssets.length !== sourceReceipt.sourceFileCount ||
-  sourceTreeSha256(sourceAssets) !== sourceReceipt.reconstructedSourceTreeSha256
+  sourceTreeSha256(sourceAssets) !== expectedSourceTreeSha256
 ) {
   throw new Error("Reconstructed source no longer matches its receipt");
 }
@@ -126,7 +139,7 @@ try {
     schemaVersion: 1,
     kind: "pip-self-hosting-build/1",
     sourceReceiptSha256: createHash("sha256").update(sourceReceiptBytes).digest("hex"),
-    reconstructedSourceTreeSha256: sourceReceipt.reconstructedSourceTreeSha256,
+    sourceTreeSha256: expectedSourceTreeSha256,
     toolchain: {
       node: process.version,
       platform: process.platform,

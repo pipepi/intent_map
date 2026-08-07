@@ -27,7 +27,7 @@ const makeCandidates = async (candidateRoot) => {
     schemaVersion: 1,
     kind: "pip-self-hosting-build/1",
     sourceReceiptSha256: "1".repeat(64),
-    reconstructedSourceTreeSha256: "2".repeat(64),
+    sourceTreeSha256: "2".repeat(64),
     toolchain: {},
     artifacts,
   }));

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -21,11 +21,18 @@ test("self-hosted source builds isolated a0 through a3 candidates with a receipt
   const repeatedCandidates = path.join(temporary, "candidates-repeated");
   const extracted = run("extract-system-sources.mjs", source);
   assert.equal(extracted.status, 0, extracted.stderr);
+  await appendFile(path.join(source, "a3", "README.md"), "\nCandidate self-hosting edit.\n");
+  const unsealed = run("build-self-hosted-candidates.mjs", source, candidates);
+  assert.notEqual(unsealed.status, 0);
+  assert.match(unsealed.stderr, /no longer matches its receipt/);
+  const sealed = run("seal-self-hosting-source.mjs", source);
+  assert.equal(sealed.status, 0, sealed.stderr);
   const built = run("build-self-hosted-candidates.mjs", source, candidates);
   assert.equal(built.status, 0, built.stderr);
   const receiptText = await readFile(path.join(candidates, "self-hosting-build-receipt.json"), "utf8");
   const receipt = JSON.parse(receiptText);
   assert.equal(receipt.kind, "pip-self-hosting-build/1");
+  assert.match(receipt.sourceTreeSha256, /^[a-f0-9]{64}$/);
   assert.equal(receipt.artifacts.length, 4);
   assert.deepEqual(
     receipt.artifacts.map(({ file }) => file.match(/packages\/system\/(a[0-3])\//)?.[1]),

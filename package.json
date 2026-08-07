@@ -31,6 +31,7 @@
     "pip:software:spec": "node scripts/project-software-specification.mjs",
     "pip:self:audit": "node scripts/audit-system-sources.mjs",
     "pip:self:extract": "node scripts/extract-system-sources.mjs",
+    "pip:self:seal": "node scripts/seal-self-hosting-source.mjs",
     "pip:self:build": "node scripts/build-self-hosted-candidates.mjs",
     "db:generate": "drizzle-kit generate"
   },
