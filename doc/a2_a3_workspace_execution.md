@@ -34,7 +34,7 @@ branch:   codex/a2-a3-workspace-refactor
 | 3 | 可配置 PIP 容量策略 | `checkpoint/configurable-pip-limits-v1` | complete |
 | 4 | `intent.pip + resources/` 工作区 | `checkpoint/pip-split-workspace-v1` | complete |
 | 5 | 默认 Bundle 与流式读写 | `checkpoint/pip-bundle-v1` | complete |
-| 6 | a3 自定义节点和投影工作区 | `checkpoint/a3-projection-workspace-v1` | pending |
+| 6 | a3 自定义节点和投影工作区 | `checkpoint/a3-projection-workspace-v1` | complete |
 | 7 | Software Authoring | `checkpoint/software-authoring-v1` | pending |
 | 8 | a0–a3 自举闭环 | `checkpoint/pip-self-hosting-v1` | pending |
 | 9 | 独立用户仓库 Crypto CEX 试验 | `checkpoint/crypto-cex-pilot-v1` | pending |
@@ -52,9 +52,14 @@ Registry、用户 Workspace 和大型测试资源不进入本仓库。
 
 ## Current phase
 
-Phase 6 将建立 a3 自定义节点和投影工作区。a3 只通过 a2 的不透明扩展信封和公共
-命令边界关联第二层内树；UI、DB、API、代码等外树资源继续留在拆分工作区，a2
-不解释这些内容。该阶段先固化扩展注册、投影身份和补丁协议，再增加工作区界面。
+Phase 7 将在已稳定的 custom-node、受控补丁和可选投影工作区之上实现 Software
+Authoring。首批能力聚焦软件项目描述、诊断和小范围资源投影，不把 UI、DB、API
+或代码语义下沉到 a2；能力输出继续经过 a3 Host 校验后才写入工作区。
+
+Phase 6 已建立 a3 custom-node v1、显式类型/能力 Registry、带 extension SHA 的
+原子意图补丁、投影来源身份和乐观一致性诊断。投影工作区惰性读取外树资源，支持
+显式附加、手工修正、非破坏 detach 和需要确认的 reset；只读 CLI 可输出稳定
+JSON，供终端、未来 UI 和 MCP 共用。
 
 Phase 5 已完成可逆 Bundle。Node/CLI 和 Web File System Access 路径都逐块读取、
 写入并计算 SHA-256；打包结果与标准 PIP 编码逐字节一致，解包恢复小型
@@ -83,6 +88,10 @@ Phase 4 检查点已通过相同的 lint、100 项工程测试、PIP/Rust 测试
 Phase 5 检查点已通过 lint、110 项工程测试、8 项 TypeScript PIP 测试、13 项
 Rust Core 测试、Seed/Tauri 编译与完整 macOS 分发。系统 a2 与 a3 权威 PIP 已
 刷新，分发清单仍只有系统 a0–a3；大型测试资源只在临时目录生成，不进入 Git。
+
+Phase 6 检查点已通过 lint、129 项工程测试、8 项 TypeScript PIP 测试、13 项
+Rust Core 测试、Seed/Tauri 编译与完整 macOS 分发。a2 编辑器仍不导入或启动
+a3；官方分发仍只包含系统 a0–a3，不包含用户 a4/a5 或用户工作区。
 
 ---
 
