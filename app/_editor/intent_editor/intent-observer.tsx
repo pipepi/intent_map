@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { EventCanvas } from "./event-canvas";
-import { formatHour } from "./geometry";
+import { formatHour, type ManualPositions } from "./geometry";
 import {
   kindNames,
   relationNames,
@@ -19,6 +19,7 @@ export function IntentObserver() {
   const [zAxisLength, setZAxisLength] = useState(200);
   const [xZoom, setXZoom] = useState(1);
   const [xPan, setXPan] = useState(0);
+  const [manualPositions, setManualPositions] = useState<ManualPositions>({});
   const [selectedId, setSelectedId] = useState<NodeId>("deliver-breakfast");
   const selected = todayScene.nodes[selectedId];
   const selectedIsEvent = selected.tag.kind === "event";
@@ -65,7 +66,7 @@ export function IntentObserver() {
               <div className={styles.stageControls}>
                 <label className={styles.rotationControl}>
                   <span>z 绕 y</span>
-                  <input type="range" min="90" max="180" step="1" value={zRotation} aria-label="z轴绕y轴旋转角度" onInput={(event) => setZRotation(Number(event.currentTarget.value))} />
+                  <input type="range" min="0" max="180" step="1" value={zRotation} aria-label="z轴绕y轴旋转角度" onInput={(event) => setZRotation(Number(event.currentTarget.value))} />
                   <output>{zRotation}°</output>
                 </label>
                 <label className={styles.rotationControl}>
@@ -103,6 +104,8 @@ export function IntentObserver() {
             zAxisLength={zAxisLength}
             xZoom={xZoom}
             xPan={xPan}
+            manualPositions={manualPositions}
+            onMoveNode={(id, position) => setManualPositions((current) => ({ ...current, [id]: position }))}
             onSelect={setSelectedId}
           />
           <div className={styles.legend}>
@@ -122,7 +125,11 @@ export function IntentObserver() {
             <strong>{selected.tag.kind === "event"
               ? `${formatHour(selected.tag.time!.start)} — ${formatHour(selected.tag.time?.end ?? selected.tag.time!.start)}`
               : kindNames[selected.tag.kind]}</strong>
-            <small>{selectedIsEvent ? "事件位置由以下节点的几何中心实时计算" : "节点位于对应类型的 y 轴分段内"}</small>
+            <small>{selectedIsEvent
+              ? "事件位置由以下节点的几何中心实时计算"
+              : manualPositions[selectedId]
+                ? "手动 yz 坐标，不再参与自动位置计算"
+                : "自动位置；在 z 绕 y = 0° 时可拖动"}</small>
           </div>
 
           <div className={styles.relationList}>

@@ -2,13 +2,14 @@ import {
   eventCenter,
   entitySurfacePoint,
   formatHour,
-  pointsAttribute,
   project,
-  surfaceOutline,
   surfacePoint,
   timeX,
+  type ManualPositions,
+  type PointYZ,
 } from "./geometry";
 import { kindColors, type NodeId, type SceneNode, type SceneState, type ViewMode } from "./model";
+import { useNodeDrag } from "./node-drag";
 import { SurfaceAxes } from "./surface-axes";
 import styles from "./intent-observer.module.css";
 
@@ -21,10 +22,13 @@ type EventCanvasProps = {
   zAxisLength: number;
   xZoom: number;
   xPan: number;
+  manualPositions: ManualPositions;
+  onMoveNode: (id: NodeId, position: PointYZ) => void;
   onSelect: (id: NodeId) => void;
 };
 
 const defaultEventColor = "#7c9cff";
+const fadedRelationLength = 32;
 
 function relatedNodes(event: SceneNode, state: SceneState): SceneNode[] {
   return event.relations.flatMap((relation) => {
@@ -42,6 +46,8 @@ export function EventCanvas({
   zAxisLength,
   xZoom,
   xPan,
+  manualPositions,
+  onMoveNode,
   onSelect,
 }: EventCanvasProps) {
   const nodes = Object.values(state.nodes);
@@ -53,6 +59,8 @@ export function EventCanvas({
   const surfaceCenter = project({ x: 0, y: 0, z: 0 }, mode, "surface", angle, yAxisLength, zAxisLength);
   const surfaceRight = project({ x: 0, y: 0, z: 1 }, mode, "surface", angle, yAxisLength, zAxisLength);
   const timelineBoundary = Math.max(mode === "quadrant" ? 260 : 270, surfaceRight.x + 36);
+  const editable = mode === "quadrant" && zRotation === 0;
+  const drag = useNodeDrag({ enabled: editable, state, yAxisLength, zAxisLength, onMove: onMoveNode });
 
   return (
     <svg
@@ -60,6 +68,9 @@ export function EventCanvas({
       viewBox="0 0 960 540"
       role="img"
       aria-label="小明今日购买事件的时空观察图"
+      onPointerMove={drag.moveDrag}
+      onPointerUp={drag.endDrag}
+      onPointerCancel={drag.endDrag}
     >
       <defs>
         <linearGradient id="time-axis" x1="0" x2="1">
@@ -85,13 +96,6 @@ export function EventCanvas({
       </defs>
 
       <g className={styles.structure} clipPath="url(#timeline-viewport)">
-        {[0, 0.25, 0.5, 0.75, 1].map((x) => (
-          <polyline
-            key={x}
-            points={pointsAttribute(surfaceOutline(mode, x, "timeline", angle, yAxisLength, zAxisLength, xZoom, xPan))}
-            className={styles.surfaceGuide}
-          />
-        ))}
         {[0, 0.25, 0.5, 0.75].map((sector) => {
           const position = { sector, depth: mode === "tube" ? 1 : sector === 0 ? 0 : 1 };
           const yz = surfacePoint(position, mode);
@@ -121,7 +125,7 @@ export function EventCanvas({
       <g className={styles.relations}>
         {entities.flatMap((node) => {
           if (!node.tag.position) return [];
-          const sourceYZ = entitySurfacePoint(node, state, mode);
+          const sourceYZ = entitySurfacePoint(node, state, mode, manualPositions);
           const source = project({ x: 0, ...sourceYZ }, mode, "surface", angle, yAxisLength, zAxisLength);
           return node.relations.flatMap((relation) => {
             const targetNode = state.nodes[relation.targetId];
@@ -130,7 +134,7 @@ export function EventCanvas({
               && selectedTargets.has(node.tag.id)
               && selectedTargets.has(relation.targetId);
             if (!targetNode?.tag.position || (!directlySelected && !cascadeSelected)) return [];
-            const targetYZ = entitySurfacePoint(targetNode, state, mode);
+            const targetYZ = entitySurfacePoint(targetNode, state, mode, manualPositions);
             const target = project({ x: 0, ...targetYZ }, mode, "surface", angle, yAxisLength, zAxisLength);
             return [
               <line
@@ -146,7 +150,7 @@ export function EventCanvas({
           });
         })}
         {events.flatMap((event) => {
-          const center = eventCenter(event, state, mode);
+          const center = eventCenter(event, state, mode, manualPositions);
           const time = event.tag.time;
           if (!center || !time) return [];
           const eventPoint = project({ x: timeX(time.start), ...center }, mode, "timeline", angle, yAxisLength, zAxisLength, xZoom, xPan);
@@ -156,19 +160,37 @@ export function EventCanvas({
           if (!eventVisible) return [];
           return relatedNodes(event, state).flatMap((node) => {
             if (!node.tag.position) return [];
-            const yz = entitySurfacePoint(node, state, mode);
+            const yz = entitySurfacePoint(node, state, mode, manualPositions);
             const target = project({ x: 0, ...yz }, mode, "surface", angle, yAxisLength, zAxisLength);
             const active = event.tag.id === selectedId || node.tag.id === selectedId;
+            const gradientId = `event-relation-${event.tag.id}-${node.tag.id}`;
+            const distance = Math.hypot(target.x - eventPoint.x, target.y - eventPoint.y);
+            const visibleRatio = active ? 1 : Math.min(1, fadedRelationLength / distance);
+            const lineEnd = {
+              x: eventPoint.x + (target.x - eventPoint.x) * visibleRatio,
+              y: eventPoint.y + (target.y - eventPoint.y) * visibleRatio,
+            };
             return [
-              <line
-                key={`${event.tag.id}-${node.tag.id}`}
-                x1={eventPoint.x}
-                y1={eventPoint.y}
-                x2={target.x}
-                y2={target.y}
-                className={active ? styles.relationActive : undefined}
-                data-event-relation={`${event.tag.id}-${node.tag.id}`}
-              />,
+              <g key={`${event.tag.id}-${node.tag.id}`}>
+                {!active && (
+                  <defs>
+                    <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={eventPoint.x} y1={eventPoint.y} x2={lineEnd.x} y2={lineEnd.y}>
+                      <stop stopColor="#7186cb" stopOpacity="0.7" />
+                      <stop offset="0.55" stopColor="#7186cb" stopOpacity="0.3" />
+                      <stop offset="1" stopColor="#7186cb" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                )}
+                <line
+                  x1={eventPoint.x}
+                  y1={eventPoint.y}
+                  x2={lineEnd.x}
+                  y2={lineEnd.y}
+                  className={active ? styles.relationActive : styles.relationFaded}
+                  style={active ? undefined : { stroke: `url(#${gradientId})` }}
+                  data-event-relation={`${event.tag.id}-${node.tag.id}`}
+                />
+              </g>,
             ];
           });
         })}
@@ -177,16 +199,22 @@ export function EventCanvas({
       <g>
         {entities.map((node) => {
           if (!node.tag.position) return null;
-          const yz = entitySurfacePoint(node, state, mode);
+          const yz = entitySurfacePoint(node, state, mode, manualPositions);
           const point = project({ x: 0, ...yz }, mode, "surface", angle, yAxisLength, zAxisLength);
           const directlySelected = selectedId === node.tag.id;
           const eventRelated = selected?.tag.kind === "event"
             && selected.relations.some((relation) => relation.targetId === node.tag.id);
+          const entityRelated = selected?.tag.kind !== "event"
+            && (selectedTargets.has(node.tag.id)
+              || node.relations.some((relation) => relation.targetId === selectedId));
+          const related = eventRelated || entityRelated;
+          const showLabel = directlySelected || related;
           const labelDirectionX = point.x >= surfaceCenter.x ? 1 : -1;
           return (
             <g
               key={node.tag.id}
-              className={styles.entity}
+              className={`${styles.entity} ${editable ? styles.entityEditable : ""} ${drag.draggingId === node.tag.id ? styles.entityDragging : ""}`}
+              onPointerDown={(event) => drag.beginDrag(node.tag.id, event)}
               onClick={() => onSelect(node.tag.id)}
               onKeyDown={(keyEvent) => {
                 if (keyEvent.key === "Enter" || keyEvent.key === " ") onSelect(node.tag.id);
@@ -198,16 +226,18 @@ export function EventCanvas({
               <circle
                 cx={point.x}
                 cy={point.y}
-                r={directlySelected || eventRelated ? 7 : 5}
-                className={directlySelected ? styles.entitySelected : eventRelated ? styles.entityRelated : undefined}
+                r={directlySelected || related ? 7 : 5}
+                className={directlySelected ? styles.entitySelected : related ? styles.entityRelated : undefined}
               />
-              <text
-                x={point.x + labelDirectionX * 11}
-                y={point.y + 4}
-                textAnchor={labelDirectionX > 0 ? "start" : "end"}
-              >
-                {node.tag.name}
-              </text>
+              {showLabel && (
+                <text
+                  x={point.x + labelDirectionX * 11}
+                  y={point.y + 4}
+                  textAnchor={labelDirectionX > 0 ? "start" : "end"}
+                >
+                  {node.tag.name}
+                </text>
+              )}
             </g>
           );
         })}
@@ -215,12 +245,15 @@ export function EventCanvas({
 
       <g clipPath="url(#timeline-viewport)">
         {events.map((event) => {
-          const center = eventCenter(event, state, mode);
+          const center = eventCenter(event, state, mode, manualPositions);
           const time = event.tag.time;
           if (!center || !time) return null;
           const start = project({ x: timeX(time.start), ...center }, mode, "timeline", angle, yAxisLength, zAxisLength, xZoom, xPan);
           const end = project({ x: timeX(time.end ?? time.start), ...center }, mode, "timeline", angle, yAxisLength, zAxisLength, xZoom, xPan);
           const active = event.tag.id === selectedId;
+          const relatedToSelectedEntity = selected?.tag.kind !== "event"
+            && event.relations.some((relation) => relation.targetId === selectedId);
+          const showDetails = active || relatedToSelectedEntity;
           const hasVirtualRelation = event.relations.some((relation) => state.nodes[relation.targetId]?.tag.kind === "virtual");
           const color = hasVirtualRelation ? kindColors.virtual : defaultEventColor;
           const startRadius = 5 + Math.min(5, event.relations.length);
@@ -236,17 +269,22 @@ export function EventCanvas({
               role="button"
               tabIndex={0}
               data-event-id={event.tag.id}
+              aria-label={`${event.tag.name} ${formatHour(time.start)} → ${formatHour(time.end ?? time.start)}`}
             >
               <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} className={styles.eventTrack} />
               <circle cx={start.x} cy={start.y} r={startRadius} style={{ fill: color }} data-event-point="start" />
               <circle cx={end.x} cy={end.y} r={endRadius} style={{ fill: color }} data-event-point="end" />
               <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} className={styles.eventConnector} style={{ stroke: color }} />
-              <text x={(start.x + end.x) / 2} y={start.y - 17} textAnchor="middle">
-                {event.tag.name}
-              </text>
-              <text x={(start.x + end.x) / 2} y={start.y + 24} textAnchor="middle">
-                {formatHour(time.start)} → {formatHour(time.end ?? time.start)}
-              </text>
+              {showDetails && (
+                <>
+                  <text x={(start.x + end.x) / 2} y={start.y - 17} textAnchor="middle">
+                    {event.tag.name}
+                  </text>
+                  <text x={(start.x + end.x) / 2} y={start.y + 24} textAnchor="middle">
+                    {formatHour(time.start)} → {formatHour(time.end ?? time.start)}
+                  </text>
+                </>
+              )}
             </g>
           );
         })}

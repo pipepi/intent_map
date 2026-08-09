@@ -142,7 +142,6 @@
 
 .structure { fill: none; stroke: #293149; stroke-width: 1; }
 .structure line { stroke-dasharray: 4 8; opacity: 0.65; }
-.surfaceGuide { stroke: #252d43; }
 
 .surfaceAxes circle { fill: #dfe6ff; }
 .surfaceAxes line { stroke-width: 1.5; }
@@ -184,9 +183,12 @@
 }
 
 .relations .relationActive { stroke: #7186cb; opacity: 0.88; }
+.relations .relationFaded { opacity: 1; }
 .relations .entityRelation { stroke: #4de1c1; stroke-dasharray: 2 4; opacity: 0.72; }
 
 .entity { cursor: pointer; outline: none; }
+.entityEditable { cursor: grab; }
+.entityDragging { cursor: grabbing; }
 .entity circle {
   fill: #0c101c;
   stroke: #8795bd;

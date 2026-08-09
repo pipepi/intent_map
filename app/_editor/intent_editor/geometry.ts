@@ -9,6 +9,7 @@ export type PointYZ = { y: number; z: number };
 export type Point3 = PointYZ & { x: number };
 export type ScreenPoint = { x: number; y: number };
 export type ProjectionSpace = "surface" | "timeline";
+export type ManualPositions = Partial<Record<string, PointYZ>>;
 
 export const TIME_START = 7.5;
 export const TIME_END = 20;
@@ -45,7 +46,10 @@ export function entitySurfacePoint(
   node: SceneNode,
   state: SceneState,
   mode: ViewMode,
+  manualPositions?: ManualPositions,
 ): PointYZ {
+  const manual = manualPositions?.[node.tag.id];
+  if (manual) return manual;
   const position = node.tag.position!;
   if (mode === "tube") return surfacePoint(position, mode);
 
@@ -70,16 +74,26 @@ export function entitySurfacePoint(
   };
 }
 
+export function entityKindRange(node: SceneNode, state: SceneState): { start: number; end: number } {
+  const entities = Object.values(state.nodes).filter((entity) => entity.tag.kind !== "event");
+  const sameKind = entities.filter((entity) => entity.tag.kind === node.tag.kind);
+  const offset = entityKindOrder
+    .slice(0, entityKindOrder.indexOf(node.tag.kind as (typeof entityKindOrder)[number]))
+    .reduce((sum, kind) => sum + entities.filter((entity) => entity.tag.kind === kind).length, 0);
+  return { start: offset / entities.length, end: (offset + sameKind.length) / entities.length };
+}
+
 export function eventCenter(
   event: SceneNode,
   state: SceneState,
   mode: ViewMode,
+  manualPositions?: ManualPositions,
 ): PointYZ | undefined {
   const points = event.relations.flatMap((relation) => {
     const node = state.nodes[relation.targetId];
     const position = node?.tag.position;
     if (!node || node.tag.kind === "event" || !position) return [];
-    return [entitySurfacePoint(node, state, mode)];
+    return [entitySurfacePoint(node, state, mode, manualPositions)];
   });
 
   if (points.length === 0) return undefined;
@@ -110,8 +124,8 @@ export function project(
   const yScale = mode === "tube" ? 104 : yAxisLength;
   const timeScale = space === "timeline" ? 500 : 0;
   const rotation = (zRotation * Math.PI) / 180;
-  const zHorizontal = Math.sin(rotation);
-  const zDepth = Math.cos(rotation);
+  const zHorizontal = zRotation === 0 ? 1 : Math.sin(rotation);
+  const zDepth = zRotation === 0 ? 0 : Math.cos(rotation);
   const viewedX = (point.x - 0.5) * xZoom + 0.5;
   const round = (value: number) => Math.round(value * 100) / 100;
 
