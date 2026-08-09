@@ -28,7 +28,7 @@ export function useNodeDrag({ enabled, state, yAxisLength, zAxisLength, onMove }
     const bounds = event.currentTarget.getBoundingClientRect();
     const screenX = ((event.clientX - bounds.left) / bounds.width) * 960;
     const screenY = ((event.clientY - bounds.top) / bounds.height) * 540;
-    const origin = project({ x: 0, y: 0, z: 0 }, "quadrant", "surface", 0, yAxisLength, zAxisLength);
+    const origin = project({ x: 0, y: 0, z: 0 }, "quadrant", "surface", 90, yAxisLength, zAxisLength);
     const range = entityKindRange(node, state);
     const margin = (range.end - range.start) * 0.04;
     onMove(draggingId, {

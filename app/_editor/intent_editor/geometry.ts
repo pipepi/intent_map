@@ -124,8 +124,8 @@ export function project(
   const yScale = mode === "tube" ? 104 : yAxisLength;
   const timeScale = space === "timeline" ? 500 : 0;
   const rotation = (zRotation * Math.PI) / 180;
-  const zHorizontal = zRotation === 0 ? 1 : Math.sin(rotation);
-  const zDepth = zRotation === 0 ? 0 : Math.cos(rotation);
+  const zHorizontal = Math.sin(rotation);
+  const zDepth = Math.cos(rotation);
   const viewedX = (point.x - 0.5) * xZoom + 0.5;
   const round = (value: number) => Math.round(value * 100) / 100;
 

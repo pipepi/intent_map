@@ -66,7 +66,7 @@ export function IntentObserver() {
               <div className={styles.stageControls}>
                 <label className={styles.rotationControl}>
                   <span>z 绕 y</span>
-                  <input type="range" min="0" max="180" step="1" value={zRotation} aria-label="z轴绕y轴旋转角度" onInput={(event) => setZRotation(Number(event.currentTarget.value))} />
+                  <input type="range" min="90" max="180" step="1" value={zRotation} aria-label="z轴绕y轴旋转角度" onInput={(event) => setZRotation(Number(event.currentTarget.value))} />
                   <output>{zRotation}°</output>
                 </label>
                 <label className={styles.rotationControl}>
@@ -129,7 +129,7 @@ export function IntentObserver() {
               ? "事件位置由以下节点的几何中心实时计算"
               : manualPositions[selectedId]
                 ? "手动 yz 坐标，不再参与自动位置计算"
-                : "自动位置；在 z 绕 y = 0° 时可拖动"}</small>
+                : "自动位置；在 z 绕 y = 90° 时可拖动"}</small>
           </div>
 
           <div className={styles.relationList}>

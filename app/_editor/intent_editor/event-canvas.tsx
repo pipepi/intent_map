@@ -59,7 +59,7 @@ export function EventCanvas({
   const surfaceCenter = project({ x: 0, y: 0, z: 0 }, mode, "surface", angle, yAxisLength, zAxisLength);
   const surfaceRight = project({ x: 0, y: 0, z: 1 }, mode, "surface", angle, yAxisLength, zAxisLength);
   const timelineBoundary = Math.max(mode === "quadrant" ? 260 : 270, surfaceRight.x + 36);
-  const editable = mode === "quadrant" && zRotation === 0;
+  const editable = mode === "quadrant" && zRotation === 90;
   const drag = useNodeDrag({ enabled: editable, state, yAxisLength, zAxisLength, onMove: onMoveNode });
 
   return (
