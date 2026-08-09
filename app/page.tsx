@@ -1,8 +1,5 @@
-"use client";
-
-import { IntentEditor } from "./editor/intent-editor";
-// import { IntentEditor } from "./_editor/intent-editor";
+import { IntentObserver } from "./_editor/intent_editor";
 
 export default function HomePage() {
-  return <IntentEditor />;
+  return <IntentObserver />;
 }
