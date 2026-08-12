@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "name": "Media Plugin",
+  "nodeTypes": [
+    {
+      "type": "image",
+      "displayName": "图片节点",
+      "defaultName": "image-intent",
+      "fields": [
+        { "key": "imageUrl", "label": "图片 URL", "control": "input", "defaultValue": "" }
+      ],
+      "ui": {
+        "kind": "card",
+        "elements": [
+          { "kind": "image", "sourceField": "imageUrl" }
+        ]
+      }
+    },
+    {
+      "type": "image-description",
+      "displayName": "图片与简介",
+      "defaultName": "image-intent",
+      "fields": [
+        { "key": "imageUrl", "label": "图片 URL", "control": "input", "defaultValue": "" },
+        { "key": "description", "label": "简介", "control": "textarea", "defaultValue": "" }
+      ],
+      "ui": {
+        "kind": "card",
+        "elements": [
+          { "kind": "image", "sourceField": "imageUrl" },
+          { "kind": "text", "sourceField": "description" }
+        ]
+      }
+    }
+  ]
+}
