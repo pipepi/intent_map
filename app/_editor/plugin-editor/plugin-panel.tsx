@@ -4,13 +4,16 @@ import { useRef } from "react";
 import type { IntentPlugin } from "./types";
 import styles from "./editor.module.css";
 
-type Props = { plugins: IntentPlugin[]; message: string; onInstall: (file: File) => void; onUninstall: (name: string) => void };
+type Props = { plugins: IntentPlugin[]; message: string; onInstall: (file: File) => void; onImportCollection: (file: File) => void; onUninstall: (name: string) => void };
 
-export function PluginPanel({ plugins, message, onInstall, onUninstall }: Props) {
+export function PluginPanel({ plugins, message, onInstall, onImportCollection, onUninstall }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const collectionRef = useRef<HTMLInputElement>(null);
   return <aside className={styles.panel}>
     <div className={styles.panelTitle}><div><span>PLUGIN MANAGER</span><h2>插件管理</h2></div><button className={styles.primary} onClick={() => inputRef.current?.click()}>安装插件</button></div>
     <input ref={inputRef} type="file" accept="application/json,.json,.zip" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onInstall(file); event.currentTarget.value = ""; }} />
+    <input ref={collectionRef} type="file" accept=".zip" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onImportCollection(file); event.currentTarget.value = ""; }} />
+    <button onClick={() => collectionRef.current?.click()}>导入节点集合</button>
     <p className={styles.message}>{message}</p>
     <div className={styles.sampleLinks}><span>样例：</span><a href="/sample-plugins/text-plugin.json" download>文本插件</a><a href="/sample-plugins/media-plugin.json" download>图文插件</a></div>
     <div className={styles.pluginList}>

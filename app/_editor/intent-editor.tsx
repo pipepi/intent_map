@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ElementPluginRegistry, browserElementRuntime } from "./plugin-editor/element-runtime";
 import { decodeElementPackage } from "./plugin-editor/element-package";
+import { decodeCollectionPackage, encodeCollectionPackage, selectCollection } from "./plugin-editor/collection-package";
 import { parseNodeTypePackage, validateNodeTypeDependencies } from "./plugin-editor/node-type-registry";
 import type { ElementPluginPackage } from "./plugin-editor/package-types";
 import { NodeCanvas } from "./plugin-editor/node-canvas";
@@ -71,11 +72,36 @@ export function IntentEditor() {
     setMessage(`已导出 ${entries.length} 种节点类型`);
   }
 
+  function collection(includeAll: boolean) {
+    const base = { format: "intent-node-collection" as const, schemaVersion: 1 as const, id: crypto.randomUUID(), name: includeAll ? "全部节点" : "选中节点", dependencies: plugins.map(({ id, version }) => ({ id, version })), nodes, edges: [] };
+    const output = includeAll ? base : selectCollection(base, selectedIds);
+    const usedTypes = new Set(output.nodes.map((node) => node.type));
+    const typePackages = plugins.filter((plugin) => plugin.nodeTypes.some((type) => usedTypes.has(type.type)));
+    const requiredElements = new Set(typePackages.flatMap((plugin) => plugin.dependencies.map((dep) => dep.id)));
+    const archive = encodeCollectionPackage({ collection: { ...output, dependencies: typePackages.map(({ id, version }) => ({ id, version })) }, nodeTypes: typePackages, elementPlugins: elementPlugins.filter((plugin) => requiredElements.has(plugin.manifest.id)) });
+    const anchor = document.createElement("a"); anchor.href = URL.createObjectURL(new Blob([archive as Uint8Array<ArrayBuffer>], { type: "application/zip" })); anchor.download = `${includeAll ? "all" : "selection"}.intent-collection.zip`; anchor.click(); URL.revokeObjectURL(anchor.href);
+  }
+
+  async function importCollection(file: File) {
+    try {
+      const portable = await decodeCollectionPackage(new Uint8Array(await file.arrayBuffer()));
+      const allElements = [...elementPlugins, ...portable.elementPlugins];
+      portable.nodeTypes.forEach((plugin) => validateNodeTypeDependencies(plugin, allElements));
+      for (const plugin of portable.elementPlugins) if (!elementPlugins.some((item) => item.manifest.id === plugin.manifest.id)) await registry.install(plugin);
+      setElementPlugins((current) => [...current, ...portable.elementPlugins.filter((plugin) => !current.some((item) => item.manifest.id === plugin.manifest.id))]);
+      setPlugins((current) => [...current, ...portable.nodeTypes.filter((plugin) => !current.some((item) => item.id === plugin.id))]);
+      setNodes((current) => [...current, ...portable.collection.nodes.map((node) => ({ ...node, id: current.some((item) => item.id === node.id) ? crypto.randomUUID() : node.id }))]);
+      setMessage(`已导入集合 ${portable.collection.name}`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "集合导入失败"); }
+  }
+
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
         <div><span>INTENT PLUGIN EDITOR</span><h1>插件化节点画布</h1></div>
         <div className={styles.addArea}>
+          <button onClick={() => collection(false)} disabled={!selectedIds.size}>导出选中集合</button>
+          <button onClick={() => collection(true)} disabled={!nodes.length}>导出全部</button>
           <button className={styles.primary} onClick={() => setAdding((value) => !value)}>＋ 添加节点</button>
           {adding && <div className={styles.typeMenu}>
             {definitions.size ? [...definitions.values()].map(({ definition }) =>
@@ -89,7 +115,7 @@ export function IntentEditor() {
           onSelectionChange={setSelectedIds}
           onValueChange={(id, key, value) => setNodes((current) => current.map((node) => node.id === id ? { ...node, values: { ...node.values, [key]: value } } : node))}
           onExport={exportSelection} />
-        <PluginPanel plugins={plugins} message={message} onInstall={install}
+        <PluginPanel plugins={plugins} message={message} onInstall={install} onImportCollection={importCollection}
           onUninstall={(name) => { setPlugins((current) => current.filter((plugin) => plugin.name !== name)); setMessage(`已卸载 ${name}`); }} />
       </div>
     </main>
