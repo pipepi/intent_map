@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { downloadPlugin, readPluginFile } from "./plugin-editor/plugin-io";
+import { useMemo, useRef, useState } from "react";
+import { ElementPluginRegistry, browserElementRuntime } from "./plugin-editor/element-runtime";
+import { decodeElementPackage } from "./plugin-editor/element-package";
+import { parseNodeTypePackage, validateNodeTypeDependencies } from "./plugin-editor/node-type-registry";
+import type { ElementPluginPackage } from "./plugin-editor/package-types";
 import { NodeCanvas } from "./plugin-editor/node-canvas";
 import { PluginPanel } from "./plugin-editor/plugin-panel";
 import type { CanvasNode, IntentPlugin, NodeTypeDefinition } from "./plugin-editor/types";
@@ -9,10 +12,14 @@ import styles from "./plugin-editor/editor.module.css";
 
 export function IntentEditor() {
   const [plugins, setPlugins] = useState<IntentPlugin[]>([]);
+  const [elementPlugins, setElementPlugins] = useState<ElementPluginPackage[]>([]);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("安装插件后即可添加节点");
+  const registryRef = useRef<ElementPluginRegistry | null>(null);
+  if (!registryRef.current) registryRef.current = new ElementPluginRegistry(browserElementRuntime());
+  const registry = registryRef.current;
 
   const definitions = useMemo(() => new Map(plugins.flatMap((plugin) =>
     plugin.nodeTypes.map((definition) => [definition.type, { plugin, definition }] as const),
@@ -20,7 +27,15 @@ export function IntentEditor() {
 
   async function install(file: File) {
     try {
-      const plugin = await readPluginFile(file);
+      if (file.name.endsWith(".zip")) {
+        const plugin = await decodeElementPackage(new Uint8Array(await file.arrayBuffer()));
+        await registry.install(plugin);
+        setElementPlugins((current) => [...current, plugin]);
+        setMessage(`已安装可执行元素插件 ${plugin.manifest.name}`);
+        return;
+      }
+      const plugin = parseNodeTypePackage(await file.text());
+      validateNodeTypeDependencies(plugin, elementPlugins);
       if (plugins.some((item) => item.name === plugin.name)) throw new Error(`插件 “${plugin.name}” 已安装`);
       const occupied = new Set(plugins.flatMap((item) => item.nodeTypes.map((type) => type.type)));
       const conflict = plugin.nodeTypes.find((type) => occupied.has(type.type));
@@ -49,7 +64,10 @@ export function IntentEditor() {
     })).values()];
     if (!entries.length) return;
     const names = [...new Set(entries.map((entry) => entry.plugin.name))].sort();
-    downloadPlugin({ schemaVersion: 1, name: names.length === 1 ? names[0] : `${names.join(" + ")} bundle`, nodeTypes: entries.map((entry) => entry.definition) });
+    const plugin = entries[0].plugin;
+    const exported: IntentPlugin = { ...plugin, id: names.length === 1 ? plugin.id : "local.export-bundle", name: names.length === 1 ? names[0] : `${names.join(" + ")} bundle`, nodeTypes: entries.map((entry) => entry.definition), dependencies: [...new Map(entries.flatMap((entry) => entry.plugin.dependencies).map((dep) => [dep.id, dep])).values()] };
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
+    const anchor = document.createElement("a"); anchor.href = URL.createObjectURL(blob); anchor.download = `${exported.id}.intent-node-type.json`; anchor.click(); URL.revokeObjectURL(anchor.href);
     setMessage(`已导出 ${entries.length} 种节点类型`);
   }
 
@@ -67,7 +85,7 @@ export function IntentEditor() {
         </div>
       </header>
       <div className={styles.layout}>
-        <NodeCanvas nodes={nodes} definitions={definitions} selectedIds={selectedIds}
+        <NodeCanvas nodes={nodes} definitions={definitions} selectedIds={selectedIds} registry={registry}
           onSelectionChange={setSelectedIds}
           onValueChange={(id, key, value) => setNodes((current) => current.map((node) => node.id === id ? { ...node, values: { ...node.values, [key]: value } } : node))}
           onExport={exportSelection} />

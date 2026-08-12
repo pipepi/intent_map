@@ -1,28 +1,7 @@
-export type PluginField = {
-  key: string;
-  label: string;
-  control: "input" | "textarea";
-  defaultValue: string;
-};
+import type { NodeTypePackage } from "./package-types";
 
-export type PluginElement = {
-  kind: "text" | "image";
-  sourceField: string;
-};
-
-export type NodeTypeDefinition = {
-  type: string;
-  displayName: string;
-  defaultName: string;
-  fields: PluginField[];
-  ui: { kind: "card"; elements: PluginElement[] };
-};
-
-export type IntentPlugin = {
-  schemaVersion: 1;
-  name: string;
-  nodeTypes: NodeTypeDefinition[];
-};
+export type NodeTypeDefinition = NodeTypePackage["nodeTypes"][number];
+export type IntentPlugin = NodeTypePackage;
 
 export type CanvasNode = {
   id: string;

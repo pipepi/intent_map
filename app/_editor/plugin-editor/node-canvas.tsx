@@ -2,6 +2,7 @@
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { NodeRenderer } from "./node-renderer";
+import type { ElementPluginRegistry } from "./element-runtime";
 import type { CanvasNode, DefinitionEntry } from "./types";
 import styles from "./editor.module.css";
 
@@ -13,11 +14,12 @@ type Props = {
   onSelectionChange: (ids: Set<string>) => void;
   onValueChange: (id: string, key: string, value: string) => void;
   onExport: () => void;
+  registry: ElementPluginRegistry;
 };
 
 const additive = (event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => event.ctrlKey || event.metaKey || event.shiftKey;
 
-export function NodeCanvas({ nodes, definitions, selectedIds, onSelectionChange, onValueChange, onExport }: Props) {
+export function NodeCanvas({ nodes, definitions, selectedIds, onSelectionChange, onValueChange, onExport, registry }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ start: Point; end: Point; additive: boolean }>();
   const [menu, setMenu] = useState<Point>();
@@ -65,7 +67,7 @@ export function NodeCanvas({ nodes, definitions, selectedIds, onSelectionChange,
       {nodes.map((node) => <article key={node.id} className={`${styles.node} ${selectedIds.has(node.id) ? styles.selected : ""}`}
         style={{ left: node.x, top: node.y }} onPointerDown={(event) => selectNode(event, node.id)}
         onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); if (!selectedIds.has(node.id)) onSelectionChange(new Set([node.id])); setMenu(localPoint(event)); }}>
-        <NodeRenderer node={node} definition={definitions.get(node.type)?.definition} onValueChange={(key, value) => onValueChange(node.id, key, value)} />
+        <NodeRenderer node={node} definition={definitions.get(node.type)?.definition} registry={registry} onValueChange={(key, value) => onValueChange(node.id, key, value)} />
       </article>)}
       {drag && <div className={styles.selectionBox} style={{ left: Math.min(drag.start.x, drag.end.x), top: Math.min(drag.start.y, drag.end.y), width: Math.abs(drag.end.x - drag.start.x), height: Math.abs(drag.end.y - drag.start.y) }} />}
       {menu && <div className={styles.contextMenu} style={{ left: menu.x, top: menu.y }}>
