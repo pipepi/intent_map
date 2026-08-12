@@ -1,4 +1,4 @@
-import type { ElementPluginManifest, NodeCollection, NodeTypePackage } from "./package-types";
+import type { ElementPluginManifest, NodeCollection, NodeTypePackage } from "./package-types.ts";
 
 const ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/;
 const VERSION = /^\d+\.\d+\.\d+$/;
