@@ -59,12 +59,12 @@ export function NodeCanvas({ nodes, definitions, selectedIds, onSelectionChange,
 
   const selectedTypes = [...new Set(nodes.filter((node) => selectedIds.has(node.id)).map((node) => node.type))];
   const validTypes = selectedTypes.filter((type) => definitions.has(type));
-  return <section className={styles.canvasWrap}>
+  return <section className={styles.canvasWrap} data-testid="node-canvas">
     <div className={styles.canvasInfo}>画布 · {nodes.length} 个节点 · {selectedIds.size} 个已选</div>
     <div ref={canvasRef} className={styles.canvas} onPointerDown={beginBox}
       onPointerMove={(event) => drag && setDrag({ ...drag, end: localPoint(event) })} onPointerUp={finishBox}
       onContextMenu={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}>
-      {nodes.map((node) => <article key={node.id} className={`${styles.node} ${selectedIds.has(node.id) ? styles.selected : ""}`}
+      {nodes.map((node) => <article key={node.id} data-node-id={node.id} data-node-type={node.type} className={`${styles.node} ${selectedIds.has(node.id) ? styles.selected : ""}`}
         style={{ left: node.x, top: node.y }} onPointerDown={(event) => selectNode(event, node.id)}
         onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); if (!selectedIds.has(node.id)) onSelectionChange(new Set([node.id])); setMenu(localPoint(event)); }}>
         <NodeRenderer node={node} definition={definitions.get(node.type)?.definition} registry={registry} onValueChange={(key, value) => onValueChange(node.id, key, value)} />

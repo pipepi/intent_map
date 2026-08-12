@@ -1,20 +1,13 @@
 {
+  "format": "intent-node-type-plugin",
   "schemaVersion": 1,
+  "id": "official.text-nodes",
   "name": "Text Plugin",
-  "nodeTypes": [
-    {
-      "type": "text",
-      "displayName": "文本节点",
-      "defaultName": "intent",
-      "fields": [
-        { "key": "text", "label": "文本", "control": "input", "defaultValue": "" }
-      ],
-      "ui": {
-        "kind": "card",
-        "elements": [
-          { "kind": "text", "sourceField": "text" }
-        ]
-      }
-    }
-  ]
+  "version": "1.0.0",
+  "dependencies": [{ "id": "official.text-elements", "version": "1.0.0" }],
+  "nodeTypes": [{
+    "type": "text", "displayName": "文本节点", "defaultName": "intent",
+    "fields": [{ "key": "text", "defaultValue": "", "control": { "pluginId": "official.text-elements", "elementId": "input", "sourceField": "text", "properties": { "label": "文本" } } }],
+    "view": [{ "pluginId": "official.text-elements", "elementId": "text", "sourceField": "text" }]
+  }]
 }

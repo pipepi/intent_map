@@ -118,7 +118,7 @@ export function IntentEditor() {
           <button className={styles.primary} onClick={() => setAdding((value) => !value)}>＋ 添加节点</button>
           {adding && <div className={styles.typeMenu}>
             {definitions.size ? [...definitions.values()].map(({ definition }) =>
-              <button key={definition.type} onClick={() => addNode(definition)}>{definition.displayName}<small>{definition.type}</small></button>)
+              <button key={definition.type} data-node-type={definition.type} onClick={() => addNode(definition)}>{definition.displayName}<small>{definition.type}</small></button>)
               : <p>请先安装插件</p>}
           </div>}
         </div>
