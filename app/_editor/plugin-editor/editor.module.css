@@ -37,6 +37,11 @@
 .panel { padding: 18px; border-left: 1px solid #293257; background: #0d1226; overflow: auto; }
 .panelTitle { display: flex; justify-content: space-between; align-items: center; }
 .panelTitle h2 { font-size: 17px; }
+.panel h3 { margin: 20px 0 9px; color: #c4ceec; font-size: 13px; }
+.panel h3 small { display: block; margin-top: 3px; color: #ff9a70; font-weight: 400; }
+.panelActions { display: grid; gap: 7px; margin-top: 15px; }
+.panelActions button { padding: 8px; border: 1px solid #405083; border-radius: 6px; background: #151e3d; cursor: pointer; }
+.hint { color: #7d88ad; line-height: 1.5; }
 .message { min-height: 36px; margin: 16px 0 8px; padding: 9px; border-radius: 6px; color: #a9b6dc; background: #121a35; }
 .sampleLinks { display: flex; gap: 9px; padding: 5px 2px 15px; color: #7481a8; font-size: 12px; }
 .sampleLinks a { color: #62b8ff; }

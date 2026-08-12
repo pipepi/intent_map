@@ -6,6 +6,7 @@ import { decodeElementPackage } from "./plugin-editor/element-package";
 import { decodeCollectionPackage, encodeCollectionPackage, selectCollection } from "./plugin-editor/collection-package";
 import { parseNodeTypePackage, validateNodeTypeDependencies } from "./plugin-editor/node-type-registry";
 import type { ElementPluginPackage } from "./plugin-editor/package-types";
+import { sampleElementArchives, SAMPLE_NODE_TYPE_PACKAGES } from "./plugin-editor/sample-packages";
 import { NodeCanvas } from "./plugin-editor/node-canvas";
 import { PluginPanel } from "./plugin-editor/plugin-panel";
 import type { CanvasNode, IntentPlugin, NodeTypeDefinition } from "./plugin-editor/types";
@@ -95,6 +96,18 @@ export function IntentEditor() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "集合导入失败"); }
   }
 
+  async function installSamples() {
+    try {
+      const archives = await sampleElementArchives();
+      const decoded = await Promise.all(archives.map(decodeElementPackage));
+      for (const plugin of decoded) await registry.install(plugin);
+      setElementPlugins(decoded);
+      SAMPLE_NODE_TYPE_PACKAGES.forEach((plugin) => validateNodeTypeDependencies(plugin, decoded));
+      setPlugins(SAMPLE_NODE_TYPE_PACKAGES);
+      setMessage("已安装 2 个元素插件和 2 个节点类型插件");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "样例安装失败"); }
+  }
+
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
@@ -115,8 +128,9 @@ export function IntentEditor() {
           onSelectionChange={setSelectedIds}
           onValueChange={(id, key, value) => setNodes((current) => current.map((node) => node.id === id ? { ...node, values: { ...node.values, [key]: value } } : node))}
           onExport={exportSelection} />
-        <PluginPanel plugins={plugins} message={message} onInstall={install} onImportCollection={importCollection}
-          onUninstall={(name) => { setPlugins((current) => current.filter((plugin) => plugin.name !== name)); setMessage(`已卸载 ${name}`); }} />
+        <PluginPanel plugins={plugins} elementPlugins={elementPlugins} message={message} onInstall={install} onImportCollection={importCollection} onInstallSamples={installSamples}
+          onDisableElement={(id) => { registry.disable(id); setElementPlugins((current) => current.filter((plugin) => plugin.manifest.id !== id)); setMessage(`已禁用 ${id}；刷新页面才能完全清除已执行代码`); }}
+          onUninstall={(id) => { setPlugins((current) => current.filter((plugin) => plugin.id !== id)); setMessage(`已卸载 ${id}`); }} />
       </div>
     </main>
   );
