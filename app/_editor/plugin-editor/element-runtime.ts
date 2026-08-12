@@ -42,8 +42,9 @@ export class ElementPluginRegistry {
 
 export function browserElementRuntime(): ElementRuntimeAdapter {
   return {
-    registry: customElements,
+    registry: { get: (tag) => typeof customElements === "undefined" ? undefined : customElements.get(tag) },
     async load(source) {
+      if (typeof window === "undefined") throw new Error("Element plugins can only run in a browser");
       const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
       try { await import(/* webpackIgnore: true */ url); } finally { URL.revokeObjectURL(url); }
     },
