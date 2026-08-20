@@ -2,14 +2,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { encodePip as encodePipWithPolicy } from "../app/runtime/pip.ts";
-import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
+import { createRelationDocument, serializeRelationDocument } from "../app/relation/document.ts";
 import {
   createdAtFor,
   projectRoot,
   readReleaseConfig,
   systemPackagePath,
 } from "./pip-release.mjs";
-import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
+import { collectSourceAssets, softwareProjectGraph } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
 
@@ -33,7 +33,7 @@ const sourceAssets = await collectSourceAssets(
   systemSourceEntriesFor(release.packageId),
 );
 const assets = [...runtimeAssets, ...sourceAssets];
-const root = softwareProjectRoot({
+const project = softwareProjectGraph({
   id: "loader_root",
   name: "PIP Loader",
   description: "Selects exactly one a2 editor and starts it.",
@@ -57,7 +57,7 @@ const bytes = await encodePip({
     requiredEditorCapabilities: [],
     providedCapabilities: [],
     requiredCapabilities: ["pip.catalog", "pip.activate"],
-    requiredAuthoringCapabilities: ["software-authoring/1"],
+    requiredAuthoringCapabilities: [],
     ioPolicy: packagedPipIoPolicy,
     authoringKind: "software-project/1",
     authoringCompiler: "pip-loader-ui/1",
@@ -65,7 +65,7 @@ const bytes = await encodePip({
     contentType: "application/vnd.intent-map.pip",
   },
   loaderSource: "export async function load() { return { rootNodeId: 'loader_root' }; }",
-  rootTreeText: serializeIntentDocument(createApplicationDocument(root)),
+  rootTreeText: serializeRelationDocument(createRelationDocument(project.graph, [project.rootNodeId])),
   assets,
 });
 const output = systemPackagePath(release);

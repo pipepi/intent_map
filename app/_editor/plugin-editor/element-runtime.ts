@@ -1,4 +1,5 @@
-import type { ElementDeclaration, ElementPluginPackage } from "./package-types.ts";
+import { assertSameImmutablePlugin } from "./package-identity.ts";
+import type { ElementDeclaration, ElementPluginPackage, PluginInstallStatus } from "./package-types.ts";
 
 export type CustomElementLookup = { get(tag: string): unknown };
 export type ElementRuntimeAdapter = {
@@ -10,6 +11,7 @@ export type InstalledElementPlugin = ElementPluginPackage & { active: boolean };
 
 export class ElementPluginRegistry {
   readonly #plugins = new Map<string, InstalledElementPlugin>();
+  readonly #installing = new Map<string, Promise<PluginInstallStatus>>();
   readonly #runtime: ElementRuntimeAdapter;
   constructor(runtime: ElementRuntimeAdapter) { this.#runtime = runtime; }
 
@@ -19,18 +21,33 @@ export class ElementPluginRegistry {
     return this.get(pluginId)?.manifest.elements.find((element) => element.id === elementId);
   }
 
-  async install(plugin: ElementPluginPackage) {
+  install(plugin: ElementPluginPackage): Promise<PluginInstallStatus> {
+    const pending = this.#installing.get(plugin.manifest.id);
+    if (pending) return pending.then(() => this.#installOnce(plugin));
+    const task = this.#installOnce(plugin).finally(() => {
+      if (this.#installing.get(plugin.manifest.id) === task) this.#installing.delete(plugin.manifest.id);
+    });
+    this.#installing.set(plugin.manifest.id, task);
+    return task;
+  }
+
+  async #installOnce(plugin: ElementPluginPackage): Promise<PluginInstallStatus> {
     const current = this.#plugins.get(plugin.manifest.id);
-    if (current?.active) throw new Error(`Element plugin ${plugin.manifest.id} is already installed`);
+    if (current) {
+      assertSameImmutablePlugin(current.manifest, plugin.manifest);
+      if (current.active) return "already-active";
+      this.#plugins.set(plugin.manifest.id, { ...current, active: true });
+      return "reactivated";
+    }
     for (const element of plugin.manifest.elements) {
       const occupied = this.#runtime.registry.get(element.tag);
-      const previouslyOwned = current?.manifest.elements.some((item) => item.tag === element.tag);
-      if (occupied && !previouslyOwned) throw new Error(`Custom element tag ${element.tag} is already registered`);
+      if (occupied) throw new Error(`Custom element tag ${element.tag} is already registered`);
     }
     await this.#runtime.load(plugin.entrySource);
     const missing = plugin.manifest.elements.find((element) => !this.#runtime.registry.get(element.tag));
     if (missing) throw new Error(`Element module did not register ${missing.tag}`);
     this.#plugins.set(plugin.manifest.id, { ...plugin, active: true });
+    return "installed";
   }
 
   disable(id: string) {
@@ -38,6 +55,11 @@ export class ElementPluginRegistry {
     if (!plugin) return;
     this.#plugins.set(id, { ...plugin, active: false });
   }
+  enable(id: string) {
+    const plugin = this.#plugins.get(id);
+    if (plugin) this.#plugins.set(id, { ...plugin, active: true });
+  }
+  uninstall(id: string) { this.#plugins.delete(id); }
 }
 
 export function browserElementRuntime(): ElementRuntimeAdapter {

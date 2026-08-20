@@ -17,7 +17,7 @@ const run = (destination) => spawnSync(process.execPath, [script, destination], 
   encoding: "utf8",
 });
 
-test("self-hosting source extraction reconstructs a0 through a3 without overwriting", async (context) => {
+test("self-hosting source extraction reconstructs a0 through a2 without overwriting", async (context) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "pip-self-source-"));
   context.after(() => rm(temporary, { recursive: true, force: true }));
   const first = path.join(temporary, "first");
@@ -30,7 +30,7 @@ test("self-hosting source extraction reconstructs a0 through a3 without overwrit
   assert.equal(secondReceipt, firstReceipt);
   const receipt = JSON.parse(firstReceipt);
   assert.equal(receipt.kind, "pip-self-hosting-source/1");
-  assert.deepEqual(receipt.packages.map(({ layer }) => layer), ["a0", "a1", "a2", "a3"]);
+  assert.deepEqual(receipt.packages.map(({ layer }) => layer), ["a0", "a1", "a2"]);
   assert.ok(receipt.sourceFileCount > 0);
   assert.match(receipt.reconstructedSourceTreeSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(

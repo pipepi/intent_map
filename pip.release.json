@@ -30,19 +30,9 @@
     "version": "1.0.0",
     "releaseDate": "20260806"
   },
-  "softwareAuthoring": {
-    "layer": "a3",
-    "artifactName": "software_authoring",
-    "packageId": "software-authoring",
-    "name": "Software Authoring",
-    "version": "1.0.0",
-    "releaseDate": "20260806"
-  },
   "defaults": {
     "loaderPackageId": "pip-loader",
     "editorPackageId": "intent-map",
-    "capabilities": {
-      "software-authoring/1": "software-authoring"
-    }
+    "capabilities": {}
   }
 }

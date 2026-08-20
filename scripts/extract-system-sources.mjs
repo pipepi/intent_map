@@ -45,7 +45,7 @@ const temporary = await mkdtemp(path.join(parent, `.${path.basename(output)}.tmp
 
 try {
   const release = await readReleaseConfig();
-  const selected = [release.seed, release.loader, release.intentMap, release.softwareAuthoring];
+  const selected = [release.seed, release.loader, release.intentMap];
   const merged = new Map();
   const packages = [];
 

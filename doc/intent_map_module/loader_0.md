@@ -1,6 +1,6 @@
 # Loader 0：无状态初始加载器（种皮）
 
-[← 返回总体方案](../intent_map_position.md) · [下一篇：Loader N →](loader_n.md)
+[RelationNode 插件架构](../relation_node_plugins.md) · [下一篇：Loader N →](loader_n.md)
 
 ## 定位
 
@@ -168,4 +168,4 @@ CLI 仍有字段为“每次确认”时直接报错；桌面端则在读取 PIP
 
 ---
 
-[← 返回总体方案](../intent_map_position.md) · [下一篇：Loader N →](loader_n.md)
+[RelationNode 插件架构](../relation_node_plugins.md) · [下一篇：Loader N →](loader_n.md)

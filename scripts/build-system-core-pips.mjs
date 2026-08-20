@@ -1,19 +1,19 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
   DEFAULT_PIP_LOADER_SOURCE,
   encodePip as encodePipWithPolicy,
 } from "../app/runtime/pip.ts";
-import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
+import { createRelationDocument, serializeRelationDocument } from "../app/relation/document.ts";
 import { createdAtFor, projectRoot, readReleaseConfig, systemPackagePath } from "./pip-release.mjs";
-import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
+import { collectSourceAssets, softwareProjectGraph } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
 
-const writePackage = async (release, manifest, root, assets) => {
+const writePackage = async (release, manifest, project, assets) => {
   const output = systemPackagePath(release);
   const bytes = await encodePip({
     manifest: {
@@ -23,7 +23,7 @@ const writePackage = async (release, manifest, root, assets) => {
       name: release.name,
       packageVersion: release.version,
       releaseDate: release.releaseDate,
-      rootNodeId: root.id,
+      rootNodeId: project.rootNodeId,
       loaderAbi: "pip-loader/1",
       providedEditorKinds: [],
       supportedDocumentKinds: [],
@@ -36,7 +36,7 @@ const writePackage = async (release, manifest, root, assets) => {
       ...manifest,
     },
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeIntentDocument(createApplicationDocument(root)),
+    rootTreeText: serializeRelationDocument(createRelationDocument(project.graph, [project.rootNodeId])),
     assets,
   });
   await mkdir(path.dirname(output), { recursive: true });
@@ -54,11 +54,11 @@ await writePackage(
   {
     artifactRole: "authoring-source",
     providedCapabilities: [],
-    requiredAuthoringCapabilities: ["software-authoring/1"],
+    requiredAuthoringCapabilities: [],
     authoringKind: "software-project/1",
     authoringCompiler: "pip-seed-native/1",
   },
-  softwareProjectRoot({
+  softwareProjectGraph({
     id: "pip_seed_root",
     name: "PIP Seed",
     description: "Native, replaceable trust-root source package.",
@@ -66,33 +66,4 @@ await writePackage(
     assets: seedAssets,
   }),
   seedAssets,
-);
-
-const capabilityBytes = new Uint8Array(await readFile(
-  new URL("../a3/extensions/software-authoring/capability.mjs", import.meta.url),
-));
-const a3SourceAssets = await collectSourceAssets(
-  projectRoot,
-  systemSourceEntriesFor(release.softwareAuthoring.packageId),
-);
-await writePackage(
-  release.softwareAuthoring,
-  {
-    artifactRole: "source-and-runtime",
-    providedCapabilities: ["software-authoring/1"],
-    requiredAuthoringCapabilities: ["software-authoring/1"],
-    authoringKind: "software-project/1",
-    authoringCompiler: "software-authoring/1",
-  },
-  softwareProjectRoot({
-    id: "software_authoring_root",
-    name: "Software Authoring",
-    description: "Business-independent source, build, test and release capability.",
-    compiler: "software-authoring/1",
-    assets: a3SourceAssets,
-  }),
-  [
-    { path: "capability.mjs", mime: "text/javascript; charset=utf-8", bytes: capabilityBytes },
-    ...a3SourceAssets,
-  ],
 );

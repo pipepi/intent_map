@@ -11,11 +11,8 @@ import {
   readReleaseConfig,
   systemPackagePath,
 } from "./pip-release.mjs";
-import {
-  createApplicationDocument,
-  serializeIntentDocument,
-} from "../app/runtime/model.ts";
-import { collectSourceAssets, softwareProjectRoot } from "./pip-source-assets.mjs";
+import { createRelationDocument, loadRelationDocument, serializeRelationDocument } from "../app/relation/document.ts";
+import { collectSourceAssets, softwareProjectGraph } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
 
@@ -89,15 +86,15 @@ const sourceAssets = await collectSourceAssets(
 );
 const assets = [...runtimeAssets, ...sourceAssets];
 const tree = treePath
-  ? JSON.parse(await readFile(path.resolve(root, treePath), "utf8"))
-  : createApplicationDocument(softwareProjectRoot({
+  ? loadRelationDocument(JSON.parse(await readFile(path.resolve(root, treePath), "utf8")))
+  : (() => { const project = softwareProjectGraph({
       id: "intent_map_editor_root",
-      name: "Intent Map Editor",
-      description: "Generic tree-map and graph editor source project.",
-      compiler: "intent-map-app/1",
+      name: "RelationNode Host",
+      description: "Generic three-layer RelationNode plugin host source project.",
+      compiler: "relation-host/1",
       assets: sourceAssets,
-    }));
-const rootTreeText = serializeIntentDocument(tree);
+    }); return createRelationDocument(project.graph, [project.rootNodeId]); })();
+const rootTreeText = serializeRelationDocument(tree);
 const assetMap = new Map(assets.map((asset) => [asset.path, asset]));
 const indexAsset = assetMap.get("index.html");
 if (!indexAsset) {
@@ -135,20 +132,20 @@ const bytes = await encodePip({
     name: release.name,
     packageVersion: release.version,
     releaseDate: release.releaseDate,
-    rootNodeId: tree.rootIntent.id,
+    rootNodeId: tree.rootNodeIds[0],
     loaderAbi: "pip-loader/1",
     artifactRole: "source-and-runtime",
     editorAbi: "pip-editor/1",
-    providedEditorKinds: ["tree-map/1", "graph/1"],
-    supportedDocumentKinds: ["intent-document/3"],
+    providedEditorKinds: ["relation-graph/1"],
+    supportedDocumentKinds: ["relation-workspace/1"],
     preferredEditorKinds: [],
     requiredEditorCapabilities: [],
     providedCapabilities: [],
     requiredCapabilities: [],
-    requiredAuthoringCapabilities: ["software-authoring/1"],
+    requiredAuthoringCapabilities: [],
     ioPolicy: packagedPipIoPolicy,
     authoringKind: "software-project/1",
-    authoringCompiler: "intent-map-app/1",
+    authoringCompiler: "relation-host/1",
     createdAt: createdAtFor(release),
     contentType: "application/vnd.intent-map.pip",
   },

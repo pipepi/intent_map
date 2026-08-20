@@ -12,12 +12,8 @@ import {
   UNLIMITED_PIP_IO_POLICY,
   pipLimit,
 } from "../app/runtime/pip-io-policy.ts";
-import {
-  createApplicationDocument,
-  loadIntentDocument,
-  serializeIntentDocument,
-} from "../app/runtime/model.ts";
-import { createSampleBusinessRoot } from "../app/runtime/sample-business-tree.ts";
+import { loadRelationDocument, serializeRelationDocument } from "../app/relation/document.ts";
+import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 
 const manifest = {
   packageId: "intent-map.test",
@@ -26,7 +22,7 @@ const manifest = {
   name: "Intent Map Test",
   packageVersion: "0.1.0",
   releaseDate: "20260726",
-  rootNodeId: "application_root",
+  rootNodeId: "sample.root",
   loaderAbi: "pip-loader/1",
   artifactRole: "runtime",
   providedEditorKinds: [],
@@ -41,10 +37,7 @@ const manifest = {
   contentType: "application/vnd.intent-map.pip",
 };
 
-const rootTreeText = JSON.stringify({
-  version: 2,
-  rootIntent: { id: "application_root" },
-});
+const rootTreeText = serializeRelationDocument(sampleRelationDocument());
 
 const ioOptions = { policy: UNLIMITED_PIP_IO_POLICY };
 const encodePip = (input) => encodePipWithPolicy(input, ioOptions);
@@ -150,76 +143,31 @@ test("PIP codecs require confirmation when no caller policy is supplied", async 
   );
 });
 
-test("PIP preserves the v3 multi-panel workspace and four-level tree", async () => {
-  const document = createApplicationDocument(createSampleBusinessRoot());
+test("PIP preserves a RelationDocument workspace", async () => {
+  const document = sampleRelationDocument(4);
   const bytes = await encodePip({
     manifest,
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeIntentDocument(document),
+    rootTreeText: serializeRelationDocument(document),
     assets: [],
   });
   const decoded = await decodePip(bytes);
-  const loaded = loadIntentDocument(JSON.parse(decoded.rootTreeText));
-
-  assert.equal(loaded.version, 3);
-  assert.deepEqual(
-    loaded.workspaceState.panels.map((panel) => panel.viewId),
-    ["view-workbench", "view-free-layout"],
-  );
-  assert.equal(
-    loaded.workspaceState.panels[0].surfaces.filter(
-      (surface) => surface.kind === "feature-panel",
-    ).length,
-    3,
-  );
-  assert.equal(
-    loaded.workspaceState.panels[0].surfaces.some(
-      (surface) =>
-        surface.kind === "feature-panel" &&
-        surface.featureNodeId === "global_toolbar",
-    ),
-    true,
-  );
-  assert.equal(
-    loaded.rootIntent.children
-      .find((node) => node.id === "document_loader")
-      .children[0].children[0].children[0].children[0].id,
-    "scenario_actor_leaf",
-  );
+  const loaded = loadRelationDocument(JSON.parse(decoded.rootTreeText));
+  assert.equal(loaded.schemaVersion, 1);
+  assert.ok(loaded.graph.nodes["sample.depth-4"]);
+  assert.deepEqual(loaded.workspace.views, ["relation-graph"]);
 });
 
-test("PIP round-trips an eight-level business tree without a depth cap", async () => {
-  const businessRoot = createSampleBusinessRoot();
-  let leaf = businessRoot.children[0].children[0].children[0];
-  for (let depth = 5; depth <= 8; depth += 1) {
-    const child = {
-      id: `depth_${depth}`,
-      name: `第 ${depth} 层`,
-      description: "无限递归回归节点",
-      kind: "operator",
-      operator: "identity",
-      inputs: [{ id: `in_${depth}`, name: "输入", type: "any", channel: "data" }],
-      outputs: [{ id: `out_${depth}`, name: "输出", type: "any", channel: "data" }],
-      children: [],
-      position: { x: 80 * depth, y: 60 * depth },
-      size: { width: 220, height: 150 },
-    };
-    leaf.children = [child];
-    leaf = child;
-  }
-  const document = createApplicationDocument(businessRoot);
+test("PIP round-trips an eight-level relation composition without a depth cap", async () => {
+  const document = sampleRelationDocument(8);
   const bytes = await encodePip({
     manifest,
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeIntentDocument(document),
+    rootTreeText: serializeRelationDocument(document),
     assets: [],
   });
-  const loaded = loadIntentDocument(
+  const loaded = loadRelationDocument(
     JSON.parse((await decodePip(bytes)).rootTreeText),
   );
-  const loadedBusinessRoot =
-    loaded.rootIntent.children[0].children[0];
-  let cursor = loadedBusinessRoot.children[0].children[0].children[0];
-  for (let depth = 5; depth <= 8; depth += 1) cursor = cursor.children[0];
-  assert.equal(cursor.id, "depth_8");
+  assert.ok(loaded.graph.nodes["sample.depth-8"]);
 });

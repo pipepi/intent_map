@@ -32,7 +32,7 @@ run("build-static.mjs");
 run("build-pip.mjs");
 
 const release = await readReleaseConfig();
-const selected = [release.seed, release.loader, release.intentMap, release.softwareAuthoring];
+const selected = [release.seed, release.loader, release.intentMap];
 await mkdir(applicationDirectory, { recursive: true });
 for (const item of selected) {
   await copyFile(systemPackagePath(item), path.join(applicationDirectory, artifactFilename(item)));

@@ -16,17 +16,10 @@ const packages = {
   "pip-seed": "packages/system/a0/pip-seed/a0_pip_seed_1_0_0_20260806.pip",
   "pip-loader": "packages/system/a1/pip-loader/a1_loader_1_0_0_20260806.pip",
   "intent-map": "packages/system/a2/intent-map/a2_intent_map_1_0_0_20260806.pip",
-  "software-authoring": "packages/system/a3/software-authoring/a3_software_authoring_1_0_0_20260806.pip",
 };
 
 test("every maintained system package has one explicit source boundary", () => {
   assert.deepEqual(Object.keys(SYSTEM_SOURCE_ENTRIES).sort(), Object.keys(packages).sort());
-  assert.deepEqual(systemSourceEntriesFor("software-authoring"), [
-    "a3",
-    "scripts",
-    "tests",
-    "pip.release.json",
-  ]);
   assert.throws(() => systemSourceEntriesFor("unknown-package"), /No maintained source boundary/);
 });
 

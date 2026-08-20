@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
+import { serializeRelationDocument } from "../app/relation/document.ts";
+import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 import { DEFAULT_PIP_LOADER_SOURCE, decodePip } from "../app/runtime/pip.ts";
 import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
 import { bundleSplitWorkspace } from "../a3/bundle/workspace-bundle.ts";
@@ -37,16 +38,7 @@ test("node streaming Bundle is byte-identical without aggregating resources thro
   const store = new NodeDirectoryResourceStore(resourcesDirectory);
   for (const resource of resources) await store.write(resource);
   const index = await createWorkspaceResourceIndex(resources);
-  const root = {
-    id: "stream_bundle_root",
-    name: "Stream Bundle Root",
-    description: "Streaming Bundle test",
-    kind: "composite",
-    inputs: [],
-    outputs: [],
-    children: [],
-    position: { x: 0, y: 0 },
-  };
+  const document = sampleRelationDocument();
   const pip = {
     manifest: {
       packageId: "stream-bundle-test",
@@ -55,13 +47,13 @@ test("node streaming Bundle is byte-identical without aggregating resources thro
       name: "Stream Bundle Test",
       packageVersion: "1.0.0",
       releaseDate: "20260807",
-      rootNodeId: root.id,
+      rootNodeId: document.rootNodeIds[0],
       loaderAbi: "pip-loader/1",
       artifactRole: "authoring-source",
       providedEditorKinds: [],
       supportedDocumentKinds: [],
-      preferredEditorKinds: ["tree-map/1"],
-      requiredEditorCapabilities: ["intent-document/3"],
+      preferredEditorKinds: ["relation-graph/1"],
+      requiredEditorCapabilities: ["relation-workspace/1"],
       providedCapabilities: [],
       requiredCapabilities: [],
       requiredAuthoringCapabilities: [],
@@ -70,7 +62,7 @@ test("node streaming Bundle is byte-identical without aggregating resources thro
       contentType: "application/vnd.intent-map.pip",
     },
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeIntentDocument(createApplicationDocument(root)),
+    rootTreeText: serializeRelationDocument(document),
     assets: [workspaceResourceIndexAsset(index)],
   };
   const session = openWorkspaceResourceSession(pip, store);

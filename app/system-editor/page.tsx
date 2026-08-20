@@ -1,7 +1,5 @@
-"use client";
-
-import { IntentEditor } from "../editor/intent-editor";
+import { RelationHost } from "../_editor/relation-host";
 
 export default function SystemEditorPage() {
-  return <IntentEditor />;
+  return <RelationHost />;
 }

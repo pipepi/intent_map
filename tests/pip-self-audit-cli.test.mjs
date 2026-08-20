@@ -10,7 +10,7 @@ const run = () => spawnSync(
   { cwd: root, encoding: "utf8" },
 );
 
-test("self audit emits a deterministic clean source receipt for a0 through a3", () => {
+test("self audit emits a deterministic clean source receipt for a0 through a2", () => {
   const first = run();
   assert.equal(first.status, 0, first.stderr);
   const second = run();
@@ -19,7 +19,7 @@ test("self audit emits a deterministic clean source receipt for a0 through a3", 
   const report = JSON.parse(first.stdout);
   assert.equal(report.schemaVersion, 1);
   assert.equal(report.clean, true);
-  assert.deepEqual(report.packages.map(({ layer }) => layer), ["a0", "a1", "a2", "a3"]);
+  assert.deepEqual(report.packages.map(({ layer }) => layer), ["a0", "a1", "a2"]);
   for (const item of report.packages) {
     assert.equal(item.clean, true, item.packageId);
     assert.match(item.pipSha256, /^[a-f0-9]{64}$/);

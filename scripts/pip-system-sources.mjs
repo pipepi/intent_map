@@ -14,18 +14,16 @@ const entries = {
   "pip-loader": ["loader-n"],
   "intent-map": [
     "app",
+    "plugins",
     "public",
+    "scripts",
+    "tests",
     "package.json",
     "package-lock.json",
     "next.config.ts",
+    "pip.release.json",
     "postcss.config.mjs",
     "tsconfig.json",
-  ],
-  "software-authoring": [
-    "a3",
-    "scripts",
-    "tests",
-    "pip.release.json",
   ],
 };
 

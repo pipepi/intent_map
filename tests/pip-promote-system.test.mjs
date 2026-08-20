@@ -11,7 +11,6 @@ const packageFiles = [
   "packages/system/a0/pip-seed/a0_pip_seed_1_0_0_20260806.pip",
   "packages/system/a1/pip-loader/a1_loader_1_0_0_20260806.pip",
   "packages/system/a2/intent-map/a2_intent_map_1_0_0_20260806.pip",
-  "packages/system/a3/software-authoring/a3_software_authoring_1_0_0_20260806.pip",
 ];
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -66,7 +65,7 @@ test("system promotion requires and verifies the complete candidate build receip
   assert.match(overwrite.stderr, /EEXIST/);
 
   const tamperedRegistry = path.join(temporary, "tampered-registry");
-  await writeFile(path.join(candidateRoot, packageFiles[3]), "tampered");
+  await writeFile(path.join(candidateRoot, packageFiles[2]), "tampered");
   const tampered = run(candidateRoot, tamperedRegistry);
   assert.notEqual(tampered.status, 0);
   assert.match(tampered.stderr, /does not match build receipt/);

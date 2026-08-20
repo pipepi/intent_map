@@ -13,7 +13,7 @@ const run = (script, ...args) => spawnSync(
   { cwd: root, encoding: "utf8" },
 );
 
-test("self-hosted source builds isolated a0 through a3 candidates with a receipt", async (context) => {
+test("self-hosted source builds isolated a0 through a2 candidates with a receipt", async (context) => {
   const temporary = await mkdtemp(path.join(root, ".pip-self-build-test-"));
   context.after(() => rm(temporary, { recursive: true, force: true }));
   const source = path.join(temporary, "source");
@@ -21,7 +21,7 @@ test("self-hosted source builds isolated a0 through a3 candidates with a receipt
   const repeatedCandidates = path.join(temporary, "candidates-repeated");
   const extracted = run("extract-system-sources.mjs", source);
   assert.equal(extracted.status, 0, extracted.stderr);
-  await appendFile(path.join(source, "a3", "README.md"), "\nCandidate self-hosting edit.\n");
+  await appendFile(path.join(source, "app", "relation", "model.ts"), "\n// Candidate self-hosting edit.\n");
   const unsealed = run("build-self-hosted-candidates.mjs", source, candidates);
   assert.notEqual(unsealed.status, 0);
   assert.match(unsealed.stderr, /no longer matches its receipt/);
@@ -33,10 +33,10 @@ test("self-hosted source builds isolated a0 through a3 candidates with a receipt
   const receipt = JSON.parse(receiptText);
   assert.equal(receipt.kind, "pip-self-hosting-build/1");
   assert.match(receipt.sourceTreeSha256, /^[a-f0-9]{64}$/);
-  assert.equal(receipt.artifacts.length, 4);
+  assert.equal(receipt.artifacts.length, 3);
   assert.deepEqual(
-    receipt.artifacts.map(({ file }) => file.match(/packages\/system\/(a[0-3])\//)?.[1]),
-    ["a0", "a1", "a2", "a3"],
+    receipt.artifacts.map(({ file }) => file.match(/packages\/system\/(a[0-2])\//)?.[1]),
+    ["a0", "a1", "a2"],
   );
   for (const artifact of receipt.artifacts) {
     assert.match(artifact.sha256, /^[a-f0-9]{64}$/);

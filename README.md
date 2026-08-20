@@ -1,200 +1,43 @@
-# Intent Map
+# Relation Map
 
-Intent Map 是一个业务无关的分形节点地图编辑器基础设施，以 `.pip` 应用的形式运行，用于构建、观察、编辑、组合和导出节点地图。它只提供通用节点、画布、属性编辑、连接、作用域和持久化，不内置软件开发方法论。
+Relation Map 是以 `RelationNode` 为唯一事实模型的关系世界编辑器。节点是递归关系集合；入关系、依赖边、事件连线与层级视图均由索引或插件动态推导，不持久化第二份边数据。
 
-系统中只有无状态且长期稳定的初始加载器 Seed 是原生可执行文件；新版加载器、Intent Map、软件开发复杂度掌控能力和实际应用都分别以可演进的 `.pip` 存在。`.pip` 既是可运行和可分发的应用包，也是可继续编辑和组合的创作单元。
+空白应用只包含关系内核、原子补丁、包管理和通用工作区宿主。Intent 与 Scene 不属于核心，也不会被默认发现或安装；它们在 `plugins/` 下以三个手动安装的 V2 包交付：
 
-软件开发复杂度掌控来自可选的 a3 `software_authoring.pip`：它向 Intent Map 注册软件创作节点预制件、属性定义、约束规则和预设模板地图，并组织从需求内树到 UI、Tables、API、实现、发布、反馈与收益分配的生产过程。Crypto 交易所是使用这组扩展能力的 a4 案例。
+- 元素插件：主窗口 Web Component，可视化、交互与编辑。
+- 节点类型插件：主窗口单文件 ESM，注册类型、校验、命令、执行器、投影器和语言 provider。
+- 节点集合插件：不执行代码，提供 RelationGraph、视图状态及精确依赖。
 
-这套生产方式不依赖 Agent。个人或团队可以继续采用传统的需求梳理、UI 设计、数据库与 API 设计、前后端开发、发布、推广和收益分配流程。Agent、脚本和 MCP 只是可选操作者；当 Agent 参与时，Software Authoring 可以把完整上下文和可控树枝交给它，在提高探索与实现效率的同时保留人工理解、接管和回退能力。
+可执行插件与宿主拥有相同浏览器权限。哈希用于完整性检查，不代表沙箱或信任授权；禁用会撤销宿主注册项，已执行代码需要刷新才能完全清除。
 
-> **核心结构：Intent Map（a2）提供通用节点编辑基础设施；Software Authoring（a3）通过节点预制件和模板地图提供软件复杂度掌控能力；人或 Agent 都只是可选实施者。**
+## 开发
 
-完整的系统定位、递归 PIP 架构、软件开发能力、Crypto 交易所案例与可选 MCP 接入参见：[Intent Map：方案与产品定位](doc/intent_map_position.md)。
-
-当前 a2/a3 边界、拆分资源工作区、Bundle 与可配置容量策略的长期实施进度参见：
-[a2/a3 Workspace Refactor Execution Ledger](doc/a2_a3_workspace_execution.md)。
-已实现的 `intent.pip + resources/` 创作存储契约参见：
-[Split Workspace](doc/intent_map_module/split_workspace.md)。
-已实现的 a3 custom-node、可选外树投影和乐观一致性诊断参见：
-[a3 Custom Node 与可选投影工作区](doc/intent_map_module/a3_projection_workspace.md)。
-已实现的 a0–a3 源码审计、重建、候选构建和显式发布闭环参见：
-[PIP Self-Hosting](doc/intent_map_module/pip_self_hosting.md)。
-
-## Implementation
-
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
-
-## Prerequisites
-
-- Node.js `>=22.13.0`
-
-## Quick Start
+要求 Node.js `>=22.13.0`。
 
 ```bash
 npm install
 npm run dev
 npm run build
+npm test
 ```
 
-This starter does not use `wrangler.jsonc`.
-
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run pip:build`: build the static application and deterministic `.pip`
-- `npm run pip:dist`: build the layered Seed, Loader, and application distribution
-- `npm run pip:system`: rebuild the Git-tracked default a0–a3 source packages
-- `npm run pip:install-user -- <file.pip>`: install an immutable version into the user Registry
-- `npm run pip:self:audit`: compare every maintained source PIP with its repository boundary
-- `npm run pip:self:extract -- <new-source-directory>`: reconstruct ordinary source files without overwriting
-- `npm run pip:self:seal -- <edited-source-directory>`: seal an edited candidate source tree
-- `npm run pip:self:build -- <source-directory> <new-candidate-directory>`: build isolated a0–a3 candidates and a receipt
-- `npm run pip:promote-system -- <candidate-directory> <package-id> --allow-package-limits`: promote one receipt-verified maintained candidate
-- `npm run pip:workspace:split -- <bundle.pip> <new-directory> --allow-package-limits`: create a non-overwriting split workspace
-- `npm run pip:workspace:bundle -- <workspace-directory> <versioned.pip> --allow-package-limits`: stream a split workspace into one exchange Bundle
-- `npm run pip:workspace:unbundle -- <versioned.pip> <new-directory> --allow-package-limits`: stream a Bundle back into a split workspace
-- `npm run pip:projection:audit -- <workspace-directory> --allow-package-limits`: inspect optional a3 projections without modifying the workspace
-- `npm run pip:software:spec -- <workspace-directory> <node-id> --allow-package-limits`: materialize one validated Software Authoring specification
-- `npm run pip:cli`: build the versioned diagnostic Seed CLI under `dist/pip-runtime/tools/`
-- `npm run pip:verify`: verify the generated `.pip`
-- `npm run test:pip`: test the TypeScript format, Rust core, CLI, and desktop shell
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Layered PIP Runtime
-
-Seed and `.pip` are separate files. Every artifact carries its architecture
-layer, semantic version, and release date in the filename:
-
-```text
-dist/pip-runtime/
-├── a0_pip_seed_1_0_0_20260806.app  # macOS; Windows uses .exe
-└── pip/
-    ├── a0_pip_seed_1_0_0_20260806.pip
-    ├── a1_loader_1_0_0_20260806.pip
-    ├── a2_intent_map_1_0_0_20260806.pip
-    └── a3_software_authoring_1_0_0_20260806.pip
-```
-
-Seed loads the unique `a1` Loader from `pip/`. The Loader selects exactly one
-`a2` generic editor. An optional `a3` workspace host can compose capabilities
-around that editor, while `a2` itself neither imports nor starts `a3`.
-System defaults are Git-tracked under `packages/system/`. User a0–a5 packages,
-profiles, trust decisions, and workspaces live in the platform user-data directory.
-Use `--profile`, `--editor`, or `--select-editor` to override defaults without
-silently falling back from an invalid explicit choice.
-
-```powershell
-.\dist\pip-runtime\tools\a0_pip_seed_cli_1_0_0_20260806.exe --verify .\dist\pip-runtime\pip\a2_intent_map_1_0_0_20260806.pip --allow-package-limits
-```
-
-On macOS, double-click the versioned `.app` to launch without Terminal. Desktop
-arguments remain available through Launch Services:
+访问 `/relation-host` 或 `/system-editor` 可打开空白通用宿主。生成可手动安装的 Intent/Scene 三层插件包：
 
 ```bash
-open -n dist/pip-runtime/a0_pip_seed_1_0_0_20260806.app --args \
-  --pip "$PWD/dist/pip-runtime/pip/a1_loader_1_0_0_20260806.pip" --select-editor
+npm run plugins:relation:build
 ```
 
-Use `npm run pip:cli` for terminal hosting and `--verify` diagnostics.
-See [Runtime profiles, editor selection, and capability composition](doc/intent_map_module/pip_runtime_profiles.md).
+产物写入 `dist/relation-plugins/`。完整架构与包契约见 [三层 RelationNode 插件架构](doc/relation_node_plugins.md)，浏览器验收步骤见 [three-layer-browser-checklist.md](tests/three-layer-browser-checklist.md)。
 
-### PIP I/O policy
+## PIP 与自托管
 
-PIP byte, resource, expanded-size, resource-count, and compression-ratio limits do
-not use hidden product constants. Each field is `ask`, an explicit decimal value,
-or `unlimited`. The editor's **容量策略** dialog saves the current values into the
-next exported `.pip`; **保存为本机默认** stores the higher-priority local policy.
-Desktop and CLI startup resolve command-line values over that local policy.
+系统维护 A0 Seed、A1 Loader 和 A2 Relation Map 三个核心 PIP。常用命令：
 
-The available command-line options are:
+- `npm run pip:system`：重建 Git 跟踪的 A0–A2 PIP。
+- `npm run pip:self:audit`：审计 PIP 内源码与仓库边界。
+- `npm run pip:self:extract -- <directory>`：提取可重建源码。
+- `npm run pip:self:seal -- <directory>`：封存修改后的候选源码。
+- `npm run pip:self:build -- <source> <candidates>`：构建 A0–A2 候选及 receipt。
+- `npm run pip:promote-system -- <candidates> <package-id> --allow-package-limits`：显式晋升候选。
 
-```text
---max-pip-size <bytes|unlimited>
---max-resource-size <bytes|unlimited>
---max-expanded-size <bytes|unlimited>
---max-resource-count <count|unlimited>
---max-compression-ratio <ratio|unlimited>
---allow-package-limits
-```
-
-`--allow-package-limits` explicitly allows every still-unconfigured field for
-the current process. A non-interactive CLI rejects operations while any field
-still requires confirmation. The desktop asks before granting those fields for
-the current launch. A package cannot silently relax the local or CLI boundary.
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+PIP 容量、资源数与压缩比限制仍由显式 I/O policy 管理，详见 [PIP self-hosting](doc/intent_map_module/pip_self_hosting.md)。

@@ -1,6 +1,4 @@
-// import { IntentObserver } from "./_editor/intent_editor";
-import {IntentEditor} from "./_editor/intent-editor"
+import { RelationHost } from "./_editor/relation-host";
 export default function HomePage() {
-  // return <IntentObserver />;
-  return <IntentEditor/>
+  return <RelationHost />;
 }

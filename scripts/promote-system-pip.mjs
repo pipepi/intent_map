@@ -26,7 +26,7 @@ if (
   receipt.schemaVersion !== 1 ||
   receipt.kind !== "pip-self-hosting-build/1" ||
   !Array.isArray(receipt.artifacts) ||
-  receipt.artifacts.length !== 4 ||
+  receipt.artifacts.length !== 3 ||
   !/^[a-f0-9]{64}$/.test(receipt.sourceReceiptSha256 ?? "") ||
   !/^[a-f0-9]{64}$/.test(receipt.sourceTreeSha256 ?? "")
 ) {
@@ -35,7 +35,7 @@ if (
 
 const release = await readReleaseConfig();
 const maintained = Object.values(release).filter((value) =>
-  value?.packageId && ["a0", "a1", "a2", "a3"].includes(value.layer));
+  value?.packageId && ["a0", "a1", "a2"].includes(value.layer));
 const maintainedById = new Map(maintained.map((item) => [item.packageId, item]));
 const selectedRelease = maintainedById.get(packageId);
 if (!selectedRelease) throw new Error("packageId is not maintained by this repository");
@@ -91,7 +91,7 @@ for (const artifact of receipt.artifacts) {
   candidates.set(pip.manifest.packageId, { bytes, pip });
 }
 if (candidates.size !== maintained.length) {
-  throw new Error("Build receipt does not contain every maintained a0-a3 package");
+  throw new Error("Build receipt does not contain every maintained a0-a2 package");
 }
 
 const selected = candidates.get(packageId);

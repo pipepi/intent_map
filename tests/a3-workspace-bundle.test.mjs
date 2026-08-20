@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
+import { serializeRelationDocument } from "../app/relation/document.ts";
+import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 import { DEFAULT_PIP_LOADER_SOURCE, decodePip, encodePip } from "../app/runtime/pip.ts";
 import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
 import { bundleSplitWorkspace, unpackWorkspaceBundle } from "../a3/bundle/workspace-bundle.ts";
@@ -9,23 +10,13 @@ import { MemoryWorkspaceResourceStore, openWorkspaceResourceSession } from "../a
 import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../a3/workspace/resource-index.ts";
 
 const io = { policy: UNLIMITED_PIP_IO_POLICY };
-const root = {
-  id: "bundle_root",
-  name: "Bundle Root",
-  description: "Bundle test",
-  kind: "composite",
-  inputs: [],
-  outputs: [],
-  children: [],
-  position: { x: 0, y: 0 },
-};
 const resources = [
   { path: "frontend/page.tsx", mediaType: "text/typescript", bytes: new TextEncoder().encode("export default 1") },
   { path: "ui/hero.bin", mediaType: "application/octet-stream", bytes: new Uint8Array([8, 6, 7, 5, 3, 0, 9]) },
 ];
 
 const packageFor = (index) => {
-  const document = createApplicationDocument(root);
+  const document = sampleRelationDocument();
   return {
     manifest: {
       packageId: "bundle-test",
@@ -34,13 +25,13 @@ const packageFor = (index) => {
       name: "Bundle Test",
       packageVersion: "1.0.0",
       releaseDate: "20260807",
-      rootNodeId: root.id,
+      rootNodeId: document.rootNodeIds[0],
       loaderAbi: "pip-loader/1",
       artifactRole: "authoring-source",
       providedEditorKinds: [],
       supportedDocumentKinds: [],
-      preferredEditorKinds: ["tree-map/1"],
-      requiredEditorCapabilities: ["intent-document/3"],
+      preferredEditorKinds: ["relation-graph/1"],
+      requiredEditorCapabilities: ["relation-workspace/1"],
       providedCapabilities: [],
       requiredCapabilities: [],
       requiredAuthoringCapabilities: [],
@@ -49,7 +40,7 @@ const packageFor = (index) => {
       contentType: "application/vnd.intent-map.pip",
     },
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeIntentDocument(document),
+    rootTreeText: serializeRelationDocument(document),
     assets: [workspaceResourceIndexAsset(index)],
   };
 };

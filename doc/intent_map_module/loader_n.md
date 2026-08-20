@@ -1,6 +1,6 @@
 # Loader N：可演进加载器
 
-[← 上一篇：Loader 0](loader_0.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Intent Map →](intent_map.md)
+[← 上一篇：Loader 0](loader_0.md) · [RelationNode 插件架构](../relation_node_plugins.md)
 
 ## 定位
 
@@ -87,4 +87,4 @@ Intent Map 可以由 Loader N 启动，但 Loader N 也应能够启动不依赖 
 
 ---
 
-[← 上一篇：Loader 0](loader_0.md) · [返回总体方案](../intent_map_position.md) · [下一篇：Intent Map →](intent_map.md)
+[← 上一篇：Loader 0](loader_0.md) · [RelationNode 插件架构](../relation_node_plugins.md)

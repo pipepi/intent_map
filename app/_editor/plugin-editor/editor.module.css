@@ -12,6 +12,12 @@
 .canvasWrap { min-width: 0; position: relative; background: radial-gradient(circle at 50% 35%, #141a3a 0, #080b19 60%); }
 .canvasInfo { height: 36px; padding: 10px 14px; color: #8390b8; border-bottom: 1px solid #1c2544; }
 .canvas { position: relative; height: calc(100% - 36px); overflow: auto; background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px); background-size: 24px 24px; touch-action: none; }
+.relationGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); align-content: start; gap: 16px; padding: 18px; }
+.relationGrid .node { position: relative; width: auto; min-height: 160px; }
+.rawRelations { display: grid; gap: 5px; color: #aab5d6; font-size: 11px; }
+.rawRelations > div { display: grid; grid-template-columns: minmax(70px, auto) 1fr; gap: 8px; }
+.rawRelations code { color: #67bfff; overflow-wrap: anywhere; }
+.rawRelations span { color: #8996bb; overflow-wrap: anywhere; }
 .node { position: absolute; z-index: 2; width: 250px; min-height: 220px; padding: 13px; border: 1px solid #34416f; border-radius: 10px; background: #10172e; box-shadow: 0 9px 24px #0006; touch-action: auto; }
 .node.selected { border-color: #39a7ff; box-shadow: 0 0 0 2px #39a7ff55, 0 10px 26px #0009; }
 .nodeHeading { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; }

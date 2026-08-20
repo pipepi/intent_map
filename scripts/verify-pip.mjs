@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { decodePip as decodePipWithPolicy } from "../app/runtime/pip.ts";
-import { loadIntentDocument } from "../app/runtime/model.ts";
+import { loadRelationDocument } from "../app/relation/document.ts";
 import { readReleaseConfig, systemPackagePath } from "./pip-release.mjs";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
@@ -16,7 +16,7 @@ const decodePip = (source) => decodePipWithPolicy(
 const release = (await readReleaseConfig()).intentMap;
 const input = process.argv[2] ?? systemPackagePath(release);
 const pip = await decodePip(new Uint8Array(await readFile(path.resolve(input))));
-const document = loadIntentDocument(JSON.parse(pip.rootTreeText));
+const document = loadRelationDocument(JSON.parse(pip.rootTreeText));
 process.stdout.write(
-  `valid PIP\n${pip.manifest.name}\n${pip.manifest.rootNodeId}\nv${document.version} · ${document.workspaceState.panels.length} panels\n${pip.assets.length} assets\n`,
+  `valid PIP\n${pip.manifest.name}\n${pip.manifest.rootNodeId}\nRelationDocument v${document.schemaVersion} · ${Object.keys(document.graph.nodes).length} nodes\n${pip.assets.length} assets\n`,
 );

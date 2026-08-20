@@ -45,34 +45,17 @@ export const collectSourceAssets = async (root, entries, prefix = "source") => {
   return assets;
 };
 
-const sourceFileNode = (asset, index) => ({
-  id: `source_${index}_${asset.path.replaceAll(/[^a-zA-Z0-9]/g, "_")}`,
-  name: asset.path.replace(/^source\//, ""),
-  description: `${asset.mime} · ${asset.bytes.length} bytes`,
-  kind: "operator",
-  operator: "identity",
-  inputs: [],
-  outputs: [],
-  position: { x: 80 + (index % 5) * 260, y: 120 + Math.floor(index / 5) * 190 },
-  size: { width: 220, height: 140 },
-  implementation: {
-    key: "source-file",
-    config: { assetPath: asset.path, mime: asset.mime },
-  },
-});
+const identity = { nodeId: "relation.core.identity", relationId: "identity" };
+const relation = (id, value) => ({ id, predicate: identity, object: { kind: "const", value }, relations: [] });
+const ref = (id, nodeId) => ({ id, predicate: identity, object: { kind: "ref", target: { nodeId, relationId: "identity" } }, relations: [] });
+const node = (id, relations) => ({ id, relations: [relation("identity", id), ...relations] });
 
-export const softwareProjectRoot = ({ id, name, description, compiler, assets }) => ({
-  id,
-  name,
-  description,
-  kind: "composite",
-  inputs: [],
-  outputs: [],
-  children: assets.filter((asset) => asset.path.startsWith("source/")).map(sourceFileNode),
-  position: { x: 0, y: 0 },
-  canvasSize: { width: 1500, height: Math.max(900, 300 + Math.ceil(assets.length / 5) * 190) },
-  implementation: {
-    key: "software-project",
-    config: { compiler, sourceAssetPrefix: "source/" },
-  },
-});
+export const softwareProjectGraph = ({ id, name, description, compiler, assets }) => {
+  const core = ["identity", "predicate", "type"].map((kind) => node(`relation.core.${kind}`, []));
+  const sources = assets.filter((asset) => asset.path.startsWith("source/")).map((asset, index) => node(
+    `source_${index}_${asset.path.replaceAll(/[^a-zA-Z0-9]/g, "_")}`,
+    [relation("name", asset.path.replace(/^source\//, "")), relation("description", `${asset.mime} · ${asset.bytes.length} bytes`), relation("asset", { path: asset.path, mime: asset.mime })],
+  ));
+  const root = node(id, [relation("name", name), relation("description", description), relation("compiler", compiler), ...sources.map((source) => ref(`contains:${source.id}`, source.id))]);
+  return { rootNodeId: id, graph: { revision: 0, nodes: Object.fromEntries([...core, root, ...sources].map((item) => [item.id, item])) } };
+};

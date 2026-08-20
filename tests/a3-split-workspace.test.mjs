@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createApplicationDocument, serializeIntentDocument } from "../app/runtime/model.ts";
+import { serializeRelationDocument } from "../app/relation/document.ts";
+import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 import {
   DEFAULT_PIP_LOADER_SOURCE,
   decodePip,
@@ -18,16 +19,7 @@ import {
 const io = { policy: UNLIMITED_PIP_IO_POLICY };
 
 const packageWithResources = () => {
-  const document = createApplicationDocument({
-    id: "workspace_root",
-    name: "Workspace Root",
-    description: "Split workspace test",
-    kind: "composite",
-    inputs: [],
-    outputs: [],
-    children: [],
-    position: { x: 0, y: 0 },
-  });
+  const document = sampleRelationDocument();
   return {
     manifest: {
       packageId: "workspace-test",
@@ -36,13 +28,13 @@ const packageWithResources = () => {
       name: "Workspace Test",
       packageVersion: "1.0.0",
       releaseDate: "20260807",
-      rootNodeId: document.rootIntent.id,
+      rootNodeId: document.rootNodeIds[0],
       loaderAbi: "pip-loader/1",
       artifactRole: "authoring-source",
       providedEditorKinds: [],
       supportedDocumentKinds: [],
-      preferredEditorKinds: ["tree-map/1"],
-      requiredEditorCapabilities: ["intent-document/3"],
+      preferredEditorKinds: ["relation-graph/1"],
+      requiredEditorCapabilities: ["relation-workspace/1"],
       providedCapabilities: [],
       requiredCapabilities: [],
       requiredAuthoringCapabilities: [],
@@ -51,7 +43,7 @@ const packageWithResources = () => {
       contentType: "application/vnd.intent-map.pip",
     },
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeIntentDocument(document),
+    rootTreeText: serializeRelationDocument(document),
     assets: [
       { path: "ui/large.bin", mime: "application/octet-stream", bytes: new Uint8Array(4096).fill(7) },
       { path: "backend/main.rs", mime: "text/plain", bytes: new TextEncoder().encode("fn main() {}") },

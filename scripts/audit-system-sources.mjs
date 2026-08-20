@@ -26,7 +26,7 @@ const sourceTreeSha256 = (assets) => {
 };
 
 const release = await readReleaseConfig();
-const selected = [release.seed, release.loader, release.intentMap, release.softwareAuthoring];
+const selected = [release.seed, release.loader, release.intentMap];
 const packages = [];
 for (const item of selected) {
   const packagePath = systemPackagePath(item);

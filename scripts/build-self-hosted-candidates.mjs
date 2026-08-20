@@ -131,8 +131,8 @@ try {
     }
   };
   await visitArtifacts();
-  if (artifacts.length !== 4 || artifacts.some(({ file }) => !file.endsWith(".pip"))) {
-    throw new Error("Self-hosted build must produce exactly four system PIP candidates");
+  if (artifacts.length !== 3 || artifacts.some(({ file }) => !file.endsWith(".pip"))) {
+    throw new Error("Self-hosted build must produce exactly three system PIP candidates");
   }
   const lockBytes = await readFile(path.join(source, "package-lock.json"));
   const receipt = {
