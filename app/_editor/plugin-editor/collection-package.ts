@@ -194,6 +194,7 @@ export function importRelationGraph(target: RelationGraph, incoming: RelationGra
 export type RelationWorkspace = {
   id: string;
   source: { id: string; version: string; contentSha256: string };
+  rootNodeIds: string[];
   graph: RelationGraph;
   views: NodeCollectionPlugin["workspace"]["views"];
   selection: string[];
@@ -203,6 +204,7 @@ export function createCollectionWorkspace(collection: NodeCollectionPlugin, id =
   return {
     id,
     source: { id: collection.manifest.id, version: collection.manifest.version, contentSha256 },
+    rootNodeIds: [...collection.manifest.rootNodeIds],
     graph: structuredClone(collection.graph),
     views: structuredClone(collection.workspace.views),
     selection: [...(collection.workspace.initialSelection ?? collection.manifest.rootNodeIds)],

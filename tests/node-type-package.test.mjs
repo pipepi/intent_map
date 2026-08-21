@@ -76,5 +76,5 @@ test("node type registrations must exactly match manifest identity refs", async 
 test("node type dependencies require exact installed element versions", async () => {
   const suite = await buildIntentPluginSuite();
   assert.throws(() => validateNodeTypeDependencies(suite.nodeType, []), /缺少/);
-  assert.throws(() => validateNodeTypeDependencies(suite.nodeType, [{ manifest: { id: suite.element.manifest.id, version: "2.0.0" } }]), /精确版本/);
+  assert.throws(() => validateNodeTypeDependencies(suite.nodeType, [{ manifest: { id: suite.element.manifest.id, version: "3.0.0" } }]), /精确版本/);
 });

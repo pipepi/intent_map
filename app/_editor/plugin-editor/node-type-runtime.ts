@@ -131,7 +131,7 @@ export function browserNodeTypeRuntime(): NodeTypeRuntimeAdapter {
     async load(source) {
       if (typeof window === "undefined") throw new Error("Node type plugins can only run in a browser");
       const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-      try { return await import(/* webpackIgnore: true */ url) as LoadedNodeTypeModule; }
+      try { return await import(/* webpackIgnore: true */ /* @vite-ignore */ url) as LoadedNodeTypeModule; }
       finally { URL.revokeObjectURL(url); }
     },
   };

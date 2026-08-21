@@ -23,6 +23,8 @@ test("portable collection carries exact dependencies and opens independent works
   first.graph.revision = 9;
   assert.equal(second.graph.revision, 0);
   assert.notEqual(first.graph, second.graph);
+  assert.deepEqual(first.rootNodeIds, ["scene.view.quadrant", "scene.view.tube"]);
+  assert.notEqual(first.rootNodeIds, decoded.collection.manifest.rootNodeIds);
   assert.match(decoded.contentSha256, /^[a-f0-9]{64}$/);
   assert.equal(first.source.contentSha256, decoded.contentSha256);
 });
@@ -47,7 +49,7 @@ test("collection catalog is idempotent by content and rejects changed same-versi
   assert.throws(() => catalog.install(changed), /conflicts with installed immutable package/);
 
   const nextVersionArchive = encodeCollectionPackage({
-    collection: { ...suite.collection, manifest: { ...suite.collection.manifest, version: "2.0.0" } },
+    collection: { ...suite.collection, manifest: { ...suite.collection.manifest, version: "3.0.0" } },
     nodeTypes: [suite.nodeType],
     elementPlugins: [suite.element],
   });
@@ -60,8 +62,8 @@ test("graph import remaps colliding node and nested relation references recursiv
   const imported = importRelationGraph(suite.collection.graph, suite.collection.graph);
   assertRelationGraph(imported.graph);
   assert.equal(imported.nodeIds.get("scene.xiaoming"), "scene.xiaoming~2");
-  assert.equal(imported.relationIds.get("scene.buy-btc\u0000subject"), "subject");
-  const copiedSubject = imported.graph.nodes["scene.buy-btc~2"].relations.find(({ id }) => id === "subject");
+  assert.equal(imported.relationIds.get("scene.buy-btc\u0000subject:0"), "subject:0");
+  const copiedSubject = imported.graph.nodes["scene.buy-btc~2"].relations.find(({ id }) => id === "subject:0");
   assert.equal(copiedSubject.object.target.nodeId, "scene.xiaoming~2");
   assert.equal(copiedSubject.predicate.nodeId, "scene.predicate.subject~2");
 });

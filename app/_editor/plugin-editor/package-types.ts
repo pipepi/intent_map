@@ -5,7 +5,7 @@ export type PluginInstallStatus = "installed" | "already-active" | "reactivated"
 export type ElementPurpose = "control" | "preview" | "node" | "projection" | "panel";
 export type ElementDeclaration = { id: string; tag: string; purpose: ElementPurpose };
 export type ElementPluginManifest = {
-  format: "intent-element-plugin"; schemaVersion: 2; runtimeAbi: "relation-element/1";
+  format: "intent-element-plugin"; schemaVersion: 2; runtimeAbi: "relation-element/2";
   id: string; name: string; version: string; entry: "entry.mjs"; elements: ElementDeclaration[];
   permissions: string[]; sourcePaths: string[]; sourceSha256: string; entrySha256: string;
   communityTags: string[]; redistributable: boolean;
@@ -16,14 +16,18 @@ export type ResolvedNodeType = {
   type: RelationRef; name: string; element?: { pluginId: string; elementId: string };
   matches?: (node: RelationNode, graph: RelationGraph) => boolean;
 };
-export type ElementContext = { workspaceId: string; graph: RelationGraph; node?: RelationNode; relation?: Relation; typeDescriptor?: ResolvedNodeType; selection: string[] };
+export type ElementContext = {
+  workspaceId: string; rootNodeIds: string[]; workspaceView: JsonValue; graph: RelationGraph;
+  node?: RelationNode; relation?: Relation; typeDescriptor?: ResolvedNodeType; selection: string[];
+  projection?: { id: string; data: JsonValue };
+};
 export type RelationElementRequest =
   | { kind: "apply-patch"; patch: RelationPatch }
   | { kind: "select"; nodeIds: string[] }
   | { kind: "command"; commandId: string; input: JsonValue };
 
 export type NodeTypePluginManifest = {
-  format: "intent-node-type-plugin"; schemaVersion: 2; runtimeAbi: "relation-node-type/1";
+  format: "intent-node-type-plugin"; schemaVersion: 2; runtimeAbi: "relation-node-type/2";
   id: string; name: string; version: string; entry: "entry.mjs"; ontology: "ontology.json";
   elementDependencies: ExactPackageRef[]; permissions: string[]; typeNodeIds: string[];
   sourcePaths: string[]; sourceSha256: string; entrySha256: string; redistributable: boolean;
@@ -34,7 +38,12 @@ export type Disposable = { dispose(): void } | (() => void);
 export type RelationValidator = (graph: RelationGraph) => void;
 export type RelationCommandHandler = (input: JsonValue, graph: RelationGraph) => RelationPatch | Promise<RelationPatch>;
 export type RelationExecutor = (node: RelationNode, graph: RelationGraph) => JsonValue | Promise<JsonValue>;
-export type RelationProjection = { id: string; matches(node: RelationNode, graph: RelationGraph): boolean; element: { pluginId: string; elementId: string } };
+export type RelationProjection = {
+  id: string; purpose: "node" | "workspace";
+  matches(node: RelationNode, graph: RelationGraph): boolean;
+  project?(input: { workspaceId: string; rootNodeIds: string[]; graph: RelationGraph; node: RelationNode }): JsonValue;
+  element: { pluginId: string; elementId: string };
+};
 export type RelationParseCandidate = { id: string; label: string; confidence: number; diagnostics: string[]; patch: RelationPatch };
 export type RelationLanguageProvider = {
   id: string;

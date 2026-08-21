@@ -19,14 +19,14 @@ export const mergeGraphs = (...graphs: RelationGraph[]): RelationGraph => ({
   nodes: Object.assign({}, ...graphs.map((graph) => structuredClone(graph.nodes))),
 });
 
-export const baseElementManifest = (id: string, name: string) => ({
-  format: "intent-element-plugin" as const, schemaVersion: 2 as const, runtimeAbi: "relation-element/1" as const,
-  id, name, version: "1.0.0", entry: "entry.mjs" as const, permissions: [], sourcePaths: ["source/index.js"],
+export const baseElementManifest = (id: string, name: string, sourcePaths = ["source/index.js"]) => ({
+  format: "intent-element-plugin" as const, schemaVersion: 2 as const, runtimeAbi: "relation-element/2" as const,
+  id, name, version: "2.0.0", entry: "entry.mjs" as const, permissions: [], sourcePaths,
   sourceSha256: "0".repeat(64), entrySha256: "0".repeat(64), communityTags: ["external", "source-disclosed"], redistributable: true,
 });
-export const baseNodeTypeManifest = (id: string, name: string, typeNodeIds: string[], elementId: string) => ({
-  format: "intent-node-type-plugin" as const, schemaVersion: 2 as const, runtimeAbi: "relation-node-type/1" as const,
-  id, name, version: "1.0.0", entry: "entry.mjs" as const, ontology: "ontology.json" as const,
-  elementDependencies: [{ id: elementId, version: "1.0.0" }], permissions: [], typeNodeIds,
-  sourcePaths: ["source/index.js"], sourceSha256: "0".repeat(64), entrySha256: "0".repeat(64), redistributable: true,
+export const baseNodeTypeManifest = (id: string, name: string, typeNodeIds: string[], elementId: string, sourcePaths = ["source/index.js"]) => ({
+  format: "intent-node-type-plugin" as const, schemaVersion: 2 as const, runtimeAbi: "relation-node-type/2" as const,
+  id, name, version: "2.0.0", entry: "entry.mjs" as const, ontology: "ontology.json" as const,
+  elementDependencies: [{ id: elementId, version: "2.0.0" }], permissions: [], typeNodeIds,
+  sourcePaths, sourceSha256: "0".repeat(64), entrySha256: "0".repeat(64), redistributable: true,
 });

@@ -29,10 +29,13 @@ function PluginProjection({ tag, context, onRequest }: { tag: string; context: E
     current.context = {
       ...structuredClone({
         workspaceId: context.workspaceId,
+        rootNodeIds: context.rootNodeIds,
+        workspaceView: context.workspaceView,
         graph: context.graph,
         node: context.node,
         relation: context.relation,
         selection: context.selection,
+        projection: context.projection,
       }),
       typeDescriptor: context.typeDescriptor ? {
         type: structuredClone(context.typeDescriptor.type),
@@ -54,13 +57,20 @@ function PluginProjection({ tag, context, onRequest }: { tag: string; context: E
   return createElement(tag, { ref: host });
 }
 
-export function RelationNodeRenderer({ workspaceId, graph, node, selection, elements, nodeTypes, onRequest }: {
-  workspaceId: string; graph: RelationGraph; node: RelationNode; selection: string[];
+export function RelationNodeRenderer({ workspaceId, rootNodeIds, workspaceView, graph, node, selection, purpose = "node", elements, nodeTypes, onRequest }: {
+  workspaceId: string; rootNodeIds: string[]; workspaceView: import("../../relation/model").JsonValue;
+  graph: RelationGraph; node: RelationNode; selection: string[]; purpose?: "node" | "workspace";
   elements: ElementPluginRegistry; nodeTypes: NodeTypePluginRegistry;
   onRequest: (request: RelationElementRequest) => void;
 }) {
-  const { type, declaration } = resolveNodePresentation(node, graph, elements, nodeTypes);
-  const context = useMemo<ElementContext>(() => ({ workspaceId, graph, node, typeDescriptor: type, selection }), [workspaceId, graph, node, type, selection]);
+  const { type, projection, projectionData, declaration, error } = resolveNodePresentation(
+    node, graph, elements, nodeTypes, purpose, { workspaceId, rootNodeIds },
+  );
+  const context = useMemo<ElementContext>(() => ({
+    workspaceId, rootNodeIds, workspaceView, graph, node, typeDescriptor: type, selection,
+    projection: projection ? { id: projection.id, data: projectionData ?? null } : undefined,
+  }), [workspaceId, rootNodeIds, workspaceView, graph, node, type, selection, projection, projectionData]);
+  if (error) return <div className={styles.orphan}><div className={styles.nodeHeading}><strong>{node.id}</strong><span>projection error</span></div><p>{error}</p><RawRelations relations={node.relations} /></div>;
   if (declaration) return <PluginProjection tag={declaration.tag} context={context} onRequest={onRequest} />;
   return <div className={styles.orphan}>
     <div className={styles.nodeHeading}><strong>{node.id}</strong><span>{type?.name ?? "orphan RelationNode"}</span></div>

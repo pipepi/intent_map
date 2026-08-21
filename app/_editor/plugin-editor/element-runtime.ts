@@ -68,7 +68,7 @@ export function browserElementRuntime(): ElementRuntimeAdapter {
     async load(source) {
       if (typeof window === "undefined") throw new Error("Element plugins can only run in a browser");
       const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-      try { await import(/* webpackIgnore: true */ url); } finally { URL.revokeObjectURL(url); }
+      try { await import(/* webpackIgnore: true */ /* @vite-ignore */ url); } finally { URL.revokeObjectURL(url); }
     },
   };
 }

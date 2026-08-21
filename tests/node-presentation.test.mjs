@@ -17,3 +17,17 @@ test("node presentation reads mutable registries on every resolution", () => {
   enabled = false;
   assert.equal(resolveNodePresentation(node, graph, elements, nodeTypes).type, undefined);
 });
+
+test("workspace projections are purpose-scoped, validated and reject ambiguity", () => {
+  const graph = createCoreRelationGraph(), node = graph.nodes["relation.core.type"];
+  const declaration = { id: "surface", tag: "official-workspace-surface", purpose: "projection" };
+  const projection = { id: "workspace.one", purpose: "workspace", matches: () => true, project: () => ({ ready: true }), element: { pluginId: "official.elements", elementId: "surface" } };
+  const elements = { resolve: () => declaration };
+  const registry = (projections) => ({ projections: () => projections, types: () => [] });
+  const resolved = resolveNodePresentation(node, graph, elements, registry([projection]), "workspace", { workspaceId: "w", rootNodeIds: [node.id] });
+  assert.equal(resolved.declaration.tag, declaration.tag);
+  assert.deepEqual(resolved.projectionData, { ready: true });
+  assert.equal(resolveNodePresentation(node, graph, elements, registry([projection]), "node").declaration, undefined);
+  assert.match(resolveNodePresentation(node, graph, elements, registry([projection, { ...projection, id: "workspace.two" }]), "workspace").error, /Ambiguous/);
+  assert.match(resolveNodePresentation(node, graph, elements, registry([{ ...projection, project: () => ({ invalid: undefined }) }]), "workspace").error, /not JSON/);
+});

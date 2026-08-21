@@ -15,10 +15,11 @@ test("RelationNode core and host do not import domain plugin suites or a3", asyn
 });
 
 test("external suites contain domain behavior outside the blank host", async () => {
-  const [intent, scene] = await Promise.all([
+  const [intent, sceneSources] = await Promise.all([
     readFile(new URL("plugins/intent/suite.ts", root), "utf8"),
-    readFile(new URL("plugins/scene/suite.ts", root), "utf8"),
+    sourceUnder("plugins/scene/"),
   ]);
+  const scene = sceneSources.map(({ source }) => source).join("\n");
   assert.match(intent, /registerExecutor\("intent\.evaluate"/);
   assert.match(scene, /registerLanguageProvider/);
   assert.match(scene, /"subject"/);

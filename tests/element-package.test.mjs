@@ -3,7 +3,7 @@ import test from "node:test";
 import { decodeElementPackage, encodeElementPackage } from "../app/_editor/plugin-editor/element-package.ts";
 import { decodeZip, encodeZip } from "../app/_editor/plugin-editor/zip-package.ts";
 
-const manifest = { format: "intent-element-plugin", schemaVersion: 2, runtimeAbi: "relation-element/1", id: "official.text", name: "Text", version: "1.0.0", entry: "entry.mjs",
+const manifest = { format: "intent-element-plugin", schemaVersion: 2, runtimeAbi: "relation-element/2", id: "official.text", name: "Text", version: "1.0.0", entry: "entry.mjs",
   elements: [{ id: "text", tag: "intent-text-preview", purpose: "preview" }], permissions: [], sourcePaths: ["source/index.js"],
   sourceSha256: "0".repeat(64), entrySha256: "0".repeat(64), communityTags: ["source-reviewed"], redistributable: true };
 

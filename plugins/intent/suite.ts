@@ -37,7 +37,7 @@ const typeIds=${JSON.stringify(INTENT_TYPES)};
 export default function register(host){
   const releases=[];
   for(const nodeId of typeIds) releases.push(host.registerType({type:{nodeId,relationId:"identity"},name:nodeId.split(".").at(-1),element:{pluginId:"${INTENT_ELEMENT_PLUGIN_ID}",elementId:"node"},matches(node){return target(node,"type")?.nodeId===nodeId}}));
-  releases.push(host.registerProjection({id:"intent.node",matches(node){return target(node,"type")?.nodeId?.startsWith("intent.type.")},element:{pluginId:"${INTENT_ELEMENT_PLUGIN_ID}",elementId:"node"}}));
+  releases.push(host.registerProjection({id:"intent.node",purpose:"node",matches(node){return target(node,"type")?.nodeId?.startsWith("intent.type.")},element:{pluginId:"${INTENT_ELEMENT_PLUGIN_ID}",elementId:"node"}}));
   releases.push(host.registerValidator(graph=>{const parents=new Map();for(const node of Object.values(graph.nodes)){for(const relation of node.relations.filter(r=>r.predicate.nodeId==="intent.predicate.contains")){const child=relation.object.target?.nodeId;if(!child)throw new Error("contains must reference a node");if(parents.has(child)&&parents.get(child)!==node.id)throw new Error("Intent child has multiple parents");parents.set(child,node.id)}}for(const start of parents.keys()){const seen=new Set(),path=[];let at=start;while(at){if(seen.has(at))throw new Error("Intent contains cycle: "+[...path,at].join(" -> "));seen.add(at);path.push(at);at=parents.get(at)}}}));
   releases.push(host.registerCommand("intent.rename",(input,graph)=>{const node=graph.nodes[input.nodeId],old=node?.relations.find(r=>r.id==="name");if(!old||typeof input.name!=="string")throw new Error("Invalid rename command");return{schemaVersion:1,baseRevision:graph.revision,operations:[{op:"put-relation",nodeId:node.id,relation:{...old,object:{kind:"const",value:input.name}}}]}}));
   releases.push(host.registerExecutor("intent.evaluate",async(node,graph)=>{const output={};for(const relation of node.relations.filter(r=>r.predicate.nodeId==="intent.predicate.output")){const evaluate=o=>o.kind==="const"?o.value:o.kind==="ref"?graph.nodes[o.target.nodeId]?.relations.find(r=>r.id===o.target.relationId)?.object?.value:{op:o.op,args:o.args.map(evaluate)};output[relation.id]=evaluate(relation.object)}return output}));
@@ -79,7 +79,7 @@ export async function buildIntentPluginSuite() {
   const nodeArchive = await encodeNodeTypePackage(nodeManifest, intentOntology, nodeTypeSource, { "source/index.js": nodeTypeSource });
   const nodeType = await decodeNodeTypePackage(nodeArchive);
   const collection: NodeCollectionPlugin = {
-    manifest: { format: "intent-node-collection", schemaVersion: 2, id: INTENT_COLLECTION_ID, name: "Intent Workspace", version: "1.0.0", rootNodeIds: ["intent.application-root"], dependencies: { nodeTypes: [{ id: INTENT_NODE_PLUGIN_ID, version: "1.0.0" }], elements: [{ id: INTENT_ELEMENT_PLUGIN_ID, version: "1.0.0" }] } },
+    manifest: { format: "intent-node-collection", schemaVersion: 2, id: INTENT_COLLECTION_ID, name: "Intent Workspace", version: "2.0.0", rootNodeIds: ["intent.application-root"], dependencies: { nodeTypes: [{ id: INTENT_NODE_PLUGIN_ID, version: "2.0.0" }], elements: [{ id: INTENT_ELEMENT_PLUGIN_ID, version: "2.0.0" }] } },
     graph: intentCollectionGraph,
     workspace: { views: { kind: "workbench", panels: ["tree", "canvas", "properties"] }, initialSelection: ["intent.business-root"] },
   };

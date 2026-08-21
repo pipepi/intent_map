@@ -1,24 +1,24 @@
 "use client";
 
-import { useRef } from "react";
 import type { PortableCollection } from "./collection-package";
 import type { ElementPluginPackage, NodeTypePluginPackage } from "./package-types";
 import type { WorkspaceSession } from "./types";
 import styles from "./editor.module.css";
 
-export function PluginPanel({ elements, nodeTypes, disabledElements, disabledNodeTypes, collections, workspaces, activeWorkspaceId, message, onInstall, onDisableElement, onDisableNodeType, onUninstallElement, onUninstallNodeType, onOpenCollection, onActivateWorkspace }: {
+export function PluginPanel({ elements, nodeTypes, disabledElements, disabledNodeTypes, collections, workspaces, activeWorkspaceId, message, collapsed, onToggle, onInstall, onDisableElement, onDisableNodeType, onUninstallElement, onUninstallNodeType, onOpenCollection, onActivateWorkspace }: {
   elements: ElementPluginPackage[]; nodeTypes: NodeTypePluginPackage[]; collections: PortableCollection[];
   disabledElements: Set<string>; disabledNodeTypes: Set<string>;
   workspaces: WorkspaceSession[]; activeWorkspaceId?: string; message: string;
+  collapsed: boolean; onToggle: () => void;
   onInstall: (file: File) => void; onDisableElement: (id: string) => void; onDisableNodeType: (id: string) => void;
   onUninstallElement: (id: string) => void; onUninstallNodeType: (id: string) => void;
   onOpenCollection: (collection: PortableCollection) => void | Promise<void>; onActivateWorkspace: (id: string) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  return <aside className={styles.panel} data-testid="plugin-manager">
-    <div className={styles.panelTitle}><div><span>RELATION HOST</span><h2>三层外置插件</h2></div></div>
-    <div className={styles.panelActions}><button className={styles.primary} onClick={() => inputRef.current?.click()}>安装 V2 ZIP</button></div>
-    <input ref={inputRef} type="file" accept=".zip" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onInstall(file); event.currentTarget.value = ""; }} />
+  return <aside className={`${styles.panel} ${collapsed ? styles.panelCollapsed : ""}`} data-testid="plugin-manager">
+    <div className={styles.panelTitle}><div><span>RELATION HOST</span><h2>三层外置插件</h2></div><button onClick={onToggle}>{collapsed ? "展开" : "收起"}</button></div>
+    {collapsed ? null : <>
+    <div className={styles.panelActions}><label className={styles.primary} htmlFor="relation-plugin-zip">安装 V2 ZIP</label></div>
+    <input id="relation-plugin-zip" type="file" accept=".zip" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onInstall(file); event.currentTarget.value = ""; }} />
     <p className={styles.message} data-testid="status-message">{message}</p>
 
     <h3>元素插件 <small>主窗口同权执行</small></h3>
@@ -49,6 +49,6 @@ export function PluginPanel({ elements, nodeTypes, disabledElements, disabledNod
       <div><strong>{workspace.source.id}</strong><button disabled={activeWorkspaceId === workspace.id} onClick={() => onActivateWorkspace(workspace.id)}>切换</button></div>
       <small>{workspace.id}<br />revision {workspace.graph.revision}</small>
       {!!workspace.capabilityDiagnostics.length && <small>能力诊断：{workspace.capabilityDiagnostics.map((item) => `${item.dependency.id}@${item.dependency.version} ${item.message}`).join("；")}</small>}
-    </article>) : <div className={styles.empty}>打开集合后创建独立工作区。</div>}</div>
+    </article>) : <div className={styles.empty}>打开集合后创建独立工作区。</div>}</div></>}
   </aside>;
 }

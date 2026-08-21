@@ -38,7 +38,7 @@ const refs = (value: unknown, label: string) => {
 export function assertElementManifest(value: unknown): asserts value is ElementPluginManifest {
   const item = record(value, "manifest");
   exactKeys(item, ["format", "schemaVersion", "runtimeAbi", "id", "name", "version", "entry", "elements", "permissions", "sourcePaths", "sourceSha256", "entrySha256", "communityTags", "redistributable"], "manifest");
-  if (item.format !== "intent-element-plugin" || item.schemaVersion !== 2 || item.runtimeAbi !== "relation-element/1" || item.entry !== "entry.mjs") throw new Error("element manifest format is invalid or obsolete");
+  if (item.format !== "intent-element-plugin" || item.schemaVersion !== 2 || item.runtimeAbi !== "relation-element/2" || item.entry !== "entry.mjs") throw new Error("element manifest format is invalid or obsolete");
   string(item.id, "id", ID); string(item.name, "name"); string(item.version, "version", VERSION);
   string(item.sourceSha256, "sourceSha256", SHA); string(item.entrySha256, "entrySha256", SHA);
   strings(item.permissions, "permissions"); strings(item.sourcePaths, "sourcePaths", false); strings(item.communityTags, "communityTags");
@@ -55,7 +55,7 @@ export function assertElementManifest(value: unknown): asserts value is ElementP
 export function assertNodeTypeManifest(value: unknown): asserts value is NodeTypePluginManifest {
   const item = record(value, "node type manifest");
   exactKeys(item, ["format", "schemaVersion", "runtimeAbi", "id", "name", "version", "entry", "ontology", "elementDependencies", "permissions", "typeNodeIds", "sourcePaths", "sourceSha256", "entrySha256", "redistributable"], "node type manifest");
-  if (item.format !== "intent-node-type-plugin" || item.schemaVersion !== 2 || item.runtimeAbi !== "relation-node-type/1" || item.entry !== "entry.mjs" || item.ontology !== "ontology.json") throw new Error("node type manifest format is invalid or obsolete");
+  if (item.format !== "intent-node-type-plugin" || item.schemaVersion !== 2 || item.runtimeAbi !== "relation-node-type/2" || item.entry !== "entry.mjs" || item.ontology !== "ontology.json") throw new Error("node type manifest format is invalid or obsolete");
   string(item.id, "id", ID); string(item.name, "name"); string(item.version, "version", VERSION);
   string(item.sourceSha256, "sourceSha256", SHA); string(item.entrySha256, "entrySha256", SHA);
   refs(item.elementDependencies, "elementDependencies"); strings(item.permissions, "permissions");

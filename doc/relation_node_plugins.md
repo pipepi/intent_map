@@ -8,7 +8,8 @@
 
 ## 插件边界
 
-核心提供三类 V2 ABI：
+核心提供三类 V2 包协议。可执行包的 runtime ABI 是 `relation-element/2` 和
+`relation-node-type/2`；包 schema 仍为 2，旧 `/1` runtime ABI 会被明确拒绝：
 
 1. 元素插件用 Web Component 呈现节点、关系和工作区，通过事件提出操作请求。
 2. 节点类型插件以可执行 ESM 注册领域 ontology、识别、校验、命令、执行、投影与语言能力。
@@ -16,9 +17,14 @@
 
 同一工作区可被多个节点类型插件共同解释，但每个 type ref 只能有一个活动 provider。打开集合总是复制为独立 workspace。集合导出沿 predicate/ref 和组合关系求完整可达闭包；导入冲突通过 node/relation ID 映射递归重写。
 
+Collection 的 `rootNodeIds` 会原序复制到 workspace。宿主先为每个根节点解析
+`purpose: "workspace"` 的投影；多个根可同时形成多个投影实例，宽屏并排、窄屏纵向排列。
+每个实例可持久保存自己的相机、选择和视图关系，同时观察同一份领域数据。投影函数必须是
+同步纯计算并返回 JSON；匹配、计算或 JSON 校验失败只降级对应实例，不中断整个工作区。
+
 ## 外置领域套件
 
-`plugins/intent/` 和 `plugins/scene/` 分别构造 Element、Node Type、Collection 三个包。核心源码不导入这些目录，空白启动也不自动安装。Intent 的端口、作用域、执行和工作台，以及 Scene 的事件几何、时间视图与中文语言解析，均由对应插件注册并投影。
+`plugins/intent/` 和 `plugins/scene/` 分别构造 Element、Node Type、Collection 三个包。核心源码不导入这些目录，空白启动也不自动安装。Intent 的端口、作用域、执行和工作台，以及 Scene 的事件几何、时间视图与中文语言解析，均由对应插件注册并投影。Scene collection 以同为 `scene.type.projection-instance` 的象限和管道节点为有序根；它们独立保存视图状态，并通过 `observes` 观察同一个 `scene.type.scene` 世界节点。
 
 节点类型代码和元素代码都在浏览器主窗口运行，拥有宿主同等 DOM、存储和网络权限；系统不把它们描述为沙箱。manifest 权限与哈希仅用于信息披露和完整性校验。ESM lexer 会拒绝 entry 中直接出现的静态、动态和重导出依赖，以维持单文件 ABI，但该检查不构成对任意 JavaScript 的安全隔离。
 

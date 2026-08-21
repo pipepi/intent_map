@@ -33,6 +33,7 @@ export function RelationHost() {
   if (!workspaceStoreRef.current) workspaceStoreRef.current = new WorkspaceSessionStore([], setWorkspaces);
   const workspaceStore = workspaceStoreRef.current;
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>();
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [message, setMessage] = useState("核心为空白宿主；请安装 V2 外置插件或集合 ZIP。 ");
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
 
@@ -75,7 +76,7 @@ export function RelationHost() {
   async function openCollection(portable: PortableCollection) {
     const { collection } = portable;
     const workspace: WorkspaceSession = { ...createCollectionWorkspace(collection, crypto.randomUUID(), portable.contentSha256), undo: [], redo: [], capabilityDiagnostics: [] };
-    workspaceStore.add(workspace); setActiveWorkspaceId(workspace.id);
+    workspaceStore.add(workspace); setActiveWorkspaceId(workspace.id); setPanelCollapsed(true);
     const diagnostics = await activateCollectionDependencies(portable, {
       elements: () => elements.list(),
       nodeTypes: () => nodeTypes.list(),
@@ -111,12 +112,12 @@ export function RelationHost() {
     <header className={styles.header}><div><span>RELATION NODE HOST</span><h1>三层外置插件工作区</h1></div>
       <div className={styles.addArea}><button onClick={() => history("undo")} disabled={!active?.undo.length}>撤销</button> <button onClick={() => history("redo")} disabled={!active?.redo.length}>重做</button></div>
     </header>
-    <div className={styles.layout}>
+    <div className={`${styles.layout} ${panelCollapsed ? styles.layoutPanelCollapsed : ""}`}>
       {active ? <NodeCanvas workspace={active} elements={elements} nodeTypes={nodeTypes}
         onSelectionChange={(selection) => { try { workspaceStore.select(active.id, selection); } catch (error) { setMessage(error instanceof Error ? error.message : "选择失败"); } }}
         onRequest={request} /> : <section className={styles.canvasWrap}><div className={styles.empty}>空白 RelationNode 核心<br />安装节点集合插件后打开独立工作区。</div></section>}
       <PluginPanel elements={elementPackages} nodeTypes={nodeTypePackages} disabledElements={disabledElements} disabledNodeTypes={disabledNodeTypes} collections={collections} workspaces={workspaces}
-        activeWorkspaceId={activeWorkspaceId} message={message} onInstall={install}
+        activeWorkspaceId={activeWorkspaceId} message={message} collapsed={panelCollapsed} onToggle={() => setPanelCollapsed((value) => !value)} onInstall={install}
         onDisableElement={(id) => { elements.disable(id); setDisabledElements((current) => new Set(current).add(id)); setMessage(`已禁用 ${id}；刷新后清除已执行代码`); }}
         onDisableNodeType={(id) => { let cleanupError: unknown; try { nodeTypes.disable(id); } catch (error) { cleanupError = error; } setDisabledNodeTypes((current) => new Set(current).add(id)); setMessage(cleanupError instanceof Error ? cleanupError.message : `已禁用 ${id}；刷新后清除已执行代码`); }}
         onUninstallElement={(id) => { elements.uninstall(id); setElementPackages((current) => current.filter((item) => item.manifest.id !== id)); setDisabledElements((current) => { const next = new Set(current); next.delete(id); return next; }); setMessage(`已卸载元素插件 ${id}；已注册标签刷新后清除`); }}
