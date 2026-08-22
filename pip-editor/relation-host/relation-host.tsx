@@ -16,7 +16,7 @@ import { SystemPluginManager } from "./view/system-plugin-manager-element.tsx";
 import { WorkspaceTabs } from "./view/workspace-tabs.tsx";
 import { CloseWorkspaceDialog } from "./view/close-workspace-dialog.tsx";
 import { graphFingerprint, WorkspaceSessionStore, type WorkspaceSession } from "./workspace/workspace-store.ts";
-import { normalizeFreeLayout } from "./workspace/view-state.ts";
+import { normalizeFreeLayout, preserveSystemWindows } from "./workspace/view-state.ts";
 import styles from "./view/relation-host.module.css";
 
 const scratchWorkspace = (): WorkspaceSession => {
@@ -39,7 +39,7 @@ export function RelationHost() {
   const [workspaces, setWorkspaces] = useState(initialRef.current), workspaceStoreRef = useRef<WorkspaceSessionStore | null>(null);
   if (!workspaceStoreRef.current) workspaceStoreRef.current = new WorkspaceSessionStore(initialRef.current, setWorkspaces);
   const workspaceStore = workspaceStoreRef.current, [activeWorkspaceId, setActiveWorkspaceId] = useState(initialRef.current[0].id);
-  const [message, setMessage] = useState("核心为空白宿主；Alt/Option + 拖拽空白画布可创建节点或召唤插件管理器。"), [pendingClose, setPendingClose] = useState<string>();
+  const [message, setMessage] = useState("核心为空白宿主；Alt/Option + 左键拖拽，或按一下空格，可打开节点创建器。"), [pendingClose, setPendingClose] = useState<string>();
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId), launchRead = useRef(false);
   const nameFor = (workspace: WorkspaceSession) => workspace.source.id === "host.new-tab" ? "新标签" : nodeMaps.find((item) => item.contentSha256 === workspace.source.contentSha256)?.nodeMap.manifest.name ?? workspace.source.id;
   const persistTrust = async (hashes: string[]) => location.protocol === "pip:" ? trustPackageHashes(hashes) : browserTrustHashes(hashes);
@@ -68,7 +68,10 @@ export function RelationHost() {
     const base = createNodeMapWorkspace(portable.nodeMap, crypto.randomUUID(), portable.contentSha256);
     const workspace: WorkspaceSession = { ...base, undo: [], redo: [], capabilityDiagnostics: [], savedGraphFingerprint: graphFingerprint(base.graph) };
     const reusable = active?.source.id === "host.new-tab" && !active.rootNodeIds.length && active.graph.revision === 0;
-    if (reusable && active) { workspace.id = active.id; workspaceStore.replace(active.id, workspace); setActiveWorkspaceId(active.id); }
+    if (reusable && active) {
+      workspace.id = active.id; workspace.views = preserveSystemWindows(workspace.views, active.views, active.rootNodeIds);
+      workspaceStore.replace(active.id, workspace); setActiveWorkspaceId(active.id);
+    }
     else { workspaceStore.add(workspace); setActiveWorkspaceId(workspace.id); }
     setMessage(`${status === "installed" ? "已打开" : "已再次打开"} Node Map ${portable.nodeMap.manifest.name}`);
   }
@@ -77,6 +80,11 @@ export function RelationHost() {
     void readHostLaunchPackage().then((bytes) => bytes && importPip(bytes, { confirmTrust: () => true, trustHashes: persistTrust, installElement, installNodeType, openNodeMap, uninstallElement: rollbackElement, uninstallNodeType: rollbackNodeType })).catch((error) => setMessage(error instanceof Error ? error.message : "启动 A5 失败"));
   // Native launch is a one-shot handoff.
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const preventPageZoom = (event: WheelEvent) => { if (event.ctrlKey || event.metaKey) event.preventDefault(); };
+    addEventListener("wheel", preventPageZoom, { passive: false });
+    return () => removeEventListener("wheel", preventPageZoom);
   }, []);
   async function request(request: RelationElementRequest) {
     if (!active) return; const workspaceId = active.id;

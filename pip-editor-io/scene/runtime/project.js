@@ -66,7 +66,7 @@ export function projectScene(mode, view, graph, selection = []) {
     relations: roleRelations(selectedNode).map(({ role, ref }) => ({ role, nodeId: ref.nodeId, name: nameOf(graph, ref.nodeId), kind: kindOf(graph.nodes[ref.nodeId]) })),
   } : null;
   return {
-    mode, viewId: view.id, projectionId: projectionId(view), camera, selectedId: selected,
+    mode, viewId: view.id, projectionId: projectionId(view), camera, selectedId: selected ?? null,
     counts: { entities: entities.length, events: events.length, relations: members.reduce((sum, node) => sum + roleRelations(node).length, 0) },
     editable: mode === "quadrant" && camera.zRotation === 90, entities: entityData, events: eventData,
     relationLines, entityLines, axes, inspector,

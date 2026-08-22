@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { applyRelationPatch } from "../pip-editor/relation/index.ts";
 import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
+import { assertJsonValue } from "../pip-editor/relation-host/contracts/json-validation.ts";
 import { buildScenePluginSuite, SCENE_BUSINESS_IDS } from "../pip-editor-io/scene/suite.ts";
 
 const dataModule = async (source) => import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
@@ -14,13 +15,15 @@ async function installed() {
   return { suite, registry };
 }
 
-test("Scene collection has one world and two same-type projection roots", async () => {
+test("Scene collection opens with one world and no projection roots", async () => {
   const { suite } = await installed(), { graph, manifest } = suite.nodeMap;
-  assert.deepEqual(manifest.rootNodeIds, ["scene.view.quadrant", "scene.view.tube"]);
+  assert.deepEqual(manifest.rootNodeIds, []);
+  assert.deepEqual(suite.nodeMap.workspace.views.projections, {});
+  assert.deepEqual(suite.nodeMap.workspace.initialSelection, []);
   assert.equal(SCENE_BUSINESS_IDS.length, 21);
   const scene = graph.nodes["scene.today"];
   assert.equal(byPredicate(scene, "contains").length, 21);
-  for (const id of manifest.rootNodeIds) {
+  for (const id of ["scene.view.quadrant", "scene.view.tube"]) {
     const view = graph.nodes[id];
     assert.equal(byPredicate(view, "type")[0].object.target.nodeId, "scene.type.projection-instance");
     assert.equal(byPredicate(view, "observes")[0].object.target.nodeId, scene.id);
@@ -51,6 +54,15 @@ test("quadrant and tube project the same world with independent view state", asy
   assert.equal(eventType.label(graph.nodes["scene.take-chicken-home"], graph), "小明把烤鸡带回家");
 });
 
+test("Scene projections remain JSON when a new view has no selection", async () => {
+  const { suite, registry } = await installed(), graph = suite.nodeMap.graph;
+  for (const projection of registry.projections()) {
+    const view = graph.nodes[projection.id.endsWith("quadrant") ? "scene.view.quadrant" : "scene.view.tube"];
+    const data = projection.project({ workspaceId: "workspace.scene", rootNodeIds: [], workspaceView: {}, graph, node: view, selection: [] });
+    assert.doesNotThrow(() => assertJsonValue(data)); assert.equal(data.selectedId, null);
+  }
+});
+
 test("Scene selection is an ephemeral scoped request while commands mutate camera and world position", async () => {
   const { suite, registry } = await installed();
   const commands = registry.commands(); let graph = suite.nodeMap.graph;
@@ -76,6 +88,7 @@ test("Scene A4 registers creators for new quadrant and tube projection roots", a
   const context = { workspaceId: "workspace.scene", graph: suite.nodeMap.graph, rootNodeIds: suite.nodeMap.manifest.rootNodeIds, worldPosition: { x: 400, y: 300 } };
   const result = await creators[0].create(context);
   assert.equal(result.patch.baseRevision, 0); assert.equal(result.patch.operations[0].op, "put-node");
+  assert.deepEqual(byPredicate(result.patch.operations[0].node, "camera")[0].object.value, { zRotation: 135, yAxisLength: 300, zAxisLength: 300, xZoom: 1, xPan: 0 });
   assert.deepEqual(result.addRootNodeIds, [result.patch.operations[0].node.id]);
   assert.equal(result.preferredProjection.projectionId, result.patch.operations[0].node.id);
 });

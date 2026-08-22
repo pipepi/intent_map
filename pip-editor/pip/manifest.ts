@@ -56,7 +56,7 @@ const validNodeTypeManifest = (manifest: Extract<PipManifest, { layer: "a4" }>) 
   manifest.nodeTypeAbi === "relation-node-type/2" && manifest.entry === "entry.mjs" && manifest.typeNodeIds.length > 0 &&
   manifest.typeNodeIds.every(Boolean) && manifest.dependencies.length > 0 && manifest.dependencies.every(validRef) && validExecutableFields(manifest);
 const validNodeMapManifest = (manifest: Extract<PipManifest, { layer: "a5" }>) =>
-  manifest.nodeMapAbi === "relation-node-map/1" && manifest.rootNodeIds.length > 0 && manifest.rootNodeIds.every(Boolean) &&
+  manifest.nodeMapAbi === "relation-node-map/1" && Array.isArray(manifest.rootNodeIds) && manifest.rootNodeIds.every(Boolean) &&
   manifest.dependencies.length > 0 && manifest.dependencies.every(validRef) && (!manifest.launchProfile ||
     (manifest.launchProfile.schemaVersion === 1 && validRef(manifest.launchProfile.loader) && validRef(manifest.launchProfile.editor)));
 export const pipFilename = (manifest: PipManifest) => {

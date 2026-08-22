@@ -3,7 +3,7 @@ import { isSceneType } from "./selectors.js";
 const identity = (nodeId) => ({ nodeId, relationId: "identity" });
 const ref = (id, predicate, nodeId) => ({ id, predicate: identity(`scene.predicate.${predicate}`), object: { kind: "ref", target: identity(nodeId) }, relations: [] });
 const constant = (id, predicate, value) => ({ id, predicate: identity(`scene.predicate.${predicate}`), object: { kind: "const", value }, relations: [] });
-const camera = (mode) => mode === "quadrant" ? { zRotation: 135, yAxisLength: 200, zAxisLength: 200, xZoom: 1, xPan: 0 } : { xZoom: 1, xPan: 0 };
+const camera = (mode) => mode === "quadrant" ? { zRotation: 135, yAxisLength: 300, zAxisLength: 300, xZoom: 1, xPan: 0 } : { xZoom: 1, xPan: 0 };
 
 const createProjection = (mode) => ({
   id: `scene.create-${mode}`,

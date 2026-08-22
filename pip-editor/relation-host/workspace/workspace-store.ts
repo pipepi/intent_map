@@ -149,7 +149,7 @@ export class WorkspaceSessionStore {
       if (!roots.includes(id)) throw new Error(`Creator projection ${id} is not a root`);
       const width = result.preferredProjection.width, height = result.preferredProjection.height;
       const frame = { x: Math.max(0, Math.min(views.world.width - width, point.x)), y: Math.max(0, Math.min(views.world.height - height, point.y)), width, height, resizeMode: "simple" as const };
-      assertWorkspaceFrame(frame, views.world); views.projections[id] = frame;
+      assertWorkspaceFrame(frame, views.world); views.projections[id] = frame; views.activeWindowId = id;
     }
     const undo = { patch: applied.inverse, rootNodeIds: [...workspace.rootNodeIds] };
     const next = { ...workspace, graph: applied.graph, rootNodeIds: roots, views, undo: [...workspace.undo, undo], redo: [] };

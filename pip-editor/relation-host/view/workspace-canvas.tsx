@@ -1,5 +1,5 @@
 /** Renders relation nodes or a camera-controlled free-layout world of workspace projections. */
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { RelationElementRequest, WorkspacePoint } from "../contracts/package-types.ts";
 import type { RelationRef } from "../../relation/index.ts";
 import type { RelationNode } from "../../relation/index.ts";
@@ -25,14 +25,22 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
   const nodes = Object.values(workspace.graph.nodes), roots = workspace.rootNodeIds.map((id) => workspace.graph.nodes[id]).filter(Boolean);
   const free = isFree(workspace.views), normalized = useMemo(() => normalizeFreeLayout(workspace.views, workspace.rootNodeIds), [workspace.views, workspace.rootNodeIds]);
   const [previewCamera, setPreviewCamera] = useState<FreeLayoutWorkspaceViews["camera"]>(), [creator, setCreator] = useState<{ screen: WorkspacePoint; world: WorkspacePoint; origin?: RelationRef }>();
-  const [wire, setWire] = useState<{ from: WorkspacePoint; to: WorkspacePoint }>(), viewport = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | undefined>(undefined), space = useRef(false);
+  const [wire, setWire] = useState<{ from: WorkspacePoint; to: WorkspacePoint }>(), viewport = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | undefined>(undefined);
   const touches = useRef(new Map<number, WorkspacePoint>()), pinch = useRef<{ distance: number; world: WorkspacePoint; camera: FreeLayoutWorkspaceViews["camera"] } | undefined>(undefined);
-  const views = previewCamera ? { ...normalized, camera: previewCamera } : normalized;
+  const contentScales = useRef(new Map<string, number>());
+  const views = useMemo(() => previewCamera ? { ...normalized, camera: previewCamera } : normalized, [normalized, previewCamera]);
   useEffect(() => {
-    const down = (event: KeyboardEvent) => { if (event.code === "Space") space.current = true; if (event.key === "Escape") { setCreator(undefined); setWire(undefined); } };
-    const up = (event: KeyboardEvent) => { if (event.code === "Space") space.current = false; };
-    addEventListener("keydown", down); addEventListener("keyup", up); return () => { removeEventListener("keydown", down); removeEventListener("keyup", up); };
-  }, []);
+    const down = (event: KeyboardEvent) => {
+      const interactive = event.target instanceof HTMLElement && (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(event.target.tagName) || event.target.isContentEditable);
+      if (event.code === "Space" && !interactive) {
+        event.preventDefault(); if (event.repeat || !viewport.current) return;
+        const screen = { x: viewport.current.clientWidth / 2, y: viewport.current.clientHeight / 2 };
+        setCreator({ screen, world: screenToWorld(screen, views) });
+      }
+      if (event.key === "Escape") { setCreator(undefined); setWire(undefined); }
+    };
+    addEventListener("keydown", down); return () => removeEventListener("keydown", down);
+  }, [views]);
   const scopedSelections = workspace.scopedSelections ?? {};
   const hasWorkspaceProjection = roots.some((node) => nodeTypes.projections().some((projection) => projection.purpose === "workspace" && (() => { try { return projection.matches(node, workspace.graph); } catch { return true; } })()));
   const displayName = (nodeId: string) => {
@@ -45,9 +53,34 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
     try { return item.accepts({ workspaceId: workspace.id, graph: workspace.graph, rootNodeIds: workspace.rootNodeIds, worldPosition: creator?.world ?? { x: 0, y: 0 }, origin: creator?.origin }); } catch { return false; }
   }).map((item) => ({ id: item.id, label: item.label, description: item.description, category: item.category, icon: item.icon, provider: "node-type" as const }))];
   const persistCamera = (next: FreeLayoutWorkspaceViews["camera"]) => { setPreviewCamera(undefined); onViewsChange({ ...normalized, camera: next }); };
+  useEffect(() => {
+    const element = viewport.current; if (!free || !element) return;
+    const handle = (event: globalThis.WheelEvent) => {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        const path = event.composedPath() as HTMLElement[], window = path.find((item) => item?.dataset?.nodeId), windowId = window?.dataset.nodeId;
+        const frame = windowId ? views.projections[windowId] : undefined;
+        if (windowId && frame && views.activeWindowId === windowId) {
+          const scaleKey = `${workspace.id}:${windowId}`, current = contentScales.current.get(scaleKey) ?? frame.contentScale ?? 1;
+          const contentScale = Math.max(.5, Math.min(2, current * Math.exp(-event.deltaY * .002)));
+          contentScales.current.set(scaleKey, contentScale);
+          onViewsChange({ ...normalized, projections: { ...normalized.projections, [windowId]: { ...frame, contentScale } } });
+          return;
+        }
+        const point = pointIn(element, event.clientX, event.clientY), before = screenToWorld(point, views);
+        const scale = Math.max(.5, Math.min(2, views.camera.scale * Math.exp(-event.deltaY * .002)));
+        setPreviewCamera(undefined); onViewsChange({ ...normalized, camera: { scale, x: point.x - before.x * scale, y: point.y - before.y * scale } });
+      } else {
+        setPreviewCamera(undefined); onViewsChange({ ...normalized, camera: { ...views.camera, x: views.camera.x - event.deltaX, y: views.camera.y - event.deltaY } });
+      }
+    };
+    element.addEventListener("wheel", handle, { passive: false });
+    return () => element.removeEventListener("wheel", handle);
+  }, [free, normalized, onViewsChange, views, workspace.id]);
   const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!free || event.button !== 0 && event.button !== 1) return;
     const path = event.nativeEvent.composedPath() as HTMLElement[], port = path.find((item) => item?.dataset?.relationOriginNode);
+    if (path.some((item) => ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"].includes(item?.tagName))) return;
     if (!port && path.some((item) => item?.dataset?.nodeId)) return;
     const element = viewport.current!, start = pointIn(element, event.clientX, event.clientY);
     if (event.pointerType === "touch") {
@@ -77,14 +110,6 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
     if (current.kind === "pan") { if (current.moved) onViewsChange(views); setPreviewCamera(undefined); }
     else { setWire(undefined); if (current.moved) setCreator({ screen, world: screenToWorld(screen, views), origin: current.origin }); }
   };
-  const wheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (!free) return; event.preventDefault();
-    if (event.ctrlKey || event.metaKey) {
-      const point = pointIn(event.currentTarget, event.clientX, event.clientY), before = screenToWorld(point, views);
-      const scale = Math.max(.5, Math.min(2, views.camera.scale * Math.exp(-event.deltaY * .002)));
-      persistCamera({ scale, x: point.x - before.x * scale, y: point.y - before.y * scale });
-    } else persistCamera({ ...views.camera, x: views.camera.x - event.deltaX, y: views.camera.y - event.deltaY });
-  };
   const fit = () => {
     const frames = [...Object.values(views.projections), ...Object.values(views.systemWindows).map((item) => item.frame)]; if (!frames.length || !viewport.current) return;
     const minX = Math.min(...frames.map((item) => item.x)), minY = Math.min(...frames.map((item) => item.y));
@@ -95,7 +120,7 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
   if (!free) return <LegacyCanvas workspace={workspace} roots={roots} nodes={nodes} hasWorkspaceProjection={hasWorkspaceProjection} elements={elements} nodeTypes={nodeTypes} pluginManager={pluginManager} onSelectionChange={onSelectionChange} onRequest={onRequest} onOpenPluginManager={onOpenPluginManager} onClosePluginManager={onClosePluginManager} />;
   return <section className={styles.canvasWrap} data-testid="relation-workspace">
     <div className={styles.canvasInfo}>RelationGraph · revision {workspace.graph.revision} · {nodes.length} 个节点 · {status}</div>
-    <div ref={viewport} className={`${styles.canvas} ${styles.freeViewport}`} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setWire(undefined); }} onWheel={wheel}>
+    <div ref={viewport} className={`${styles.canvas} ${styles.freeViewport}`} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setWire(undefined); }}>
       <div className={styles.freeWorld} style={{ width: views.world.width, height: views.world.height, transform: `translate(${views.camera.x}px,${views.camera.y}px) scale(${views.camera.scale})` }}>
         {roots.map((node) => <WorkspaceWindow key={node.id} id={node.id} frame={views.projections[node.id]} views={views} active={views.activeWindowId === node.id} onActivate={() => onActivateWindow(node.id)} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame })}>
           <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={views} graph={workspace.graph} node={node} selection={scopedSelections[node.id] ?? workspace.selection} purpose="workspace" elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />

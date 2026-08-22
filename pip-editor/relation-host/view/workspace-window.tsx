@@ -56,7 +56,7 @@ export function WorkspaceWindow({ id, frame, views, children, system = false, ac
       if (path.some((item) => item?.dataset?.resizeToggle !== undefined)) onFrame({ ...preview, resizeMode: preview.resizeMode === "simple" ? "full" : "simple" });
       if (path.some((item) => item?.dataset?.windowClose !== undefined)) onClose?.();
     }}>
-    {children}
+    <div className={styles.windowViewport} data-window-viewport><div className={styles.windowContent} style={{ zoom: preview.contentScale ?? 1 }}>{children}</div></div>
     {handles.map((direction) => <i key={direction} className={styles.resizeHandle} data-resize-direction={direction} data-direction={direction} />)}
   </article>;
 }

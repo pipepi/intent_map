@@ -6,7 +6,18 @@ import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
 
 const session = async () => {
   const suite = await buildScenePluginSuite();
-  return { ...createNodeMapWorkspace(suite.nodeMap, "workspace.test"), undo: [], redo: [], capabilityDiagnostics: [] };
+  const base = createNodeMapWorkspace(suite.nodeMap, "workspace.test");
+  base.rootNodeIds = ["scene.view.quadrant", "scene.view.tube"];
+  base.views = {
+    kind: "free-layout", world: { width: 2600, height: 1600 }, camera: { scale: 1, x: 0, y: 0 },
+    projections: {
+      "scene.view.quadrant": { x: 80, y: 80, width: 1120, height: 720, resizeMode: "simple" },
+      "scene.view.tube": { x: 1320, y: 80, width: 1120, height: 720, resizeMode: "simple" },
+    }, systemWindows: {},
+  };
+  base.selection = ["scene.deliver-breakfast"];
+  base.scopedSelections = { "scene.view.quadrant": ["scene.deliver-breakfast"], "scene.view.tube": ["scene.deliver-breakfast"] };
+  return { ...base, undo: [], redo: [], capabilityDiagnostics: [] };
 };
 
 test("workspace store validates before publishing and preserves state on failure", async () => {

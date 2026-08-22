@@ -52,7 +52,7 @@ export async function buildScenePluginSuite() {
   const nodeTypePip = await encodeNodeTypePackage(nodeManifest, sceneOntology, nodeTypeSource, nodeSources);
   const nodeType = await decodeNodeTypePackage(nodeTypePip);
   const nodeMap = {
-    manifest: baseNodeMapManifest(SCENE_NODE_MAP_ID, "小明的今天", ["scene.view.quadrant", "scene.view.tube"], [await exactPackageRef(nodeTypePip, nodeType.manifest)]),
+    manifest: baseNodeMapManifest(SCENE_NODE_MAP_ID, "小明的今天", [], [await exactPackageRef(nodeTypePip, nodeType.manifest)], "scene.today"),
     ...sceneNodeMapData,
   };
   const nodeMapPip = await encodeNodeMapPackage({ nodeMap, nodeTypes: [nodeType], elementPlugins: [element] });

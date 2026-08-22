@@ -6,8 +6,8 @@ const controls = (data) => {
   const camera = data.camera;
   const spatial = data.mode === "quadrant" ? [
     control("zRotation", "z 绕 y", camera.zRotation, 90, 180, 1, "°"),
-    control("yAxisLength", "y 轴长", camera.yAxisLength, 120, 280, 10),
-    control("zAxisLength", "z 轴长", camera.zAxisLength, 120, 280, 10),
+    control("yAxisLength", "y 轴长", camera.yAxisLength, 200, 400, 10),
+    control("zAxisLength", "z 轴长", camera.zAxisLength, 200, 400, 10),
   ].join("") : "";
   return `${spatial}${control("xZoom", "x 缩放", camera.xZoom, .5, 3, .1, "×")}${control("xPan", "x 平移", camera.xPan, -250, 250, 10)}<div class="counts">${data.counts.entities} 个实体 · ${data.counts.events} 个事件 · ${data.counts.relations} 条关系</div>`;
 };

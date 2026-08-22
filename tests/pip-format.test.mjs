@@ -100,7 +100,7 @@ test("PIP export filenames preserve manifest identity across every layer", () =>
         dependencies: [{ origin: "user", packageId: "test.a3", version: "1.0.0", releaseDate: "20260726", sha256: "c".repeat(64) }],
       } : {}),
       ...(layer === "a5" ? {
-        nodeMapAbi: "relation-node-map/1", rootNodeIds: ["sample.root"],
+        nodeMapAbi: "relation-node-map/1", rootNodeIds: [],
         dependencies: [{ origin: "user", packageId: "test.a4", version: "1.0.0", releaseDate: "20260726", sha256: "d".repeat(64) }],
       } : {}),
     };

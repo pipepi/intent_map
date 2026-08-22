@@ -34,7 +34,7 @@ export type RelationCommandHandler = (input: JsonValue, graph: RelationGraph) =>
 export type RelationExecutor = (node: RelationNode, graph: RelationGraph) => JsonValue | Promise<JsonValue>;
 export type WorkspacePoint = { x: number; y: number };
 export type WorkspaceWindowFrame = WorkspacePoint & {
-  width: number; height: number; resizeMode: "simple" | "full";
+  width: number; height: number; resizeMode: "simple" | "full"; contentScale?: number;
 };
 export type RelationCreationContext = {
   workspaceId: string; graph: RelationGraph; rootNodeIds: string[];

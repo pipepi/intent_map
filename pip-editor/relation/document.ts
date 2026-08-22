@@ -18,7 +18,7 @@ export function loadRelationDocument(value: unknown): RelationDocument {
   }
   const graph = value.graph;
   assertRelationGraph(graph);
-  if (!value.rootNodeIds.length || value.rootNodeIds.some((id) => typeof id !== "string" || !graph.nodes[id])) {
+  if (value.rootNodeIds.some((id) => typeof id !== "string" || !graph.nodes[id])) {
     throw new Error("Relation workspace contains an invalid root node");
   }
   JSON.stringify(value.workspace);

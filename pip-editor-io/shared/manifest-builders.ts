@@ -24,7 +24,7 @@ export const baseNodeTypeManifest = (id: string, name: string, typeNodeIds: stri
   redistributable: true, providedCapabilities: ["relation-node-type/2"], requiredCapabilities: ["relation-element/2"],
 });
 
-export const baseNodeMapManifest = (id: string, name: string, rootNodeIds: string[], dependencies: PipPackageRef[]): NodeMapManifest => ({
-  ...common(id, `${artifact(id)}_map`, name, rootNodeIds[0]), layer: "a5", nodeMapAbi: "relation-node-map/1",
+export const baseNodeMapManifest = (id: string, name: string, rootNodeIds: string[], dependencies: PipPackageRef[], packageRootNodeId = rootNodeIds[0] ?? id): NodeMapManifest => ({
+  ...common(id, `${artifact(id)}_map`, name, packageRootNodeId), layer: "a5", nodeMapAbi: "relation-node-map/1",
   rootNodeIds, dependencies, requiredCapabilities: ["relation-node-type/2"],
 });

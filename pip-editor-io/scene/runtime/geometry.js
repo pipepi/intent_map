@@ -44,7 +44,7 @@ export const eventCenter = (event, graph, pointById) => {
 };
 export const timeX = (hour) => Math.max(0, Math.min(1, (hour - TIME_START) / (TIME_END - TIME_START)));
 export const project = (point, mode, space = "timeline", camera = {}) => {
-  const { zRotation = 90, yAxisLength = 148, zAxisLength = 148, xZoom = 1, xPan = 0 } = camera;
+  const { zRotation = 90, yAxisLength = 300, zAxisLength = 300, xZoom = 1, xPan = 0 } = camera;
   const origin = mode === "tube" ? { x: space === "surface" ? 130 : 320, y: 285 } : { x: space === "surface" ? 70 : 250, y: 445 };
   const zScale = mode === "tube" ? 104 : zAxisLength, yScale = mode === "tube" ? 104 : yAxisLength;
   const rotation = zRotation * Math.PI / 180, viewedX = (point.x - 0.5) * xZoom + 0.5;

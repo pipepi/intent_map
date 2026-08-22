@@ -27,7 +27,9 @@
 .freeViewport:active { cursor:grabbing; }
 .freeWorld { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; }
 .freeWindow { position:absolute; z-index:2; min-width:0; min-height:0; overflow:visible; border-radius:14px; box-shadow:0 14px 42px #0008; }
-.freeWindow > :first-child { display:block; width:100%; height:100%; overflow:auto; border-radius:14px; }
+.windowViewport { width:100%; height:100%; overflow:auto; border-radius:14px; }
+.windowContent { width:100%; height:100%; transform-origin:0 0; }
+.windowContent > :first-child { display:block; width:100%; height:100%; }
 .systemWindow { z-index:8; border:1px solid #405083; background:#0d1226; }
 .resizeHandle { position:absolute; z-index:20; display:block; }
 .resizeHandle[data-direction="n"],.resizeHandle[data-direction="s"]{left:10px;right:10px;height:8px;cursor:ns-resize}.resizeHandle[data-direction="n"]{top:-4px}.resizeHandle[data-direction="s"]{bottom:-4px}
@@ -35,7 +37,7 @@
 .resizeHandle[data-direction="nw"],.resizeHandle[data-direction="ne"],.resizeHandle[data-direction="se"],.resizeHandle[data-direction="sw"]{width:14px;height:14px}.resizeHandle[data-direction="nw"]{left:-5px;top:-5px;cursor:nwse-resize}.resizeHandle[data-direction="ne"]{right:-5px;top:-5px;cursor:nesw-resize}.resizeHandle[data-direction="se"]{right:-5px;bottom:-5px;cursor:nwse-resize}.resizeHandle[data-direction="sw"]{left:-5px;bottom:-5px;cursor:nesw-resize}
 .creationWire { position:absolute; inset:0; z-index:40; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .creationWire line { stroke:#7da0ff; stroke-width:2; stroke-dasharray:6 5; }.creationWire circle{fill:#9ab2ff}
-.cameraControls { position:absolute; z-index:30; right:14px; bottom:14px; display:flex; align-items:center; gap:3px; padding:4px; border:1px solid #354064; border-radius:8px; background:#0d1328e8; box-shadow:0 8px 24px #0007; }
+.cameraControls { position:absolute; z-index:30; right:0; bottom:0; display:flex; align-items:center; gap:3px; padding:4px; border:1px solid #354064; border-right:0; border-bottom:0; border-radius:8px 0 0 0; background:#0d1328e8; box-shadow:-4px -4px 16px #0007; }
 .cameraControls button { min-width:30px; height:28px; border:0; border-radius:5px; color:#dbe3ff; background:#1a2342; cursor:pointer; }.cameraControls span{min-width:48px;color:#9eabd0;text-align:center;font:10px monospace}
 .creator { position:absolute; z-index:60; width:320px; max-height:420px; padding:9px; overflow:auto; border:1px solid #4a598c; border-radius:11px; background:#111831f5; box-shadow:0 22px 60px #000c; }
 .creator input { box-sizing:border-box; width:100%; padding:10px; border:1px solid #354268; border-radius:7px; color:#eef2ff; background:#090e20; outline:none; }.creator>div{display:grid;gap:4px;margin-top:8px}.creator button{display:flex;gap:10px;width:100%;padding:9px;border:0;border-radius:7px;color:#dbe3fa;background:transparent;text-align:left;cursor:pointer}.creator button:hover,.creatorActive{background:#26345f!important}.creator button>b{font-size:18px}.creator button>span{display:grid}.creator small{color:#7f8bad}.creator p{color:#7f8bad;text-align:center}

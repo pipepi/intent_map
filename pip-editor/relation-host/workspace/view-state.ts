@@ -12,11 +12,11 @@ export type FreeLayoutWorkspaceViews = {
 };
 
 const DEFAULT_WORLD = { width: 2600, height: 1600 };
-const DEFAULT_CAMERA = { scale: .72, x: 0, y: 0 };
+const DEFAULT_CAMERA = { scale: 1, x: 0, y: 0 };
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 export const defaultFrame = (index = 0): WorkspaceWindowFrame => ({
-  x: 80 + index % 2 * 1240, y: 80 + Math.floor(index / 2) * 800, width: 1120, height: 720, resizeMode: "simple",
+  x: 80 + index % 2 * 1240, y: 80 + Math.floor(index / 2) * 800, width: 1120, height: 720, resizeMode: "simple", contentScale: 1,
 });
 
 export function assertWorkspaceFrame(value: unknown, world = DEFAULT_WORLD): asserts value is WorkspaceWindowFrame {
@@ -25,6 +25,7 @@ export function assertWorkspaceFrame(value: unknown, world = DEFAULT_WORLD): ass
     throw new Error("Workspace window frame is invalid");
   }
   if (item.width < 560 || item.height < 420 || item.width > 1800 || item.height > 1200) throw new Error("Workspace window size is outside supported bounds");
+  if (item.contentScale !== undefined && (!finite(item.contentScale) || item.contentScale < .5 || item.contentScale > 2)) throw new Error("Workspace content scale is outside supported bounds");
   if (item.x < 0 || item.y < 0 || item.x + item.width > world.width || item.y + item.height > world.height) throw new Error("Workspace window is outside the world");
 }
 
@@ -73,6 +74,12 @@ export const withSystemWindows = (value: JsonValue, systemWindows: Record<string
   if (activeWindowId) source.activeWindowId = activeWindowId;
   else delete source.activeWindowId;
   return source as JsonValue;
+};
+
+export const preserveSystemWindows = (value: JsonValue, previous: JsonValue, previousRootNodeIds: string[]): JsonValue => {
+  const local = normalizeFreeLayout(previous, previousRootNodeIds);
+  const activeWindowId = local.activeWindowId && local.systemWindows[local.activeWindowId] ? local.activeWindowId : undefined;
+  return withSystemWindows(value, local.systemWindows, activeWindowId);
 };
 
 export const screenToWorld = (point: WorkspacePoint, views: FreeLayoutWorkspaceViews): WorkspacePoint => ({

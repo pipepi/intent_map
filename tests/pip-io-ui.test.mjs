@@ -49,9 +49,24 @@ test("free-layout canvas exposes creator wire, camera controls, and system manag
     readFile(new URL("../pip-editor/relation-host/view/plugin-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(canvas, /event\.altKey/); assert.match(canvas, /creationWire/); assert.match(canvas, /screenToWorld/);
+  assert.match(canvas, /event\.altKey/); assert.match(canvas, /event\.code === "Space"/); assert.match(canvas, /clientWidth \/ 2/); assert.match(canvas, /creationWire/); assert.match(canvas, /screenToWorld/);
   assert.match(canvas, />适应</); assert.match(manager, /data-window-drag/); assert.match(manager, /data-resize-toggle/);
+  assert.match(canvas, /\["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"\]\.includes/);
   assert.doesNotMatch(host, /panelCollapsed|layoutPanelCollapsed/);
+});
+
+test("trackpad pinch is routed to workspace or the active projection instead of browser zoom", async () => {
+  const canvas = await readFile("pip-editor/relation-host/view/workspace-canvas.tsx", "utf8");
+  const host = await readFile("pip-editor/relation-host/relation-host.tsx", "utf8");
+  const window = await readFile("pip-editor/relation-host/view/workspace-window.tsx", "utf8");
+  const scene = await readFile("pip-editor-io/scene/elements/view-element.js", "utf8");
+  assert.match(canvas, /addEventListener\("wheel", handle, \{ passive: false \}\)/);
+  assert.match(host, /preventPageZoom/);
+  assert.match(canvas, /views\.activeWindowId === windowId/);
+  assert.match(canvas, /contentScale/);
+  assert.match(window, /preview\.contentScale \?\? 1/);
+  assert.doesNotMatch(canvas, /scene\.update-camera|xZoom/);
+  assert.doesNotMatch(scene, /addEventListener\("wheel"|pendingZoom/);
 });
 
 test("undo and redo live in the plugin panel without a global header", async () => {
@@ -69,6 +84,15 @@ test("the graph status floats at the workspace bottom-left without shrinking the
   assert.match(css, /\.canvasInfo \{[^}]*position: absolute;[^}]*bottom: 0;[^}]*left: 0;[^}]*pointer-events: none;/);
   assert.match(css, /\.canvas \{[^}]*height: 100%;/);
   assert.doesNotMatch(css, /\.canvas \{[^}]*calc\(100% - 36px\)/);
+});
+
+test("workspace camera controls dock to the bottom-right outside the scaled world", async () => {
+  const [css, canvas] = await Promise.all([
+    readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/view/workspace-canvas.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(css, /\.cameraControls \{[^}]*position:absolute;[^}]*right:0;[^}]*bottom:0;/);
+  assert.ok(canvas.indexOf("styles.freeWorld") < canvas.indexOf("styles.cameraControls"));
 });
 
 test("workspace projection status names each selection scope instead of aggregating a misleading count", async () => {
