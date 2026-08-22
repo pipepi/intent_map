@@ -34,7 +34,7 @@ class StreamingStore {
 }
 
 class OutputHandle {
-  name = "a5_browser_stream_test_1_0_0_20260807.pip";
+  name = "a1_browser_stream_test_1_0_0_20260807.pip";
   bytes = new Uint8Array();
 
   async createWritable() {
@@ -67,7 +67,7 @@ test("browser Bundle streams resources to a file handle without aggregating them
   const pipBytes = await encodePip({
     manifest: {
       packageId: "browser-stream-test",
-      layer: "a5",
+      layer: "a1",
       artifactName: "browser_stream_test",
       name: "Browser stream test",
       packageVersion: "1.0.0",

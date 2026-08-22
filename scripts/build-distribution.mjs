@@ -2,6 +2,7 @@ import { access, copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { resolveRustToolchain } from "./cargo-toolchain.mjs";
 
 import { decodePip as decodePipWithPolicy } from "../pip-editor/pip/index.ts";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
@@ -15,6 +16,7 @@ import {
 } from "./pip-release.mjs";
 
 const decodePip = (source) => decodePipWithPolicy(source, trustedBuildPipIo);
+const rustToolchain = resolveRustToolchain();
 
 const run = (script) => {
   const result = spawnSync(process.execPath, [path.join(projectRoot, "scripts", script)], {
@@ -85,7 +87,7 @@ for (const file of files) {
 }
 if (![...packageIds].includes(release.defaults.loaderPackageId)) throw new Error("default loader is missing");
 if (![...packageIds].includes(release.defaults.editorPackageId)) throw new Error("default editor is missing");
-const commandVersion = (command, args) => spawnSync(command, args, { encoding: "utf8" }).stdout.trim();
+const commandVersion = (command, args) => spawnSync(command, args, { encoding: "utf8", env: rustToolchain.env }).stdout.trim();
 const seedBinaryPath = process.platform === "darwin"
   ? path.join(runtimeDirectory, seedFile, "Contents", "MacOS", "pip-seed-tauri")
   : path.join(runtimeDirectory, seedFile);
@@ -96,8 +98,8 @@ const receipt = {
   platform: `${process.platform}-${process.arch}`,
   toolchain: {
     node: process.version,
-    rustc: commandVersion("rustc", ["--version"]),
-    cargo: commandVersion("cargo", ["--version"]),
+    rustc: commandVersion(rustToolchain.rustc, ["--version"]),
+    cargo: commandVersion(rustToolchain.cargo, ["--version"]),
   },
   artifacts: await Promise.all([
     {

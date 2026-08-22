@@ -1,4 +1,3 @@
-
 use super::{
     PipDiscovery, PipLayer, ReleaseDate, Version, discover_loader_pip, parse_pip_filename,
 };
@@ -9,7 +8,7 @@ use std::path::{Path, PathBuf};
 #[test]
 fn parses_layered_names_from_the_right() {
     let value = parse_pip_filename(Path::new("a3_software_authoring_2_10_4_20260918.pip")).unwrap();
-    assert_eq!(value.layer, PipLayer::Functional);
+    assert_eq!(value.layer, PipLayer::NodeElement);
     assert_eq!(value.artifact_name, "software_authoring");
     assert_eq!(
         value.version,

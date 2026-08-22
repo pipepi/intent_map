@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCollectionWorkspace } from "../pip-editor/relation-host/packages/collection-package.ts";
+import { createNodeMapWorkspace } from "../pip-editor/relation-host/packages/node-map-package.ts";
 import { WorkspaceSessionStore } from "../pip-editor/relation-host/workspace/workspace-store.ts";
-import { buildScenePluginSuite } from "../pip-editor-plugins/scene/suite.ts";
+import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
 
 const session = async () => {
   const suite = await buildScenePluginSuite();
-  return { ...createCollectionWorkspace(suite.collection, "workspace.test"), undo: [], redo: [], capabilityDiagnostics: [] };
+  return { ...createNodeMapWorkspace(suite.nodeMap, "workspace.test"), undo: [], redo: [], capabilityDiagnostics: [] };
 };
 
 test("workspace store validates before publishing and preserves state on failure", async () => {
@@ -36,4 +36,13 @@ test("workspace store commits, rejects stale commands, and maintains undo redo",
   assert.equal(store.list()[0].graph.nodes["scene.xiaoming"].relations.find(({ id }) => id === "name").object.value, "新名字");
   store.select(initial.id, ["scene.xiaoming", "scene.xiaoming"]);
   assert.deepEqual(store.list()[0].selection, ["scene.xiaoming"]);
+  const beforeSelection = store.list()[0];
+  store.select(initial.id, ["scene.buy-btc"], "scene.view.quadrant");
+  const afterSelection = store.list()[0];
+  assert.deepEqual(afterSelection.scopedSelections["scene.view.quadrant"], ["scene.buy-btc"]);
+  assert.deepEqual(afterSelection.scopedSelections["scene.view.tube"], ["scene.deliver-breakfast"]);
+  assert.equal(afterSelection.graph.revision, beforeSelection.graph.revision);
+  assert.deepEqual(afterSelection.undo, beforeSelection.undo);
+  assert.deepEqual(afterSelection.redo, beforeSelection.redo);
+  assert.throws(() => store.select(initial.id, ["scene.xiaoming"], "scene.not-a-root"), /scope/);
 });

@@ -52,6 +52,20 @@ export const trustPackageHash = async (sha256: string) => {
   if (!response.ok) return responseError(response);
 };
 
+export const trustPackageHashes = async (sha256: string[]) => {
+  const response = await fetch("/__pip/trust-batch", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sha256 }),
+  });
+  if (!response.ok) return responseError(response);
+};
+
+export const readHostLaunchPackage = async () => {
+  const response = await fetch("/__pip/launch-package");
+  if (response.status === 204 || response.status === 404) return undefined;
+  if (!response.ok) return responseError(response);
+  return new Uint8Array(await response.arrayBuffer());
+};
+
 export const saveHostRuntimeProfile = async (profile: PipRuntimeProfile) => {
   const response = await fetch("/__pip/profiles", {
     method: "POST",

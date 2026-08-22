@@ -1,6 +1,6 @@
 /** Commits validated patches, publishes immutable workspace snapshots, and maintains undo/redo. */
 import { applyRelationPatch, type RelationPatch } from "../../relation/index.ts";
-import type { RelationWorkspace } from "../packages/collection-package.ts";
+import type { RelationWorkspace } from "../packages/node-map-package.ts";
 import type { ExactPackageRef, RelationValidator } from "../contracts/package-types.ts";
 
 export type CapabilityDiagnostic = {
@@ -44,14 +44,19 @@ export class WorkspaceSessionStore {
       : workspace));
   }
 
-  select(workspaceId: string, nodeIds: unknown) {
+  select(workspaceId: string, nodeIds: unknown, scopeId?: string) {
     const workspace = this.#value.find((item) => item.id === workspaceId);
     if (!workspace) throw new Error(`Unknown workspace ${workspaceId}`);
     if (!Array.isArray(nodeIds) || nodeIds.some((id) => typeof id !== "string" || !workspace.graph.nodes[id])) {
       throw new Error("Selection contains an unknown RelationNode");
     }
     const selection = [...new Set(nodeIds as string[])];
-    this.#replace(this.#value.map((item) => item.id === workspaceId ? { ...item, selection } : item));
+    if (scopeId && !workspace.rootNodeIds.includes(scopeId)) throw new Error("Selection scope is not a workspace root");
+    this.#replace(this.#value.map((item) => item.id === workspaceId
+      ? scopeId
+        ? { ...item, scopedSelections: { ...item.scopedSelections, [scopeId]: selection } }
+        : { ...item, selection }
+      : item));
   }
 
   commitPatch(workspaceId: string, patch: RelationPatch, validators: RelationValidator[], recordHistory = true) {

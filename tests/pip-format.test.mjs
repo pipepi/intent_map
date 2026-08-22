@@ -17,7 +17,7 @@ import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 
 const manifest = {
   packageId: "intent-map.test",
-  layer: "a5",
+  layer: "a1",
   artifactName: "intent_map_test",
   name: "Intent Map Test",
   packageVersion: "0.1.0",
@@ -84,18 +84,29 @@ test("PIP export filenames preserve manifest identity across every layer", () =>
     const layeredManifest = {
       ...manifest,
       layer,
-      artifactName: "crypto_cex_intent",
+      artifactName: `crypto_cex_intent${layer === "a3" ? "_element" : layer === "a4" ? "_node_type" : layer === "a5" ? "_map" : ""}`,
       ...(layer === "a2" ? {
         editorAbi: "pip-editor/1",
         providedEditorKinds: ["tree-map/1"],
       } : {}),
       ...(layer === "a3" ? {
-        providedCapabilities: ["software-authoring/1"],
+        elementAbi: "relation-element/2", entry: "entry.mjs", elements: [{ id: "node", tag: "test-node", purpose: "node" }],
+        permissions: [], sourcePaths: ["source/index.js"], sourceSha256: "a".repeat(64), entrySha256: "b".repeat(64), redistributable: true,
+        providedCapabilities: ["relation-element/2"],
+      } : {}),
+      ...(layer === "a4" ? {
+        nodeTypeAbi: "relation-node-type/2", entry: "entry.mjs", typeNodeIds: ["test.type"], permissions: [], sourcePaths: ["source/index.js"],
+        sourceSha256: "a".repeat(64), entrySha256: "b".repeat(64), redistributable: true,
+        dependencies: [{ origin: "user", packageId: "test.a3", version: "1.0.0", releaseDate: "20260726", sha256: "c".repeat(64) }],
+      } : {}),
+      ...(layer === "a5" ? {
+        nodeMapAbi: "relation-node-map/1", rootNodeIds: ["sample.root"],
+        dependencies: [{ origin: "user", packageId: "test.a4", version: "1.0.0", releaseDate: "20260726", sha256: "d".repeat(64) }],
       } : {}),
     };
     assert.equal(
       pipFilename(layeredManifest),
-      `${layer}_crypto_cex_intent_0_1_0_20260726.pip`,
+      `${layer}_crypto_cex_intent${layer === "a3" ? "_element" : layer === "a4" ? "_node_type" : layer === "a5" ? "_map" : ""}_0_1_0_20260726.pip`,
     );
   }
 });

@@ -66,7 +66,7 @@ pub fn validate_runtime_profile(
             return Err(format!("duplicate capability provider: {capability}"));
         }
         let (_, package) =
-            resolve_package_ref(sources, reference, Some(PipLayer::Functional), policy)?;
+            resolve_package_ref(sources, reference, Some(PipLayer::NodeElement), policy)?;
         if !package
             .manifest_data()
             .provided_capabilities

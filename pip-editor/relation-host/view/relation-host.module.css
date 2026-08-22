@@ -1,18 +1,21 @@
 .shell { height: 100vh; min-width: 900px; background: #070a18; color: #e8edff; overflow: hidden; }
-.header { height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid #293257; background: #0b1022; }
-.header span, .panelTitle span { color: #6f80ad; font-size: 10px; letter-spacing: .16em; }
-.header h1, .panelTitle h2 { margin: 3px 0 0; font-size: 19px; }
-.layout { height: calc(100vh - 72px); display: grid; grid-template-columns: minmax(600px, 1fr) 320px; }
+.panelTitle span { color: #6f80ad; font-size: 10px; letter-spacing: .16em; }
+.panelTitle h2 { margin: 3px 0 0; font-size: 19px; }
+.layout { height: 100vh; display: grid; grid-template-columns: minmax(600px, 1fr) 320px; }
 .layoutPanelCollapsed { grid-template-columns: minmax(600px, 1fr) 64px; }
+.workspaceArea { min-width: 0; min-height: 0; display: grid; grid-template-rows: 42px minmax(0, 1fr); }
+.workspaceTabs { min-width: 0; display: flex; align-items: end; gap: 2px; padding: 7px 9px 0; overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid #293257; background: #090e20; scrollbar-width: thin; touch-action: pan-x; }
+.workspaceTab { flex: 0 1 220px; min-width: 120px; max-width: 240px; height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; overflow: hidden; border: 1px solid transparent; border-bottom: 0; border-radius: 9px 9px 0 0; color: #8f9abc; background: #11162a; cursor: pointer; }
+.workspaceTab:hover { color: #dce3ff; background: #171e37; }
+.workspaceTab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspaceTab small { flex: none; color: #657195; font: 9px monospace; }
+.workspaceTabActive { position: relative; color: #f0f3ff; border-color: #313b60; background: #141a33; }
+.workspaceTabActive::after { position: absolute; right: 9px; bottom: 0; left: 9px; height: 2px; border-radius: 2px 2px 0 0; background: #7590ff; content: ""; }
+.workspaceTabsEmpty { align-self: center; padding: 0 8px 7px; color: #657195; font-size: 11px; }
 .primary { display: block; border: 1px solid #556de8; border-radius: 7px; padding: 9px 14px; color: white; background: linear-gradient(135deg, #287bd9, #6552dc); cursor: pointer; text-align: center; }
-.addArea { position: relative; }
-.typeMenu { position: absolute; z-index: 20; right: 0; top: 43px; width: 230px; padding: 7px; border: 1px solid #34416f; border-radius: 9px; background: #111832; box-shadow: 0 18px 45px #0009; }
-.typeMenu button { width: 100%; display: flex; justify-content: space-between; padding: 9px; border: 0; border-radius: 5px; background: transparent; cursor: pointer; }
-.typeMenu button:hover { background: #1b264b; }
-.typeMenu small, .typeMenu p { color: #7d88ad; }
-.canvasWrap { min-width: 0; position: relative; background: radial-gradient(circle at 50% 35%, #141a3a 0, #080b19 60%); }
-.canvasInfo { height: 36px; padding: 10px 14px; color: #8390b8; border-bottom: 1px solid #1c2544; }
-.canvas { position: relative; height: calc(100% - 36px); overflow: auto; background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px); background-size: 24px 24px; touch-action: none; }
+.canvasWrap { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: radial-gradient(circle at 50% 35%, #141a3a 0, #080b19 60%); }
+.canvasInfo { position: absolute; z-index: 20; bottom: 0; left: 0; max-width: calc(100% - 20px); padding: 6px 11px; overflow: hidden; border: 1px solid #303858; border-bottom: 0; border-left: 0; border-radius: 0 7px 0 0; color: #a8b2d0; background: #11172aee; box-shadow: 4px -4px 16px #0007; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
+.canvas { position: relative; height: 100%; min-height: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px); background-size: 24px 24px; touch-action: pan-x pan-y; }
 .relationGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); align-content: start; gap: 16px; padding: 18px; }
 .relationGrid .node { position: relative; width: auto; min-height: 160px; }
 .workspaceProjectionGrid { display: grid; grid-template-columns: repeat(2, minmax(560px, 1fr)); align-content: start; gap: 14px; padding: 14px; }
@@ -45,8 +48,14 @@
 .invalidType { color: #ff8ba5 !important; }
 .panel { padding: 18px; border-left: 1px solid #293257; background: #0d1226; overflow: auto; }
 .panelCollapsed { padding: 12px 7px; overflow: hidden; }
-.panelCollapsed .panelTitle div { display: none; }
 .panelTitle { display: flex; justify-content: space-between; align-items: center; }
+.panelTitleActions { display: flex; gap: 5px; }
+.panelTitleActions button { padding: 5px 7px; border: 1px solid #34416f; border-radius: 5px; color: #b9c4e6; background: #151d39; cursor: pointer; }
+.panelTitleActions button:disabled { opacity: .35; cursor: default; }
+.panelCollapsed .panelTitle { flex-direction: column; gap: 8px; }
+.panelCollapsed .panelIdentity { display: none; }
+.panelCollapsed .panelTitleActions { width: 100%; flex-direction: column; }
+.panelCollapsed .panelTitleActions button { width: 100%; padding: 6px 0; }
 .panelTitle h2 { font-size: 17px; }
 .panel h3 { margin: 20px 0 9px; color: #c4ceec; font-size: 13px; }
 .panel h3 small { display: block; margin-top: 3px; color: #ff9a70; font-weight: 400; }

@@ -51,17 +51,17 @@ export class NodeTypePluginRegistry {
   resolveType(type: ResolvedNodeType["type"]) { return this.#types.get(typeKey(type))?.value; }
 
   install(plugin: NodeTypePluginPackage): Promise<PluginInstallStatus> {
-    const pending = this.#installing.get(plugin.manifest.id);
+    const pending = this.#installing.get(plugin.manifest.packageId);
     if (pending) return pending.then(() => this.#installOnce(plugin));
     const task = this.#installOnce(plugin).finally(() => {
-      if (this.#installing.get(plugin.manifest.id) === task) this.#installing.delete(plugin.manifest.id);
+      if (this.#installing.get(plugin.manifest.packageId) === task) this.#installing.delete(plugin.manifest.packageId);
     });
-    this.#installing.set(plugin.manifest.id, task);
+    this.#installing.set(plugin.manifest.packageId, task);
     return task;
   }
 
   async #installOnce(plugin: NodeTypePluginPackage): Promise<PluginInstallStatus> {
-    const current = this.#plugins.get(plugin.manifest.id);
+    const current = this.#plugins.get(plugin.manifest.packageId);
     if (current) {
       assertSameImmutablePlugin(current.manifest, plugin.manifest);
       if (current.active) return "already-active";
@@ -70,8 +70,8 @@ export class NodeTypePluginRegistry {
     const registeredTypes = new Set<string>();
     const own = <T>(map: Map<string, { pluginId: string; value: T }>, id: string, value: T, label: string): Disposable => {
       if (map.has(id)) throw new Error(`${label} ${id} is already registered`);
-      map.set(id, { pluginId: plugin.manifest.id, value });
-      const release = () => { if (map.get(id)?.pluginId === plugin.manifest.id) map.delete(id); };
+      map.set(id, { pluginId: plugin.manifest.packageId, value });
+      const release = () => { if (map.get(id)?.pluginId === plugin.manifest.packageId) map.delete(id); };
       disposables.push(release);
       return release;
     };
@@ -103,11 +103,11 @@ export class NodeTypePluginRegistry {
         const show = (key: string) => key.replace("\u0000", "/");
         throw new Error(`Node type registrations do not match manifest; missing [${missing.map(show).join(", ")}], extra [${extra.map(show).join(", ")}]`);
       }
-      this.#plugins.set(plugin.manifest.id, { ...plugin, active: true, disposables });
+      this.#plugins.set(plugin.manifest.packageId, { ...plugin, active: true, disposables });
       return current ? "reactivated" : "installed";
     } catch (error) {
       const cleanupErrors = releaseAll(disposables);
-      if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors], `Node type plugin ${plugin.manifest.id} failed and cleanup reported errors`);
+      if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors], `Node type plugin ${plugin.manifest.packageId} failed and cleanup reported errors`);
       throw error;
     }
   }

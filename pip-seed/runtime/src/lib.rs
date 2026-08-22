@@ -14,11 +14,11 @@ pub use catalog::{
     load_catalog_package_from_source, load_default_catalog_package, load_default_editor_package,
     resolve_package_ref, validate_runtime_profile,
 };
-pub use pip::{Asset, Manifest, Package, PipIoPolicy, PipLimit};
+pub use pip::{Asset, Manifest, Package, PackageRef as ManifestPackageRef, PipIoPolicy, PipLimit};
 pub use runtime::{
     catalog_sources as runtime_catalog_sources, install_user_package, load_io_policy,
-    load_runtime_profile, save_io_policy, save_runtime_profile, trust_hash, trusted_hashes,
-    user_data_root, validate_profile_trust,
+    load_runtime_profile, save_io_policy, save_runtime_profile, trust_hash, trust_package_hashes,
+    trusted_hashes, user_data_root, validate_profile_trust,
 };
 
 pub fn sha256_hex(bytes: &[u8]) -> String {

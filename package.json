@@ -9,7 +9,7 @@
     "dev": "node scripts/run-editor-dev.mjs",
     "build": "node scripts/build-editor-static.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "test:pip": "node --test tests/pip-format.test.mjs && cargo test --manifest-path pip-seed/runtime/Cargo.toml && cargo test --manifest-path pip-seed/cli/Cargo.toml && cargo check --manifest-path pip-seed/tauri/Cargo.toml",
+    "test:pip": "node --test tests/pip-format.test.mjs && node scripts/run-cargo.mjs test --manifest-path pip-seed/runtime/Cargo.toml && node scripts/run-cargo.mjs test --manifest-path pip-seed/cli/Cargo.toml && node scripts/run-cargo.mjs check --manifest-path pip-seed/tauri/Cargo.toml",
     "lint": "eslint .",
     "plugins:relation:build": "node scripts/build-relation-plugin-suites.mjs",
     "pip:build": "node scripts/build-editor-static.mjs && node scripts/build-editor-pip.mjs",
@@ -33,7 +33,6 @@
   },
   "dependencies": {
     "es-module-lexer": "2.1.0",
-    "fflate": "^0.8.3",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },

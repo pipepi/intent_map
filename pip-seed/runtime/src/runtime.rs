@@ -187,15 +187,23 @@ pub fn validate_profile_trust(
 }
 
 pub fn trust_hash(user_root: &Path, hash: &str) -> Result<(), String> {
-    if hash.len() != 64
-        || !hash
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    trust_package_hashes(user_root, &[hash.to_string()])
+}
+
+/** Commits a verified package closure to the trust store with one atomic rename. */
+pub fn trust_package_hashes(user_root: &Path, incoming: &[String]) -> Result<(), String> {
+    if incoming.is_empty()
+        || incoming.iter().any(|hash| {
+            hash.len() != 64
+                || !hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
     {
         return Err("invalid lowercase SHA-256 hash".into());
     }
     let mut hashes = trusted_hashes(user_root)?;
-    hashes.insert(hash.to_string());
+    hashes.extend(incoming.iter().cloned());
     fs::create_dir_all(user_root)
         .map_err(|error| format!("cannot create user data directory: {error}"))?;
     let path = user_root.join("trusted.json");

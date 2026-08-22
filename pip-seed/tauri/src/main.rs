@@ -1,12 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod native_export;
 
 use pip_seed_runtime::{
     CatalogSource, Package, PackageOrigin, PipDiscovery, PipIoPolicy, PipLayer, RuntimeProfile,
     catalog_entries_from_sources_with_trust, discover_loader_pip, install_user_package,
     load_catalog_package_from_source, load_default_editor_package, load_io_policy,
     load_runtime_profile, resolve_package_ref, runtime_catalog_sources, save_io_policy,
-    save_runtime_profile, trust_hash, trusted_hashes, user_data_root, validate_package_filename,
-    validate_profile_trust, validate_runtime_profile,
+    save_runtime_profile, trust_hash, trust_package_hashes, trusted_hashes, user_data_root,
+    validate_package_filename, validate_profile_trust, validate_runtime_profile,
 };
 use serde_json::json;
 use std::borrow::Cow;
@@ -26,6 +27,8 @@ struct RuntimeState {
     profile: Option<RuntimeProfile>,
     io_policy: PipIoPolicy,
     seed_source_sha: Option<&'static str>,
+    launch_package: Option<Vec<u8>>,
+    seed_artifact: PathBuf,
 }
 
 #[derive(Debug, PartialEq)]
@@ -105,6 +108,80 @@ fn seed_artifact(executable: &Path) -> PathBuf {
     } else {
         executable.to_path_buf()
     }
+}
+
+/** Validates the flat A1-A4 closure carried by A5 before any embedded code is selected. */
+fn validate_launch_closure(
+    bytes: &[u8],
+    policy: &PipIoPolicy,
+) -> Result<(Package, Package, Vec<String>), String> {
+    let node_map = Package::parse_with_policy(bytes.to_vec(), policy)?;
+    let manifest = node_map.manifest_data();
+    if manifest.layer != "a5" {
+        return Err("launch package must be an a5 Node Map".into());
+    }
+    let profile = manifest
+        .launch_profile
+        .as_ref()
+        .ok_or("launch A5 has no launchProfile")?;
+    let mut packages = Vec::new();
+    for asset in node_map
+        .assets()
+        .iter()
+        .filter(|asset| asset.path.starts_with("packages/") && asset.path.ends_with(".pip"))
+    {
+        let package = Package::parse_with_policy(node_map.asset_bytes(asset).to_vec(), policy)?;
+        validate_package_filename(
+            Path::new(asset.path.trim_start_matches("packages/")),
+            &package,
+        )?;
+        packages.push(package);
+    }
+    let matches_ref = |package: &Package, reference: &pip_seed_runtime::ManifestPackageRef| {
+        let item = package.manifest_data();
+        item.package_id == reference.package_id
+            && item.package_version == reference.version
+            && item.release_date == reference.release_date
+            && pip_seed_runtime::sha256_hex(package.bytes()) == reference.sha256
+    };
+    for reference in &manifest.dependencies {
+        let node_type = packages
+            .iter()
+            .find(|package| matches_ref(package, reference))
+            .ok_or_else(|| format!("launch closure lacks A4 {}", reference.package_id))?;
+        if node_type.manifest_data().layer != "a4" {
+            return Err("A5 dependency is not A4".into());
+        }
+        for element in &node_type.manifest_data().dependencies {
+            if !packages.iter().any(|package| {
+                matches_ref(package, element) && package.manifest_data().layer == "a3"
+            }) {
+                return Err(format!("launch closure lacks A3 {}", element.package_id));
+            }
+        }
+    }
+    let loader = packages
+        .iter()
+        .find(|package| {
+            matches_ref(package, &profile.loader) && package.manifest_data().layer == "a1"
+        })
+        .ok_or("launch closure lacks exact A1")?
+        .clone();
+    let editor = packages
+        .iter()
+        .find(|package| {
+            matches_ref(package, &profile.editor) && package.manifest_data().layer == "a2"
+        })
+        .ok_or("launch closure lacks exact A2")?
+        .clone();
+    let hashes = std::iter::once(pip_seed_runtime::sha256_hex(bytes))
+        .chain(
+            packages
+                .iter()
+                .map(|package| pip_seed_runtime::sha256_hex(package.bytes())),
+        )
+        .collect();
+    Ok((loader, editor, hashes))
 }
 
 fn resolve_loader(
@@ -197,6 +274,37 @@ fn package_response(
             ),
             Err(error) => response(
                 StatusCode::INTERNAL_SERVER_ERROR,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
+        };
+    }
+    if request.method() == Method::GET && raw_path == "/__pip/launch-package" {
+        return match &state.launch_package {
+            Some(bytes) => response(
+                StatusCode::OK,
+                "application/vnd.intent-map.pip",
+                bytes.clone(),
+                false,
+            ),
+            None => response(
+                StatusCode::NO_CONTENT,
+                "application/vnd.intent-map.pip",
+                Vec::new(),
+                false,
+            ),
+        };
+    }
+    if request.method() == Method::POST && raw_path == "/__pip/export-native" {
+        return match native_export::export_native(
+            request.body(),
+            &state.seed_artifact,
+            &state.io_policy,
+        ) {
+            Ok((body, mime)) => response(StatusCode::OK, mime, body, false),
+            Err(error) => response(
+                StatusCode::BAD_REQUEST,
                 "text/plain",
                 error.into_bytes(),
                 false,
@@ -305,6 +413,36 @@ fn package_response(
                     .ok_or_else(|| "trust request requires sha256".to_string())
                     .and_then(|hash| trust_hash(&state.user_root, hash))
             });
+        return match result {
+            Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
+            Err(error) => response(
+                StatusCode::BAD_REQUEST,
+                "text/plain",
+                error.into_bytes(),
+                false,
+            ),
+        };
+    }
+    if request.method() == Method::POST && raw_path == "/__pip/trust-batch" {
+        let result = serde_json::from_slice::<serde_json::Value>(request.body())
+            .map_err(|error| format!("invalid trust batch: {error}"))
+            .and_then(|value| {
+                value
+                    .get("sha256")
+                    .and_then(|item| item.as_array())
+                    .ok_or_else(|| "trust batch requires sha256 array".to_string())
+                    .and_then(|values| {
+                        values
+                            .iter()
+                            .map(|item| {
+                                item.as_str()
+                                    .map(str::to_owned)
+                                    .ok_or_else(|| "trust batch contains invalid SHA".to_string())
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+            })
+            .and_then(|hashes| trust_package_hashes(&state.user_root, &hashes));
         return match result {
             Ok(()) => response(StatusCode::NO_CONTENT, "text/plain", Vec::new(), false),
             Err(error) => response(
@@ -466,6 +604,26 @@ fn run(args: &[String], policy: PipIoPolicy) -> Result<(), String> {
         .ok_or("Seed artifact has no parent")?
         .join("pip");
     let user_root = user_data_root()?;
+    let launch_package = argument_path(args, "--launch")?
+        .map(|path| {
+            let bytes =
+                fs::read(&path).map_err(|error| format!("cannot read launch PIP: {error}"))?;
+            let package = Package::parse_with_policy(bytes.clone(), &policy)?;
+            validate_package_filename(&path, &package)?;
+            if package.manifest_data().layer != "a5" {
+                return Err("--launch requires an a5 Node Map PIP".into());
+            }
+            Ok::<_, String>(bytes)
+        })
+        .transpose()?
+        .or(native_export::embedded_node_map(&executable, &policy)?);
+    let launch_runtime = launch_package
+        .as_deref()
+        .map(|bytes| validate_launch_closure(bytes, &policy))
+        .transpose()?;
+    if let Some((_, _, hashes)) = &launch_runtime {
+        trust_package_hashes(&user_root, hashes)?;
+    }
     let sources = runtime_catalog_sources(&system_directory, &user_root);
     let profile: Option<RuntimeProfile> = argument_string(args, "--profile")?
         .map(|profile_id| load_runtime_profile(&user_root, &profile_id))
@@ -481,19 +639,26 @@ fn run(args: &[String], policy: PipIoPolicy) -> Result<(), String> {
         })
         .transpose()?
         .map(|(path, _)| path);
-    let Some(loader_path) =
-        (if argument_path(args, "--pip")?.is_some() || loader_from_profile.is_none() {
+    let loader_path = if launch_runtime.is_some() {
+        None
+    } else {
+        if argument_path(args, "--pip")?.is_some() || loader_from_profile.is_none() {
             resolve_loader(args, &seed, &policy)?
         } else {
             loader_from_profile
-        })
-    else {
-        return Ok(());
+        }
     };
-    let package = Package::parse_with_policy(
-        fs::read(&loader_path).map_err(|error| format!("cannot read PIP: {error}"))?,
-        &policy,
-    )?;
+    let package = if let Some((loader, _, _)) = &launch_runtime {
+        loader.clone()
+    } else {
+        let Some(loader_path) = loader_path else {
+            return Ok(());
+        };
+        Package::parse_with_policy(
+            fs::read(&loader_path).map_err(|error| format!("cannot read PIP: {error}"))?,
+            &policy,
+        )?
+    };
     if !package
         .assets()
         .iter()
@@ -524,6 +689,8 @@ fn run(args: &[String], policy: PipIoPolicy) -> Result<(), String> {
         .transpose()?;
     let package = if force_selection {
         package
+    } else if let Some((_, editor, _)) = &launch_runtime {
+        editor.clone()
     } else if let Some(editor) = explicit_editor.or(profile_editor) {
         editor
     } else {
@@ -538,6 +705,8 @@ fn run(args: &[String], policy: PipIoPolicy) -> Result<(), String> {
         profile,
         io_policy: policy,
         seed_source_sha: option_env!("PIP_SEED_SOURCE_SHA"),
+        launch_package,
+        seed_artifact: seed,
     });
     let protocol_state = Arc::clone(&state);
     tauri::Builder::default()
@@ -618,18 +787,11 @@ fn main() {
         }
         Ok(None) => {
             let mut policy = parsed_policy;
+            // Launching the interactive desktop application is explicit consent
+            // for this process to read its selected/local packages. Preserve any
+            // configured finite limits, but allow otherwise-unconfigured metrics
+            // without a redundant startup dialog or persisting an unlimited policy.
             if policy.requires_confirmation() {
-                let accepted = rfd::MessageDialog::new()
-                    .set_level(rfd::MessageLevel::Warning)
-                    .set_title("PIP 容量策略")
-                    .set_description(
-                        "当前没有完整的本机 PIP 容量配置。是否仅在本次启动中允许包的容量请求？",
-                    )
-                    .set_buttons(rfd::MessageButtons::YesNo)
-                    .show();
-                if accepted != rfd::MessageDialogResult::Yes {
-                    return;
-                }
                 policy.allow_asked();
             }
             if let Err(error) = run(&args, policy) {

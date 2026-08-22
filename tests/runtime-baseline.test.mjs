@@ -24,7 +24,7 @@ const decodePip = (input) => decodePipWithPolicy(input, ioOptions);
 
 const manifest = (overrides = {}) => ({
   packageId: "baseline.intent",
-  layer: "a5",
+  layer: "a1",
   artifactName: "baseline_intent",
   name: "Runtime baseline",
   packageVersion: "1.0.0",
@@ -99,7 +99,8 @@ test("a2 and a3 manifests keep their distinct runtime contracts", () => {
   assert.throws(() => assertPipManifest(manifest({ layer: "a3" })), /Invalid PIP manifest/);
   assertPipManifest(manifest({
     layer: "a3",
-    providedCapabilities: ["software-authoring/1"],
+    elementAbi: "relation-element/2", entry: "entry.mjs", elements: [{ id: "node", tag: "test-node", purpose: "node" }], permissions: [],
+    sourcePaths: ["source/index.js"], sourceSha256: sha, entrySha256: sha, redistributable: true, providedCapabilities: ["relation-element/2"],
   }));
 });
 

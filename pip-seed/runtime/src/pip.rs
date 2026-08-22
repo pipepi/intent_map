@@ -29,6 +29,32 @@ pub struct Package {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PackageRef {
+    pub origin: String,
+    pub package_id: String,
+    pub version: String,
+    pub release_date: String,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementDeclaration {
+    pub id: String,
+    pub tag: String,
+    pub purpose: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchProfile {
+    pub schema_version: u32,
+    pub loader: PackageRef,
+    pub editor: PackageRef,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Manifest {
     pub package_id: String,
     pub layer: String,
@@ -40,6 +66,26 @@ pub struct Manifest {
     pub loader_abi: String,
     pub artifact_role: String,
     pub editor_abi: Option<String>,
+    pub element_abi: Option<String>,
+    pub node_type_abi: Option<String>,
+    pub node_map_abi: Option<String>,
+    pub entry: Option<String>,
+    #[serde(default)]
+    pub elements: Vec<ElementDeclaration>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    #[serde(default)]
+    pub source_paths: Vec<String>,
+    pub source_sha256: Option<String>,
+    pub entry_sha256: Option<String>,
+    pub redistributable: Option<bool>,
+    #[serde(default)]
+    pub type_node_ids: Vec<String>,
+    #[serde(default)]
+    pub root_node_ids: Vec<String>,
+    #[serde(default)]
+    pub dependencies: Vec<PackageRef>,
+    pub launch_profile: Option<LaunchProfile>,
     pub provided_editor_kinds: Vec<String>,
     pub supported_document_kinds: Vec<String>,
     pub preferred_editor_kinds: Vec<String>,
@@ -210,6 +256,30 @@ impl Package {
                 && version.bytes().all(|byte| byte.is_ascii_digit())
         };
         let layer = crate::PipLayer::parse(&manifest.layer)?;
+        let valid_sha = |value: &str| {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        };
+        let valid_ref = |value: &PackageRef| {
+            matches!(value.origin.as_str(), "system" | "user")
+                && !value.package_id.is_empty()
+                && crate::Version::parse(&value.version).is_ok()
+                && crate::ReleaseDate::parse(&value.release_date).is_ok()
+                && valid_sha(&value.sha256)
+        };
+        let valid_executable = || {
+            manifest.entry.as_deref() == Some("entry.mjs")
+                && !manifest.source_paths.is_empty()
+                && manifest
+                    .source_paths
+                    .iter()
+                    .all(|path| path.starts_with("source/") && !path.contains(".."))
+                && manifest.source_sha256.as_deref().is_some_and(valid_sha)
+                && manifest.entry_sha256.as_deref().is_some_and(valid_sha)
+                && manifest.redistributable.is_some()
+        };
         if manifest.package_id.is_empty()
             || manifest.artifact_name.is_empty()
             || manifest.name.is_empty()
@@ -248,7 +318,34 @@ impl Package {
                 && (manifest.editor_abi.as_deref() != Some("pip-editor/1")
                     || manifest.provided_editor_kinds.is_empty()))
             || (layer != crate::PipLayer::Editor && manifest.editor_abi.is_some())
-            || (layer == crate::PipLayer::Functional && manifest.provided_capabilities.is_empty())
+            || (layer == crate::PipLayer::NodeElement
+                && (manifest.element_abi.as_deref() != Some("relation-element/2")
+                    || manifest.elements.is_empty()
+                    || !valid_executable()))
+            || (layer == crate::PipLayer::NodeType
+                && (manifest.node_type_abi.as_deref() != Some("relation-node-type/2")
+                    || manifest.type_node_ids.is_empty()
+                    || manifest.dependencies.is_empty()
+                    || !manifest.dependencies.iter().all(valid_ref)
+                    || !valid_executable()))
+            || (layer == crate::PipLayer::NodeMap
+                && (manifest.node_map_abi.as_deref() != Some("relation-node-map/1")
+                    || manifest.root_node_ids.is_empty()
+                    || manifest.dependencies.is_empty()
+                    || !manifest.dependencies.iter().all(valid_ref)
+                    || manifest.launch_profile.as_ref().is_some_and(|profile| {
+                        profile.schema_version != 1
+                            || !valid_ref(&profile.loader)
+                            || !valid_ref(&profile.editor)
+                    })))
+            || (layer != crate::PipLayer::NodeElement
+                && (manifest.element_abi.is_some() || !manifest.elements.is_empty()))
+            || (layer != crate::PipLayer::NodeType
+                && (manifest.node_type_abi.is_some() || !manifest.type_node_ids.is_empty()))
+            || (layer != crate::PipLayer::NodeMap
+                && (manifest.node_map_abi.is_some()
+                    || !manifest.root_node_ids.is_empty()
+                    || manifest.launch_profile.is_some()))
         {
             return Err("invalid PIP manifest fields".into());
         }

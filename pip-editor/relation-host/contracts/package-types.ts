@@ -1,21 +1,17 @@
 /** Defines the requests and capabilities that cross the host/plugin boundary. */
 import type { JsonValue, Relation, RelationGraph, RelationNode, RelationPatch, RelationRef } from "../../relation/index.ts";
+import type { PipManifest, PipPackageRef } from "../../pip/index.ts";
 
-export type ExactPackageRef = { id: string; version: string };
 export type PluginInstallStatus = "installed" | "already-active" | "reactivated";
 export type ElementPurpose = "control" | "preview" | "node" | "projection" | "panel";
 export type ElementDeclaration = { id: string; tag: string; purpose: ElementPurpose };
-export type ElementPluginManifest = {
-  format: "intent-element-plugin"; schemaVersion: 2; runtimeAbi: "relation-element/2";
-  id: string; name: string; version: string; entry: "entry.mjs"; elements: ElementDeclaration[];
-  permissions: string[]; sourcePaths: string[]; sourceSha256: string; entrySha256: string;
-  communityTags: string[]; redistributable: boolean;
-};
-export type ElementPluginPackage = { manifest: ElementPluginManifest; entrySource: string; files: Record<string, Uint8Array>; archive: Uint8Array };
+export type ElementPluginManifest = Extract<PipManifest, { layer: "a3" }>;
+export type ElementPluginPackage = { manifest: ElementPluginManifest; entrySource: string; files: Record<string, Uint8Array>; pipBytes: Uint8Array; contentSha256: string };
 
 export type ResolvedNodeType = {
   type: RelationRef; name: string; element?: { pluginId: string; elementId: string };
   matches?: (node: RelationNode, graph: RelationGraph) => boolean;
+  label?: (node: RelationNode, graph: RelationGraph) => string;
 };
 export type ElementContext = {
   workspaceId: string; rootNodeIds: string[]; workspaceView: JsonValue; graph: RelationGraph;
@@ -24,16 +20,11 @@ export type ElementContext = {
 };
 export type RelationElementRequest =
   | { kind: "apply-patch"; patch: RelationPatch }
-  | { kind: "select"; nodeIds: string[] }
+  | { kind: "select"; nodeIds: string[]; scopeId?: string }
   | { kind: "command"; commandId: string; input: JsonValue };
 
-export type NodeTypePluginManifest = {
-  format: "intent-node-type-plugin"; schemaVersion: 2; runtimeAbi: "relation-node-type/2";
-  id: string; name: string; version: string; entry: "entry.mjs"; ontology: "ontology.json";
-  elementDependencies: ExactPackageRef[]; permissions: string[]; typeNodeIds: string[];
-  sourcePaths: string[]; sourceSha256: string; entrySha256: string; redistributable: boolean;
-};
-export type NodeTypePluginPackage = { manifest: NodeTypePluginManifest; ontology: RelationGraph; entrySource: string; files: Record<string, Uint8Array>; archive: Uint8Array };
+export type NodeTypePluginManifest = Extract<PipManifest, { layer: "a4" }>;
+export type NodeTypePluginPackage = { manifest: NodeTypePluginManifest; ontology: RelationGraph; entrySource: string; files: Record<string, Uint8Array>; pipBytes: Uint8Array; contentSha256: string };
 
 export type Disposable = { dispose(): void } | (() => void);
 export type RelationValidator = (graph: RelationGraph) => void;
@@ -42,7 +33,7 @@ export type RelationExecutor = (node: RelationNode, graph: RelationGraph) => Jso
 export type RelationProjection = {
   id: string; purpose: "node" | "workspace";
   matches(node: RelationNode, graph: RelationGraph): boolean;
-  project?(input: { workspaceId: string; rootNodeIds: string[]; graph: RelationGraph; node: RelationNode }): JsonValue;
+  project?(input: { workspaceId: string; rootNodeIds: string[]; workspaceView: JsonValue; graph: RelationGraph; node: RelationNode; selection: string[] }): JsonValue;
   element: { pluginId: string; elementId: string };
 };
 export type RelationParseCandidate = { id: string; label: string; confidence: number; diagnostics: string[]; patch: RelationPatch };
@@ -60,9 +51,7 @@ export type NodeTypePluginHost = {
   registerLanguageProvider(provider: RelationLanguageProvider): Disposable;
 };
 
-export type NodeCollectionManifest = {
-  format: "intent-node-collection"; schemaVersion: 2; id: string; name: string; version: string; rootNodeIds: string[];
-  dependencies: { nodeTypes: ExactPackageRef[]; elements: ExactPackageRef[] };
-};
-export type NodeCollectionWorkspace = { views: JsonValue; initialSelection?: string[] };
-export type NodeCollectionPlugin = { manifest: NodeCollectionManifest; graph: RelationGraph; workspace: NodeCollectionWorkspace };
+export type NodeMapManifest = Extract<PipManifest, { layer: "a5" }>;
+export type NodeMapWorkspace = { views: JsonValue; initialSelection?: string[] };
+export type NodeMap = { manifest: NodeMapManifest; graph: RelationGraph; workspace: NodeMapWorkspace };
+export type ExactPackageRef = PipPackageRef;

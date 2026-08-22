@@ -2,10 +2,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/relation-host/packages/element-package.ts";
-import { encodeCollectionPackage } from "../../pip-editor/relation-host/packages/collection-package.ts";
+import { encodeNodeMapPackage } from "../../pip-editor/relation-host/packages/node-map-package.ts";
 import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/relation-host/packages/node-type-package.ts";
-import { baseElementManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
-import { sceneCollection, sceneOntology, SCENE_ELEMENT_PLUGIN_ID, SCENE_NODE_PLUGIN_ID, SCENE_TYPES } from "./domain.ts";
+import { exactPackageRef } from "../../pip-editor/relation-host/packages/pip-package.ts";
+import { baseElementManifest, baseNodeMapManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
+import { sceneNodeMapData, sceneOntology, SCENE_NODE_MAP_ID, SCENE_ELEMENT_PLUGIN_ID, SCENE_NODE_PLUGIN_ID, SCENE_TYPES } from "./domain.ts";
 
 export * from "./domain.ts";
 
@@ -42,13 +43,17 @@ export async function buildScenePluginSuite() {
       { id: "tube", tag: "scene-tube-view", purpose: "projection" as const },
     ],
   };
-  const elementArchive = await encodeElementPackage(elementManifest, elementSource, elementSources);
-  const element = await decodeElementPackage(elementArchive);
+  const elementPip = await encodeElementPackage(elementManifest, elementSource, elementSources);
+  const element = await decodeElementPackage(elementPip);
   const nodeManifest = baseNodeTypeManifest(
-    SCENE_NODE_PLUGIN_ID, "Scene Relation Types", SCENE_TYPES, SCENE_ELEMENT_PLUGIN_ID, Object.keys(nodeSources),
+    SCENE_NODE_PLUGIN_ID, "Scene Relation Types", SCENE_TYPES, [await exactPackageRef(elementPip, element.manifest)], Object.keys(nodeSources),
   );
-  const nodeArchive = await encodeNodeTypePackage(nodeManifest, sceneOntology, nodeTypeSource, nodeSources);
-  const nodeType = await decodeNodeTypePackage(nodeArchive);
-  const collectionArchive = encodeCollectionPackage({ collection: sceneCollection, nodeTypes: [nodeType], elementPlugins: [element] });
-  return { elementArchive, nodeTypeArchive: nodeArchive, collectionArchive, element, nodeType, collection: sceneCollection };
+  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, sceneOntology, nodeTypeSource, nodeSources);
+  const nodeType = await decodeNodeTypePackage(nodeTypePip);
+  const nodeMap = {
+    manifest: baseNodeMapManifest(SCENE_NODE_MAP_ID, "小明的今天", ["scene.view.quadrant", "scene.view.tube"], [await exactPackageRef(nodeTypePip, nodeType.manifest)]),
+    ...sceneNodeMapData,
+  };
+  const nodeMapPip = await encodeNodeMapPackage({ nodeMap, nodeTypes: [nodeType], elementPlugins: [element] });
+  return { elementPip, nodeTypePip, nodeMapPip, element, nodeType, nodeMap };
 }

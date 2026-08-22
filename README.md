@@ -2,13 +2,13 @@
 
 Relation Map 是以 `RelationNode` 为唯一事实模型的关系世界编辑器。节点是递归关系集合；入关系、依赖边、事件连线与层级视图均由索引或插件动态推导，不持久化第二份边数据。
 
-空白应用只包含关系内核、原子补丁、包管理和通用工作区宿主。浏览器入口位于 `pip-editor/web/`，由 React 与 esbuild 直接构建；Intent 与 Scene 不属于核心，也不会被默认发现或安装，它们在 `pip-editor-plugins/` 下以三个手动安装的 V2 包交付：
+空白应用只包含关系内核、原子补丁、PIP 管理和通用工作区宿主。浏览器入口位于 `pip-editor/web/`；Intent 与 Scene 位于 `pip-editor-io/`，不会被核心自动安装。系统只交换 `.pip`：
 
 PIP 的分离工作区、外部资源索引及流式 Bundle/Unbundle 也属于编辑器通用 I/O，分别位于 `pip-editor/pip/workspace/` 与 `pip-editor/pip/bundle/`，不再使用含义模糊的根级 `a3/` 目录。
 
-- 元素插件：主窗口 Web Component，可视化、交互与编辑。
-- 节点类型插件：主窗口单文件 ESM，注册类型、校验、命令、执行器、投影器和语言 provider。
-- 节点集合插件：不执行代码，提供 RelationGraph、视图状态及精确依赖。
+- A3 Node Element Plugin：Web Component 表现、交互与编辑。
+- A4 Node Type Plugin：类型、校验、命令、执行器、投影器和语言 provider。
+- A5 Node Map：不执行代码，提供 RelationGraph、视图状态及精确 A4 依赖；portable 形式扁平携带依赖 PIP。
 
 可执行插件与宿主拥有相同浏览器权限。哈希用于完整性检查，不代表沙箱或信任授权；禁用会撤销宿主注册项，已执行代码需要刷新才能完全清除。
 
@@ -23,19 +23,19 @@ npm run build
 npm test
 ```
 
-`npm run dev` 默认在 `http://127.0.0.1:3000` 提供自动刷新的空白通用宿主。生成可手动安装的 Intent/Scene 三层插件包：
+`npm run dev` 默认在 `http://127.0.0.1:3000` 提供自动刷新的空白通用宿主。生成 Intent/Scene 的 A3–A5 PIP：
 
 ```bash
 npm run plugins:relation:build
 ```
 
-产物写入 `dist/relation-plugins/`。完整架构与包契约见 [三层 RelationNode 插件架构](doc/relation_node_plugins.md)，浏览器验收步骤见 [three-layer-browser-checklist.md](tests/three-layer-browser-checklist.md)。
+产物写入 `dist/pip-editor-io/`。完整架构与包契约见 [A3–A5 RelationNode PIP 架构](doc/relation_node_plugins.md)。
 
 ## PIP 与自托管
 
-系统维护 A0 Seed、A1 Loader 和 A2 Relation Map 三个核心 PIP。常用命令：
+系统统一维护 A0 Seed、A1 Loader、A2 Editor、A3 Node Element、A4 Node Type、A5 Node Map 六层协议。常用命令：
 
-根目录按处理机制命名：`pip-seed/` 从最小宿主逐层发现、校验并加载 PIP，最终启动 `pip-editor/`；领域能力位于 `pip-editor-plugins/`。
+根目录按处理机制命名：`pip-seed/` 负责自举，`pip-editor/` 负责编辑，`pip-editor-io/` 负责外部 PIP 的进入与离开。
 
 - `npm run pip:system`：重建 Git 跟踪的 A0–A2 PIP。
 - `npm run pip:self:audit`：审计 PIP 内源码与仓库边界。

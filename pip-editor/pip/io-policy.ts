@@ -125,3 +125,17 @@ export const pipLimit = (value: bigint | number): PipLimit => {
   if (normalized < BigInt(0)) throw new Error("PIP limit cannot be negative");
   return { mode: "value", value: normalized.toString() };
 };
+
+/**
+ * A file chosen explicitly by the user is its own finite I/O envelope. PIP v1
+ * stores resources without compression, so no decoded metric can exceed the
+ * selected byte length (and its compression ratio is exactly one).
+ */
+export const selectedPipFilePolicy = (byteLength: number): PipIoPolicy => ({
+  schemaVersion: 1,
+  maxPipBytes: pipLimit(byteLength),
+  maxSingleResourceBytes: pipLimit(byteLength),
+  maxExpandedBytes: pipLimit(byteLength),
+  maxResourceCount: pipLimit(byteLength),
+  maxCompressionRatio: pipLimit(1),
+});

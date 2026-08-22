@@ -3,16 +3,16 @@ import {
   eventReferenceCount, formatHour, kindRange, project, timeX,
 } from "./geometry.js";
 import {
-  kindOf, nameOf, projectionId, roleRelations, scalar, sceneMembers, selectedId,
+  kindOf, nameOf, projectionId, roleRelations, scalar, sceneMembers,
 } from "./selectors.js";
 
 const pointKey = (point) => `${point.x},${point.y}`;
-export function projectScene(mode, view, graph) {
+export function projectScene(mode, view, graph, selection = []) {
   const members = sceneMembers(view, graph);
   const entities = members.filter((node) => kindOf(node) !== "event");
   const events = members.filter((node) => kindOf(node) === "event");
   const camera = scalar(view, "camera") ?? {};
-  const selected = selectedId(view);
+  const selected = selection[0];
   const angle = mode === "quadrant" ? camera.zRotation : 90;
   const effectiveCamera = { ...camera, zRotation: angle };
   const surfaceById = new Map(entities.map((node) => [node.id, entitySurfacePoint(node, entities, events, mode)]));

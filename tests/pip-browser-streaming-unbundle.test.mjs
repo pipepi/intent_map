@@ -54,7 +54,7 @@ test("browser unbundle streams a Bundle into an empty split workspace", async ()
   const pip = {
     manifest: {
       packageId: "browser-unbundle-test",
-      layer: "a5",
+      layer: "a1",
       artifactName: "browser_unbundle_test",
       name: "Browser unbundle test",
       packageVersion: "1.0.0",
@@ -81,7 +81,7 @@ test("browser unbundle streams a Bundle into an empty split workspace", async ()
   const store = new MemoryWorkspaceResourceStore(resources);
   const bundleBytes = await bundleSplitWorkspace(pip, openWorkspaceResourceSession(pip, store), io);
   const bundle = {
-    name: "a5_browser_unbundle_test_1_0_0_20260807.pip",
+    name: "a1_browser_unbundle_test_1_0_0_20260807.pip",
     size: bundleBytes.byteLength,
     slice: (start, end) => new Blob([bundleBytes.slice(start, end)]),
   };

@@ -1,14 +1,15 @@
 import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/relation-host/packages/element-package.ts";
-import { encodeCollectionPackage } from "../../pip-editor/relation-host/packages/collection-package.ts";
+import { encodeNodeMapPackage } from "../../pip-editor/relation-host/packages/node-map-package.ts";
 import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/relation-host/packages/node-type-package.ts";
-import type { NodeCollectionPlugin } from "../../pip-editor/relation-host/contracts/package-types.ts";
+import { exactPackageRef } from "../../pip-editor/relation-host/packages/pip-package.ts";
+import type { NodeMap } from "../../pip-editor/relation-host/contracts/package-types.ts";
 import { assertRelationGraph, type Relation } from "../../pip-editor/relation/index.ts";
-import { baseElementManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
+import { baseElementManifest, baseNodeMapManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
 import { constRelation, mergeGraphs, ontologyGraph, refRelation, relationNode } from "../shared/relation-builders.ts";
 
 export const INTENT_ELEMENT_PLUGIN_ID = "official.intent-elements";
 export const INTENT_NODE_PLUGIN_ID = "official.intent-types";
-export const INTENT_COLLECTION_ID = "official.intent-workspace";
+export const INTENT_NODE_MAP_ID = "official.intent-workspace";
 export const INTENT_TYPES = ["composite", "operator", "linked-module", "loader", "renderer", "state", "action"].map((kind) => `intent.type.${kind}`);
 
 const predicates = ["name", "description", "type", "input", "output", "contains", "position", "implementation", "module-ref", "binding"]
@@ -54,7 +55,7 @@ const node = (id: string, name: string, type: string, extra: Relation[] = []) =>
   ...extra,
 ]);
 
-export const intentCollectionGraph = mergeGraphs(intentOntology, ontologyGraph([
+export const intentNodeMapGraph = mergeGraphs(intentOntology, ontologyGraph([
   node("intent.application-root", "Intent Map 应用根", "composite", [
     refRelation("contains:loader", "intent.predicate.contains", "intent.document-loader"),
     refRelation("contains:business", "intent.predicate.contains", "intent.business-root"),
@@ -70,20 +71,20 @@ export const intentCollectionGraph = mergeGraphs(intentOntology, ontologyGraph([
     constRelation("output:done", "intent.predicate.output", true),
   ]),
 ]));
-assertRelationGraph(intentCollectionGraph);
+assertRelationGraph(intentNodeMapGraph);
 
 export async function buildIntentPluginSuite() {
   const elementManifest = { ...baseElementManifest(INTENT_ELEMENT_PLUGIN_ID, "Intent Elements"), elements: [{ id: "node", tag: "intent-relation-node", purpose: "node" as const }] };
-  const elementArchive = await encodeElementPackage(elementManifest, elementSource, { "source/index.js": elementSource });
-  const element = await decodeElementPackage(elementArchive);
-  const nodeManifest = baseNodeTypeManifest(INTENT_NODE_PLUGIN_ID, "Intent Relation Types", INTENT_TYPES, INTENT_ELEMENT_PLUGIN_ID);
-  const nodeArchive = await encodeNodeTypePackage(nodeManifest, intentOntology, nodeTypeSource, { "source/index.js": nodeTypeSource });
-  const nodeType = await decodeNodeTypePackage(nodeArchive);
-  const collection: NodeCollectionPlugin = {
-    manifest: { format: "intent-node-collection", schemaVersion: 2, id: INTENT_COLLECTION_ID, name: "Intent Workspace", version: "2.0.0", rootNodeIds: ["intent.application-root"], dependencies: { nodeTypes: [{ id: INTENT_NODE_PLUGIN_ID, version: "2.0.0" }], elements: [{ id: INTENT_ELEMENT_PLUGIN_ID, version: "2.0.0" }] } },
-    graph: intentCollectionGraph,
+  const elementPip = await encodeElementPackage(elementManifest, elementSource, { "source/index.js": elementSource });
+  const element = await decodeElementPackage(elementPip);
+  const nodeManifest = baseNodeTypeManifest(INTENT_NODE_PLUGIN_ID, "Intent Relation Types", INTENT_TYPES, [await exactPackageRef(elementPip, element.manifest)]);
+  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, intentOntology, nodeTypeSource, { "source/index.js": nodeTypeSource });
+  const nodeType = await decodeNodeTypePackage(nodeTypePip);
+  const nodeMap: NodeMap = {
+    manifest: baseNodeMapManifest(INTENT_NODE_MAP_ID, "Intent Workspace", ["intent.application-root"], [await exactPackageRef(nodeTypePip, nodeType.manifest)]),
+    graph: intentNodeMapGraph,
     workspace: { views: { kind: "workbench", panels: ["tree", "canvas", "properties"] }, initialSelection: ["intent.business-root"] },
   };
-  const collectionArchive = encodeCollectionPackage({ collection, nodeTypes: [nodeType], elementPlugins: [element] });
-  return { elementArchive, nodeTypeArchive: nodeArchive, collectionArchive, element, nodeType, collection };
+  const nodeMapPip = await encodeNodeMapPackage({ nodeMap, nodeTypes: [nodeType], elementPlugins: [element] });
+  return { elementPip, nodeTypePip, nodeMapPip, element, nodeType, nodeMap };
 }

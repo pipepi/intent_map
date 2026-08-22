@@ -12,11 +12,11 @@ pub enum PipLayer {
     #[serde(rename = "a2")]
     Editor,
     #[serde(rename = "a3")]
-    Functional,
+    NodeElement,
     #[serde(rename = "a4")]
-    Business,
+    NodeType,
     #[serde(rename = "a5")]
-    Other,
+    NodeMap,
 }
 
 impl PipLayer {
@@ -25,9 +25,9 @@ impl PipLayer {
             Self::Seed => "a0",
             Self::Loader => "a1",
             Self::Editor => "a2",
-            Self::Functional => "a3",
-            Self::Business => "a4",
-            Self::Other => "a5",
+            Self::NodeElement => "a3",
+            Self::NodeType => "a4",
+            Self::NodeMap => "a5",
         }
     }
 
@@ -36,9 +36,9 @@ impl PipLayer {
             "a0" => Ok(Self::Seed),
             "a1" => Ok(Self::Loader),
             "a2" => Ok(Self::Editor),
-            "a3" => Ok(Self::Functional),
-            "a4" => Ok(Self::Business),
-            "a5" => Ok(Self::Other),
+            "a3" => Ok(Self::NodeElement),
+            "a4" => Ok(Self::NodeType),
+            "a5" => Ok(Self::NodeMap),
             _ => Err(format!("unsupported PIP layer: {value}")),
         }
     }

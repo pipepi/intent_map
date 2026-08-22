@@ -21,8 +21,8 @@ test("RelationNode core and host do not import domain plugin suites or a3", asyn
 
 test("external suites contain domain behavior outside the blank host", async () => {
   const [intent, sceneSources] = await Promise.all([
-    readFile(new URL("pip-editor-plugins/intent/suite.ts", root), "utf8"),
-    sourceUnder("pip-editor-plugins/scene/"),
+    readFile(new URL("pip-editor-io/intent/suite.ts", root), "utf8"),
+    sourceUnder("pip-editor-io/scene/"),
   ]);
   const scene = sceneSources.map(({ source }) => source).join("\n");
   assert.match(intent, /registerExecutor\("intent\.evaluate"/);

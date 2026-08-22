@@ -23,21 +23,21 @@ export class ElementPluginRegistry {
   }
 
   install(plugin: ElementPluginPackage): Promise<PluginInstallStatus> {
-    const pending = this.#installing.get(plugin.manifest.id);
+    const pending = this.#installing.get(plugin.manifest.packageId);
     if (pending) return pending.then(() => this.#installOnce(plugin));
     const task = this.#installOnce(plugin).finally(() => {
-      if (this.#installing.get(plugin.manifest.id) === task) this.#installing.delete(plugin.manifest.id);
+      if (this.#installing.get(plugin.manifest.packageId) === task) this.#installing.delete(plugin.manifest.packageId);
     });
-    this.#installing.set(plugin.manifest.id, task);
+    this.#installing.set(plugin.manifest.packageId, task);
     return task;
   }
 
   async #installOnce(plugin: ElementPluginPackage): Promise<PluginInstallStatus> {
-    const current = this.#plugins.get(plugin.manifest.id);
+    const current = this.#plugins.get(plugin.manifest.packageId);
     if (current) {
       assertSameImmutablePlugin(current.manifest, plugin.manifest);
       if (current.active) return "already-active";
-      this.#plugins.set(plugin.manifest.id, { ...current, active: true });
+      this.#plugins.set(plugin.manifest.packageId, { ...current, active: true });
       return "reactivated";
     }
     for (const element of plugin.manifest.elements) {
@@ -47,7 +47,7 @@ export class ElementPluginRegistry {
     await this.#runtime.load(plugin.entrySource);
     const missing = plugin.manifest.elements.find((element) => !this.#runtime.registry.get(element.tag));
     if (missing) throw new Error(`Element module did not register ${missing.tag}`);
-    this.#plugins.set(plugin.manifest.id, { ...plugin, active: true });
+    this.#plugins.set(plugin.manifest.packageId, { ...plugin, active: true });
     return "installed";
   }
 

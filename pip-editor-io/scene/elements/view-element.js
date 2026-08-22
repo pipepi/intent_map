@@ -41,7 +41,10 @@ export class SceneViewElement extends HTMLElement {
     }
     const target = event.target.closest?.("[data-select]");
     if (!target || this.drag) return;
-    this.command("scene.select-instance", { viewId: this.data().viewId, nodeId: target.dataset.select });
+    this.dispatchEvent(new CustomEvent("intent-relation-request", {
+      bubbles: true, composed: true,
+      detail: { kind: "select", nodeIds: [target.dataset.select], scopeId: this.data().viewId },
+    }));
   }
   changeCamera(event) {
     const input = event.target.closest?.("[data-camera]");

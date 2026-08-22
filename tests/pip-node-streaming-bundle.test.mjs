@@ -42,7 +42,7 @@ test("node streaming Bundle is byte-identical without aggregating resources thro
   const pip = {
     manifest: {
       packageId: "stream-bundle-test",
-      layer: "a5",
+      layer: "a1",
       artifactName: "stream_bundle_test",
       name: "Stream Bundle Test",
       packageVersion: "1.0.0",
@@ -69,7 +69,7 @@ test("node streaming Bundle is byte-identical without aggregating resources thro
   const expected = await bundleSplitWorkspace(pip, session, io);
   store.read = async () => { throw new Error("streaming bundler must not call read()"); };
 
-  const destination = path.join(temporary, "a5_stream_bundle_test_1_0_0_20260807.pip");
+  const destination = path.join(temporary, "a1_stream_bundle_test_1_0_0_20260807.pip");
   const result = await streamNodeWorkspaceBundle({ pip, session, store, destination, options: io });
   const actual = new Uint8Array(await readFile(destination));
   assert.equal(result.byteLength, actual.byteLength.toString());

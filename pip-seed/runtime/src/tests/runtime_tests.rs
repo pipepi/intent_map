@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn temporary_directory(label: &str) -> PathBuf {
@@ -12,10 +11,10 @@ fn temporary_directory(label: &str) -> PathBuf {
 fn installs_user_packages_without_overwriting_versions() {
     let directory = temporary_directory("install");
     let bytes = include_bytes!("../../../../tests/fixtures/minimal-valid.pip");
-    let file = "a5_intent_map_test_0_1_0_20260726.pip";
+    let file = "a1_intent_map_test_0_1_0_20260726.pip";
     let destination =
         install_user_package(&directory, file, bytes, &PipIoPolicy::unlimited()).unwrap();
-    assert_eq!(destination, directory.join("registry/a5").join(file));
+    assert_eq!(destination, directory.join("registry/a1").join(file));
     assert!(install_user_package(&directory, file, bytes, &PipIoPolicy::unlimited()).is_err());
     fs::remove_dir_all(directory).unwrap();
 }

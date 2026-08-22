@@ -12,11 +12,6 @@ export function updateCamera(input, graph) {
   if (!current || current.object.kind !== "const" || !input.camera || typeof input.camera !== "object") throw new Error("Invalid Scene camera update");
   return put(graph, view.id, { ...current, object: { kind: "const", value: { ...current.object.value, ...input.camera } } });
 }
-export function selectInstance(input, graph) {
-  const view = requireNode(graph, input.viewId), selected = requireNode(graph, input.nodeId), current = relationBy(view, "selection");
-  if (!current || !sceneMembers(view, graph).some(({ id }) => id === selected.id)) throw new Error("Scene selection is outside the observed scene");
-  return put(graph, view.id, { ...current, object: { kind: "ref", target: { nodeId: selected.id, relationId: "identity" } } });
-}
 export function moveEntity(input, graph) {
   const view = requireNode(graph, input.viewId), entity = requireNode(graph, input.nodeId);
   const camera = scalar(view, "camera"), position = relationBy(entity, "position");

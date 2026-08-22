@@ -7,6 +7,7 @@ import {
   assertPipIoPolicy,
   evaluatePipLimit,
   pipLimit,
+  selectedPipFilePolicy,
   resolvePipIoPolicy,
 } from "../pip-editor/pip/io-policy.ts";
 
@@ -22,6 +23,17 @@ test("unlimited policy is available only as an explicit caller choice", () => {
   for (const [field, limit] of Object.entries(UNLIMITED_PIP_IO_POLICY)) {
     if (field !== "schemaVersion") assert.equal(limit.mode, "unlimited");
   }
+});
+
+test("an explicitly selected PIP file produces a finite per-file policy", () => {
+  assert.deepEqual(selectedPipFilePolicy(153679), {
+    schemaVersion: 1,
+    maxPipBytes: pipLimit(153679),
+    maxSingleResourceBytes: pipLimit(153679),
+    maxExpandedBytes: pipLimit(153679),
+    maxResourceCount: pipLimit(153679),
+    maxCompressionRatio: pipLimit(1),
+  });
 });
 
 test("PIP I/O policy resolves every field by CLI, session, profile, package, then default", () => {

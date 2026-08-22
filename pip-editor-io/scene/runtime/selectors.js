@@ -22,5 +22,4 @@ export const sceneMembers = (view, graph) => {
 export const roleRelations = (node) => ["subject", "source", "target", "object"]
   .flatMap((role) => targets(node, role).map((ref) => ({ role, ref })));
 export const projectionId = (view) => target(view, "projection")?.nodeId;
-export const selectedId = (view) => target(view, "selection")?.nodeId;
 export const isSceneType = (node, name) => typeId(node) === `scene.type.${name}`;

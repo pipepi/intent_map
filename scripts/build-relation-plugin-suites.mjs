@@ -1,16 +1,17 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { buildIntentPluginSuite } from "../pip-editor-plugins/intent/suite.ts";
-import { buildScenePluginSuite } from "../pip-editor-plugins/scene/suite.ts";
+import { buildIntentPluginSuite } from "../pip-editor-io/intent/suite.ts";
+import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
+import { pipFilename } from "../pip-editor/pip/manifest.ts";
 
-const output = new URL("../dist/relation-plugins/", import.meta.url);
+const output = new URL("../dist/pip-editor-io/", import.meta.url);
 await mkdir(output, { recursive: true });
 
-for (const [name, build] of [["intent", buildIntentPluginSuite], ["scene", buildScenePluginSuite]]) {
+for (const build of [buildIntentPluginSuite, buildScenePluginSuite]) {
   const suite = await build();
   await Promise.all([
-    writeFile(new URL(`${name}.intent-element.zip`, output), suite.elementArchive),
-    writeFile(new URL(`${name}.intent-node-type.zip`, output), suite.nodeTypeArchive),
-    writeFile(new URL(`${name}.intent-collection.zip`, output), suite.collectionArchive),
+    writeFile(new URL(pipFilename(suite.element.manifest), output), suite.elementPip),
+    writeFile(new URL(pipFilename(suite.nodeType.manifest), output), suite.nodeTypePip),
+    writeFile(new URL(pipFilename(suite.nodeMap.manifest), output), suite.nodeMapPip),
   ]);
 }
 

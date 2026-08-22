@@ -15,7 +15,7 @@ const entries = {
   "pip-loader": ["pip-seed/loader"],
   "intent-map": [
     "pip-editor",
-    "pip-editor-plugins",
+    "pip-editor-io",
     "scripts",
     "tests",
     "package.json",

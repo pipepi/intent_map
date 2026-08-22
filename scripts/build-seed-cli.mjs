@@ -2,6 +2,7 @@ import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { resolveRustToolchain } from "./cargo-toolchain.mjs";
 
 import {
   artifactFilename,
@@ -12,10 +13,11 @@ import {
 
 const root = projectRoot;
 const release = (await readReleaseConfig()).seedCli;
+const toolchain = resolveRustToolchain();
 const cargo = spawnSync(
-  "cargo",
+  toolchain.cargo,
   ["build", "--release", "--manifest-path", path.join(root, "pip-seed", "cli", "Cargo.toml")],
-  { cwd: root, stdio: "inherit" },
+  { cwd: root, stdio: "inherit", env: toolchain.env },
 );
 if (cargo.status !== 0) process.exit(cargo.status ?? 1);
 

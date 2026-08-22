@@ -10,7 +10,7 @@ export function resolveNodePresentation(
   elements: ElementPluginRegistry,
   nodeTypes: NodeTypePluginRegistry,
   purpose: "node" | "workspace" = "node",
-  projectionInput?: { workspaceId: string; rootNodeIds: string[] },
+  projectionInput?: { workspaceId: string; rootNodeIds: string[]; workspaceView: JsonValue; selection: string[] },
 ) {
   const matches = [];
   for (const candidate of nodeTypes.projections()) {
@@ -30,7 +30,9 @@ export function resolveNodePresentation(
     try {
       projectionData = projection.project({
         workspaceId: projectionInput?.workspaceId ?? "unknown",
-        rootNodeIds: projectionInput?.rootNodeIds ?? [], graph, node,
+        rootNodeIds: projectionInput?.rootNodeIds ?? [],
+        workspaceView: projectionInput?.workspaceView ?? null,
+        selection: projectionInput?.selection ?? [], graph, node,
       });
       assertJsonValue(projectionData, `Projection ${projection.id} data`);
       projectionData = structuredClone(projectionData);

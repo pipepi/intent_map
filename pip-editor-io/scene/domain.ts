@@ -1,16 +1,15 @@
-import type { NodeCollectionPlugin } from "../../pip-editor/relation-host/contracts/package-types.ts";
 import type { Relation } from "../../pip-editor/relation/index.ts";
 import { assertRelationGraph } from "../../pip-editor/relation/index.ts";
 import { constRelation, mergeGraphs, ontologyGraph, refRelation, relationNode } from "../shared/relation-builders.ts";
 
 export const SCENE_ELEMENT_PLUGIN_ID = "official.scene-elements";
 export const SCENE_NODE_PLUGIN_ID = "official.scene-types";
-export const SCENE_COLLECTION_ID = "official.today-scene";
+export const SCENE_NODE_MAP_ID = "official.today-scene";
 export const SCENE_TYPE_NAMES = ["scene", "projection-instance", "person", "physical", "virtual", "event"] as const;
 export const SCENE_TYPES = SCENE_TYPE_NAMES.map((kind) => `scene.type.${kind}`);
 export const SCENE_PREDICATES = [
   "name", "type", "position", "time", "subject", "source", "target", "object",
-  "contains", "observes", "projection", "camera", "selection",
+  "contains", "observes", "projection", "camera",
 ] as const;
 
 const predicates = SCENE_PREDICATES.map((name) => relationNode(`scene.predicate.${name}`));
@@ -58,23 +57,16 @@ const sceneRoot = relationNode("scene.today", [
 const view = (id: string, projection: "quadrant" | "tube", camera: Record<string, number>) => relationNode(id, [
   refRelation("type", "scene.predicate.type", "scene.type.projection-instance"), refRelation("observes", "scene.predicate.observes", "scene.today"),
   refRelation("projection", "scene.predicate.projection", `scene.projection.${projection}`), constRelation("camera", "scene.predicate.camera", camera),
-  refRelation("selection", "scene.predicate.selection", "scene.deliver-breakfast"),
 ]);
 
-export const sceneCollectionGraph = mergeGraphs(sceneOntology, ontologyGraph([
+export const sceneNodeMapGraph = mergeGraphs(sceneOntology, ontologyGraph([
   ...businessNodes, sceneRoot,
   view("scene.view.quadrant", "quadrant", { zRotation: 135, yAxisLength: 200, zAxisLength: 200, xZoom: 1, xPan: 0 }),
   view("scene.view.tube", "tube", { xZoom: 1, xPan: 0 }),
 ]));
-assertRelationGraph(sceneCollectionGraph);
+assertRelationGraph(sceneNodeMapGraph);
 
-export const sceneCollection: NodeCollectionPlugin = {
-  manifest: {
-    format: "intent-node-collection", schemaVersion: 2, id: SCENE_COLLECTION_ID, name: "小明的今天", version: "2.0.0",
-    rootNodeIds: ["scene.view.quadrant", "scene.view.tube"], dependencies: {
-      nodeTypes: [{ id: SCENE_NODE_PLUGIN_ID, version: "2.0.0" }], elements: [{ id: SCENE_ELEMENT_PLUGIN_ID, version: "2.0.0" }],
-    },
-  },
-  graph: sceneCollectionGraph,
+export const sceneNodeMapData = {
+  graph: sceneNodeMapGraph,
   workspace: { views: { kind: "parallel-projections" }, initialSelection: ["scene.deliver-breakfast"] },
 };

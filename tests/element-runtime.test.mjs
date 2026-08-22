@@ -3,7 +3,7 @@ import test from "node:test";
 import { ElementPluginRegistry } from "../pip-editor/relation-host/activation/element-registry.ts";
 
 const plugin = (id = "official.text", tag = "intent-text-preview") => ({
-  manifest: { id, version: "1.0.0", entrySha256: "a".repeat(64), sourceSha256: "b".repeat(64), elements: [{ id: "text", tag, purpose: "preview" }] }, entrySource: "register", files: {}, archive: new Uint8Array(),
+  manifest: { packageId: id, packageVersion: "1.0.0", entrySha256: "a".repeat(64), sourceSha256: "b".repeat(64), elements: [{ id: "text", tag, purpose: "preview" }] }, entrySource: "register", files: {}, pipBytes: new Uint8Array(), contentSha256: "c".repeat(64),
 });
 
 test("runtime installs, resolves and disables an element plugin", async () => {
@@ -16,7 +16,7 @@ test("runtime installs, resolves and disables an element plugin", async () => {
   assert.equal(registry.resolve("official.text", "text"), undefined);
   assert.ok(tags.has("intent-text-preview"), "browser tag remains registered after disable");
   assert.equal(await registry.install(plugin()), "reactivated");
-  await assert.rejects(() => registry.install({ ...plugin(), manifest: { ...plugin().manifest, version: "2.0.0" } }), /conflicts with installed immutable package/);
+  await assert.rejects(() => registry.install({ ...plugin(), manifest: { ...plugin().manifest, packageVersion: "2.0.0" } }), /conflicts with installed immutable package/);
 });
 
 test("runtime rejects tag conflicts, missing registration and loader errors", async () => {

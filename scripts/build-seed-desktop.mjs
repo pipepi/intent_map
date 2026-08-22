@@ -2,6 +2,7 @@ import { copyFile, cp, mkdir, readFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { resolveRustToolchain } from "./cargo-toolchain.mjs";
 
 import {
   artifactFilename,
@@ -15,7 +16,8 @@ const release = (await readReleaseConfig()).seed;
 const seedSourceSha = createHash("sha256")
   .update(await readFile(systemPipFilePath(release)))
   .digest("hex");
-const buildEnvironment = { ...process.env, PIP_SEED_SOURCE_SHA: seedSourceSha };
+const toolchain = resolveRustToolchain();
+const buildEnvironment = { ...toolchain.env, PIP_SEED_SOURCE_SHA: seedSourceSha };
 await mkdir(runtimeDirectory, { recursive: true });
 
 if (process.platform === "darwin") {
@@ -53,7 +55,7 @@ if (process.platform === "darwin") {
   process.exit(0);
 }
 
-const cargo = spawnSync("cargo", [
+const cargo = spawnSync(toolchain.cargo, [
   "build", "--release", "--manifest-path", path.join(projectRoot, "pip-seed", "tauri", "Cargo.toml"),
 ], { cwd: projectRoot, stdio: "inherit", env: buildEnvironment });
 if (cargo.status !== 0) process.exit(cargo.status ?? 1);

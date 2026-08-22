@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildIntentPluginSuite, INTENT_TYPES } from "../pip-editor-plugins/intent/suite.ts";
+import { buildIntentPluginSuite, INTENT_TYPES } from "../pip-editor-io/intent/suite.ts";
 import { decodeNodeTypePackage, encodeNodeTypePackage, validateNodeTypeDependencies } from "../pip-editor/relation-host/packages/node-type-package.ts";
 import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
 
@@ -8,7 +8,7 @@ const dataModule = async (source) => import(`data:text/javascript;base64,${Buffe
 
 test("executable v2 node type package round-trips and registers every declared type", async () => {
   const suite = await buildIntentPluginSuite();
-  const decoded = await decodeNodeTypePackage(suite.nodeTypeArchive);
+  const decoded = await decodeNodeTypePackage(suite.nodeTypePip);
   assert.deepEqual(decoded.manifest.typeNodeIds, INTENT_TYPES);
   validateNodeTypeDependencies(decoded, [suite.element]);
   const registry = new NodeTypePluginRegistry({ load: dataModule });
@@ -16,7 +16,7 @@ test("executable v2 node type package round-trips and registers every declared t
   assert.equal(await registry.install(decoded), "already-active");
   assert.equal(registry.types().length, INTENT_TYPES.length);
   assert.ok(registry.executors().has("intent.evaluate"));
-  registry.disable(decoded.manifest.id);
+  registry.disable(decoded.manifest.packageId);
   assert.equal(registry.types().length, 0);
   assert.equal(await registry.install(decoded), "reactivated");
   await assert.rejects(() => registry.install({ ...decoded, manifest: { ...decoded.manifest, entrySha256: "f".repeat(64) } }), /conflicts with installed immutable package/);
@@ -50,7 +50,7 @@ test("disable clears host registrations even when plugin cleanup throws", async 
     return () => { throw new Error("cleanup exploded"); };
   } }) });
   await registry.install(suite.nodeType);
-  assert.throws(() => registry.disable(suite.nodeType.manifest.id), /cleanup reported errors/);
+  assert.throws(() => registry.disable(suite.nodeType.manifest.packageId), /cleanup reported errors/);
   assert.equal(registry.types().length, 0);
   assert.equal(registry.commands().size, 0);
   assert.equal(registry.list()[0].active, false);
@@ -76,5 +76,5 @@ test("node type registrations must exactly match manifest identity refs", async 
 test("node type dependencies require exact installed element versions", async () => {
   const suite = await buildIntentPluginSuite();
   assert.throws(() => validateNodeTypeDependencies(suite.nodeType, []), /缺少/);
-  assert.throws(() => validateNodeTypeDependencies(suite.nodeType, [{ manifest: { id: suite.element.manifest.id, version: "3.0.0" } }]), /精确版本/);
+  assert.throws(() => validateNodeTypeDependencies(suite.nodeType, [{ ...suite.element, manifest: { ...suite.element.manifest, packageVersion: "3.0.0" } }]), /内容身份/);
 });

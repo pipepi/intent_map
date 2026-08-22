@@ -23,7 +23,7 @@ const packageWithResources = () => {
   return {
     manifest: {
       packageId: "workspace-test",
-      layer: "a5",
+      layer: "a1",
       artifactName: "workspace_test",
       name: "Workspace Test",
       packageVersion: "1.0.0",

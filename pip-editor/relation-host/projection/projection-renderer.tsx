@@ -63,7 +63,7 @@ export function RelationNodeRenderer({ workspaceId, rootNodeIds, workspaceView, 
   onRequest: (request: RelationElementRequest) => void;
 }) {
   const { type, projection, projectionData, declaration, error } = resolveNodePresentation(
-    node, graph, elements, nodeTypes, purpose, { workspaceId, rootNodeIds },
+    node, graph, elements, nodeTypes, purpose, { workspaceId, rootNodeIds, workspaceView, selection },
   );
   const context = useMemo<ElementContext>(() => ({
     workspaceId, rootNodeIds, workspaceView, graph, node, typeDescriptor: type, selection,

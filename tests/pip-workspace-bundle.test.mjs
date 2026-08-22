@@ -20,7 +20,7 @@ const packageFor = (index) => {
   return {
     manifest: {
       packageId: "bundle-test",
-      layer: "a5",
+      layer: "a1",
       artifactName: "bundle_test",
       name: "Bundle Test",
       packageVersion: "1.0.0",

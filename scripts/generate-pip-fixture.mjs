@@ -39,7 +39,7 @@ const entries = [
   ["minimal-valid.pip", await build({
     ...common,
     packageId: "intent-map.test",
-    layer: "a5",
+  layer: "a1",
     artifactName: "intent_map_test",
     name: "Intent Map Test",
     packageVersion: "0.1.0",

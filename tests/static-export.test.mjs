@@ -29,7 +29,7 @@ test("the esbuild export is a self-contained editor shell without Next assets", 
 test("derived views never persist an edges collection", async () => {
   const [model, collection] = await Promise.all([
     readFile(new URL("../pip-editor/relation/reference-index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../pip-editor/relation-host/packages/collection-package.ts", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/packages/node-map-package.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(model, /\bedges\s*:/);
   assert.doesNotMatch(collection, /\bedges\s*:/);
