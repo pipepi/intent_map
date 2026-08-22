@@ -1,5 +1,3 @@
-"use client";
-
 /** Coordinates package installation, capability routing, workspace commits, and React publication. */
 import { useRef, useState } from "react";
 import { createCollectionWorkspace, decodeCollectionPackage, PortableCollectionCatalog, type PortableCollection } from "./packages/collection-package";

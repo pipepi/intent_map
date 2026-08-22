@@ -6,12 +6,11 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
-    "start": "next start",
+    "dev": "node scripts/run-editor-dev.mjs",
+    "build": "node scripts/build-editor-static.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:pip": "node --test tests/pip-format.test.mjs && cargo test --manifest-path pip-seed/runtime/Cargo.toml && cargo test --manifest-path pip-seed/cli/Cargo.toml && cargo check --manifest-path pip-seed/tauri/Cargo.toml",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint .",
     "plugins:relation:build": "node scripts/build-relation-plugin-suites.mjs",
     "pip:build": "node scripts/build-editor-static.mjs && node scripts/build-editor-pip.mjs",
     "pip:verify": "node scripts/verify-pip.mjs",
@@ -35,19 +34,21 @@
   "dependencies": {
     "es-module-lexer": "2.1.0",
     "fflate": "^0.8.3",
-    "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "esbuild": "0.28.0",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
-    "typescript": "5.9.3"
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.5.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.67.0"
   },
   "type": "module"
 }

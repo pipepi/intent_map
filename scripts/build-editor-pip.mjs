@@ -98,7 +98,7 @@ if (!indexAsset) {
 const indexHtml = new TextDecoder().decode(indexAsset.bytes);
 const stylesheetPaths = [...indexHtml.matchAll(
   /<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["'][^>]*>/gi,
-)].map((match) => match[1].split(/[?#]/, 1)[0].replace(/^\/+/, ""));
+)].map((match) => match[1].split(/[?#]/, 1)[0].replace(/^(?:\.\/|\/)+/, ""));
 if (!stylesheetPaths.length) {
   throw new Error("PIP index.html does not reference a stylesheet");
 }

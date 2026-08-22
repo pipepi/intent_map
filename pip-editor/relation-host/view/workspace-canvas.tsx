@@ -1,5 +1,3 @@
-"use client";
-
 /** Selects workspace roots and lays out one renderer per projection instance. */
 import type { RelationElementRequest } from "../contracts/package-types.ts";
 import type { ElementPluginRegistry } from "../activation/element-registry.ts";

@@ -2,7 +2,7 @@
 
 Relation Map 是以 `RelationNode` 为唯一事实模型的关系世界编辑器。节点是递归关系集合；入关系、依赖边、事件连线与层级视图均由索引或插件动态推导，不持久化第二份边数据。
 
-空白应用只包含关系内核、原子补丁、包管理和通用工作区宿主。通用处理机制位于 `pip-editor/`；Intent 与 Scene 不属于核心，也不会被默认发现或安装，它们在 `pip-editor-plugins/` 下以三个手动安装的 V2 包交付：
+空白应用只包含关系内核、原子补丁、包管理和通用工作区宿主。浏览器入口位于 `pip-editor/web/`，由 React 与 esbuild 直接构建；Intent 与 Scene 不属于核心，也不会被默认发现或安装，它们在 `pip-editor-plugins/` 下以三个手动安装的 V2 包交付：
 
 PIP 的分离工作区、外部资源索引及流式 Bundle/Unbundle 也属于编辑器通用 I/O，分别位于 `pip-editor/pip/workspace/` 与 `pip-editor/pip/bundle/`，不再使用含义模糊的根级 `a3/` 目录。
 
@@ -23,7 +23,7 @@ npm run build
 npm test
 ```
 
-访问 `/` 可打开空白通用宿主。生成可手动安装的 Intent/Scene 三层插件包：
+`npm run dev` 默认在 `http://127.0.0.1:3000` 提供自动刷新的空白通用宿主。生成可手动安装的 Intent/Scene 三层插件包：
 
 ```bash
 npm run plugins:relation:build

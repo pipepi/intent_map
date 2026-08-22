@@ -1,5 +1,3 @@
-"use client";
-
 /** Bridges pure projection data into a plugin Web Component and routes its requests back to the host. */
 import { createElement, useEffect, useMemo, useRef } from "react";
 import type { Relation, RelationGraph, RelationNode } from "../../relation/index.ts";

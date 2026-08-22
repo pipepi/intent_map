@@ -1,5 +1,3 @@
-"use client";
-
 import type { PortableCollection } from "../packages/collection-package.ts";
 import type { ElementPluginPackage, NodeTypePluginPackage } from "../contracts/package-types.ts";
 import type { WorkspaceSession } from "../workspace/workspace-store.ts";
