@@ -4,9 +4,10 @@ import path from "node:path";
 export const projectRoot = path.resolve(import.meta.dirname, "..");
 export const runtimeDirectory = path.join(projectRoot, "dist", "pip-runtime");
 export const applicationDirectory = path.join(runtimeDirectory, "pip");
-export const systemPackagesDirectory = process.env.PIP_SYSTEM_PACKAGES_DIR
-  ? path.resolve(process.env.PIP_SYSTEM_PACKAGES_DIR)
-  : path.join(projectRoot, "packages", "system");
+// The repository stores authoritative PIP files; package loading logic lives in the runtime.
+export const systemPipRepoDirectory = process.env.PIP_SYSTEM_REPO_DIR
+  ? path.resolve(process.env.PIP_SYSTEM_REPO_DIR)
+  : path.join(projectRoot, "pip-seed", "repo", "system");
 
 const artifactPattern = /^[a-z][a-z0-9_]*$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -34,8 +35,8 @@ export const readReleaseConfig = async () => {
   return config;
 };
 
-export const systemPackagePath = (release) => path.join(
-  systemPackagesDirectory,
+export const systemPipFilePath = (release) => path.join(
+  systemPipRepoDirectory,
   release.layer,
   release.packageId,
   artifactFilename(release),

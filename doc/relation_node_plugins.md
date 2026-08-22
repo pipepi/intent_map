@@ -24,7 +24,7 @@ Collection 的 `rootNodeIds` 会原序复制到 workspace。宿主先为每个�
 
 ## 外置领域套件
 
-`plugins/intent/` 和 `plugins/scene/` 分别构造 Element、Node Type、Collection 三个包。核心源码不导入这些目录，空白启动也不自动安装。Intent 的端口、作用域、执行和工作台，以及 Scene 的事件几何、时间视图与中文语言解析，均由对应插件注册并投影。Scene collection 以同为 `scene.type.projection-instance` 的象限和管道节点为有序根；它们独立保存视图状态，并通过 `observes` 观察同一个 `scene.type.scene` 世界节点。
+`pip-editor-plugins/intent/` 和 `pip-editor-plugins/scene/` 分别构造 Element、Node Type、Collection 三个包。核心源码不导入这些目录，空白启动也不自动安装。Intent 的端口、作用域、执行和工作台，以及 Scene 的事件几何、时间视图与中文语言解析，均由对应插件注册并投影。Scene collection 以同为 `scene.type.projection-instance` 的象限和管道节点为有序根；它们独立保存视图状态，并通过 `observes` 观察同一个 `scene.type.scene` 世界节点。
 
 节点类型代码和元素代码都在浏览器主窗口运行，拥有宿主同等 DOM、存储和网络权限；系统不把它们描述为沙箱。manifest 权限与哈希仅用于信息披露和完整性校验。ESM lexer 会拒绝 entry 中直接出现的静态、动态和重导出依赖，以维持单文件 ABI，但该检查不构成对任意 JavaScript 的安全隔离。
 

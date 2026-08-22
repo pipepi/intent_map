@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { prepareDocumentExport } from "../app/runtime/export.ts";
-import { loadRelationDocument, serializeRelationDocument } from "../app/relation/document.ts";
+import { prepareDocumentExport } from "../pip-editor/pip/export.ts";
+import { loadRelationDocument, serializeRelationDocument } from "../pip-editor/relation/document.ts";
 import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 
 test("prepares a deterministic RelationDocument export with an integrity receipt", async () => {

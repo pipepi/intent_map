@@ -5,20 +5,16 @@ import {
   assertPipManifest,
   decodePip as decodePipWithPolicy,
   encodePip as encodePipWithPolicy,
-} from "../app/runtime/pip.ts";
+} from "../pip-editor/pip/index.ts";
 import {
   ASK_PIP_IO_POLICY,
   UNLIMITED_PIP_IO_POLICY,
-} from "../app/runtime/pip-io-policy.ts";
-import {
-  assertCapabilityProvider,
-  resolveCapabilitySet,
-} from "../a3/core/pip-capabilities.ts";
+} from "../pip-editor/pip/io-policy.ts";
 import {
   compatibleEditors,
   entryMatchesRef,
   resolveExactEditor,
-} from "../app/runtime/pip-profile.ts";
+} from "../pip-editor/pip/profile.ts";
 
 const sha = "a".repeat(64);
 const releaseDate = "20260807";
@@ -136,41 +132,5 @@ test("editor compatibility filters document kinds and only uses preferences for 
     compatibleEditors([table, incompatible, tree], ["intent-document/3"], ["tree-map/1"])
       .map((entry) => entry.packageId),
     ["intent-map", "table-editor"],
-  );
-});
-
-test("profile capability providers override defaults and remain content-addressed", () => {
-  const userProvider = reference({ origin: "user", packageId: "user-authoring" });
-  const systemProvider = reference({ packageId: "system-authoring" });
-  const [selected] = resolveCapabilitySet({
-    required: ["software-authoring/1", "software-authoring/1"],
-    profile: { capabilities: { "software-authoring/1": userProvider } },
-    systemDefaults: { "software-authoring/1": systemProvider },
-  });
-
-  assert.equal(selected.reference, userProvider);
-  assert.equal(selected.source, "profile");
-  assertCapabilityProvider(
-    "software-authoring/1",
-    userProvider,
-    manifest({
-      packageId: "user-authoring",
-      layer: "a3",
-      providedCapabilities: ["software-authoring/1"],
-    }),
-    sha,
-  );
-  assert.throws(
-    () => assertCapabilityProvider(
-      "software-authoring/1",
-      userProvider,
-      manifest({
-        packageId: "user-authoring",
-        layer: "a3",
-        providedCapabilities: ["software-authoring/1"],
-      }),
-      "b".repeat(64),
-    ),
-    /content identity changed/,
   );
 });

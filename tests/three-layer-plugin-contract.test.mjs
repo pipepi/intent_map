@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertElementManifest, assertNodeCollectionManifest, assertNodeTypeManifest } from "../app/_editor/plugin-editor/package-validation.ts";
-import { buildIntentPluginSuite } from "../plugins/intent/suite.ts";
-import { buildScenePluginSuite } from "../plugins/scene/suite.ts";
+import { assertElementManifest, assertNodeCollectionManifest, assertNodeTypeManifest } from "../pip-editor/relation-host/contracts/package-validation.ts";
+import { buildIntentPluginSuite } from "../pip-editor-plugins/intent/suite.ts";
+import { buildScenePluginSuite } from "../pip-editor-plugins/scene/suite.ts";
 
 test("external Intent and Scene suites satisfy all three v2 package contracts", async () => {
   for (const suite of [await buildIntentPluginSuite(), await buildScenePluginSuite()]) {

@@ -9,12 +9,12 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip } from "../app/runtime/pip.ts";
+import { decodePip } from "../pip-editor/pip/index.ts";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 import {
   artifactFilename,
   readReleaseConfig,
-  systemPackagePath,
+  systemPipFilePath,
 } from "./pip-release.mjs";
 import {
   mergeSourceAsset,
@@ -50,7 +50,7 @@ try {
   const packages = [];
 
   for (const item of selected) {
-    const packagePath = systemPackagePath(item);
+    const packagePath = systemPipFilePath(item);
     const packageBytes = new Uint8Array(await readFile(packagePath));
     const pip = await decodePip(packageBytes, trustedBuildPipIo);
     const expectedFile = artifactFilename(item);

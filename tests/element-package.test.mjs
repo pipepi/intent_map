@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decodeElementPackage, encodeElementPackage } from "../app/_editor/plugin-editor/element-package.ts";
-import { decodeZip, encodeZip } from "../app/_editor/plugin-editor/zip-package.ts";
+import { decodeElementPackage, encodeElementPackage } from "../pip-editor/relation-host/packages/element-package.ts";
+import { decodeZip, encodeZip } from "../pip-editor/relation-host/packages/zip-package.ts";
 
 const manifest = { format: "intent-element-plugin", schemaVersion: 2, runtimeAbi: "relation-element/2", id: "official.text", name: "Text", version: "1.0.0", entry: "entry.mjs",
   elements: [{ id: "text", tag: "intent-text-preview", purpose: "preview" }], permissions: [], sourcePaths: ["source/index.js"],

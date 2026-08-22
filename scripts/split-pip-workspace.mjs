@@ -1,9 +1,9 @@
 import { lstat, mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip } from "../app/runtime/pip.ts";
-import { NodeDirectoryResourceStore } from "../a3/workspace/node-directory-store.ts";
-import { splitPipWorkspace } from "../a3/workspace/split-workspace.ts";
+import { decodePip } from "../pip-editor/pip/index.ts";
+import { NodeDirectoryResourceStore } from "../pip-editor/pip/workspace/node-directory-store.ts";
+import { splitPipWorkspace } from "../pip-editor/pip/workspace/split-workspace.ts";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 
 const [inputArgument, outputArgument] = process.argv.slice(2);

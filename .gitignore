@@ -15,7 +15,6 @@
 
 # next.js
 /.next/
-/.vinext/
 /out/
 
 # misc
@@ -39,11 +38,10 @@ yarn-error.log*
 next-env.d.ts
 tsconfig.tsbuildinfo
 /dist/
-/pip-seed/target/
-/pip-core/target/
-/pip-core/Cargo.lock
-/pip-seed-tauri/target/
-/pip-seed-tauri/gen/
-/.wrangler/
+/pip-seed/cli/target/
+/pip-seed/runtime/target/
+/pip-seed/runtime/Cargo.lock
+/pip-seed/tauri/target/
+/pip-seed/tauri/gen/
 /outputs/
 /work/

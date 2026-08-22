@@ -1,7 +1,7 @@
 import {
   pipLimit,
   resolvePipIoPolicy,
-} from "../app/runtime/pip-io-policy.ts";
+} from "../pip-editor/pip/io-policy.ts";
 
 const optionFields = Object.freeze({
   "--max-pip-size": "maxPipBytes",

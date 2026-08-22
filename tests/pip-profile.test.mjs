@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compatibleEditors, resolveExactEditor } from "../app/runtime/pip-profile.ts";
-import { resolveCapabilitySet } from "../a3/core/pip-capabilities.ts";
+import { compatibleEditors, resolveExactEditor } from "../pip-editor/pip/profile.ts";
 
 const reference = {
   origin: "user",
@@ -40,18 +39,4 @@ test("compatible a2 editors are ranked by target preference without forcing a sw
     compatibleEditors([editor, tree], ["intent-document/3"], ["tree-map/1"]).map((entry) => entry.packageId),
     ["tree", "my-editor"],
   );
-});
-
-test("profile a3 providers take precedence and defaults only fill missing capabilities", () => {
-  const user = { ...reference, packageId: "user-authoring" };
-  const system = { ...reference, origin: "system", packageId: "system-authoring" };
-  const result = resolveCapabilitySet({
-    required: ["software-authoring/1", "database-design/1", "missing/1"],
-    profile: { capabilities: { "software-authoring/1": user } },
-    systemDefaults: { "software-authoring/1": system, "database-design/1": system },
-  });
-  assert.equal(result[0].reference.packageId, "user-authoring");
-  assert.equal(result[0].source, "profile");
-  assert.equal(result[1].source, "system-default");
-  assert.equal(result[2].source, "missing");
 });

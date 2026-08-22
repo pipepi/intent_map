@@ -1,28 +1,27 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "intent-map",
   "version": "0.1.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "vinext dev",
+    "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "build:sites": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
-    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "start": "next start",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "test:pip": "node --test tests/pip-format.test.mjs && cargo test --manifest-path pip-core/Cargo.toml && cargo test --manifest-path pip-seed/Cargo.toml && cargo check --manifest-path pip-seed-tauri/Cargo.toml",
+    "test:pip": "node --test tests/pip-format.test.mjs && cargo test --manifest-path pip-seed/runtime/Cargo.toml && cargo test --manifest-path pip-seed/cli/Cargo.toml && cargo check --manifest-path pip-seed/tauri/Cargo.toml",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "plugins:relation:build": "node scripts/build-relation-plugin-suites.mjs",
-    "pip:build": "node scripts/build-static.mjs && node scripts/build-pip.mjs",
+    "pip:build": "node scripts/build-editor-static.mjs && node scripts/build-editor-pip.mjs",
     "pip:verify": "node scripts/verify-pip.mjs",
     "pip:host": "node scripts/run-pip-host.mjs",
     "pip:desktop": "node scripts/run-pip-desktop.mjs",
-    "pip:cli": "node scripts/build-pip-cli.mjs",
-    "pip:seed": "node scripts/build-pip-seed.mjs",
-    "pip:loader": "node scripts/build-loader.mjs",
-    "pip:system": "node scripts/build-system-core-pips.mjs && node scripts/build-loader.mjs && node scripts/build-static.mjs && node scripts/build-pip.mjs",
-    "pip:dist": "node scripts/build-pip-dist.mjs",
+    "pip:cli": "node scripts/build-seed-cli.mjs",
+    "pip:seed": "node scripts/build-seed-desktop.mjs",
+    "pip:loader": "node scripts/build-loader-pip.mjs",
+    "pip:system": "node scripts/build-seed-source-pip.mjs && node scripts/build-loader-pip.mjs && node scripts/build-editor-static.mjs && node scripts/build-editor-pip.mjs",
+    "pip:dist": "node scripts/build-distribution.mjs",
     "pip:install-user": "node scripts/install-user-pip.mjs",
     "pip:promote-system": "node scripts/promote-system-pip.mjs",
     "pip:workspace:split": "node scripts/split-pip-workspace.mjs",
@@ -31,37 +30,24 @@
     "pip:self:audit": "node scripts/audit-system-sources.mjs",
     "pip:self:extract": "node scripts/extract-system-sources.mjs",
     "pip:self:seal": "node scripts/seal-self-hosting-source.mjs",
-    "pip:self:build": "node scripts/build-self-hosted-candidates.mjs",
-    "db:generate": "drizzle-kit generate"
+    "pip:self:build": "node scripts/build-self-hosted-candidates.mjs"
   },
   "dependencies": {
-    "drizzle-orm": "0.45.2",
     "es-module-lexer": "2.1.0",
     "fflate": "^0.8.3",
     "next": "16.2.6",
-    "playwright": "^1.62.0",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@tailwindcss/postcss": "4.2.1",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
-    "drizzle-kit": "0.31.10",
     "esbuild": "0.28.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
-    "react-server-dom-webpack": "19.2.6",
-    "tailwindcss": "4.2.1",
-    "typescript": "5.9.3",
-    "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "typescript": "5.9.3"
   },
   "type": "module"
 }

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { decodePip as decodePipWithPolicy } from "../app/runtime/pip.ts";
+import { decodePip as decodePipWithPolicy } from "../pip-editor/pip/index.ts";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 
 const decodePip = (source) => decodePipWithPolicy(

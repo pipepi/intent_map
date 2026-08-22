@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyRelationPatch } from "../app/relation/model.ts";
-import { NodeTypePluginRegistry } from "../app/_editor/plugin-editor/node-type-runtime.ts";
-import { buildScenePluginSuite, SCENE_BUSINESS_IDS } from "../plugins/scene/suite.ts";
+import { applyRelationPatch } from "../pip-editor/relation/index.ts";
+import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
+import { buildScenePluginSuite, SCENE_BUSINESS_IDS } from "../pip-editor-plugins/scene/suite.ts";
 
 const dataModule = async (source) => import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 const byPredicate = (node, name) => node.relations.filter(({ predicate }) => predicate.nodeId === `scene.predicate.${name}`);

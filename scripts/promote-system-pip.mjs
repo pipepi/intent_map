@@ -1,12 +1,12 @@
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip as decodePipWithPolicy } from "../app/runtime/pip.ts";
+import { decodePip as decodePipWithPolicy } from "../pip-editor/pip/index.ts";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 import {
   artifactFilename,
   readReleaseConfig,
-  systemPackagePath,
+  systemPipFilePath,
 } from "./pip-release.mjs";
 import { sha256 } from "./pip-self-hosting-source.mjs";
 
@@ -46,9 +46,10 @@ const candidates = new Map();
 for (const artifact of receipt.artifacts) {
   const segments = typeof artifact.file === "string" ? artifact.file.split("/") : [];
   if (
-    segments.length !== 5 ||
-    segments[0] !== "packages" ||
-    segments[1] !== "system" ||
+    segments.length !== 6 ||
+    segments[0] !== "pip-seed" ||
+    segments[1] !== "repo" ||
+    segments[2] !== "system" ||
     segments.some((segment) => !segment || segment === "." || segment === ".." || segment.includes("\\")) ||
     seenFiles.has(artifact.file) ||
     !/^[a-f0-9]{64}$/.test(artifact.sha256 ?? "") ||
@@ -70,7 +71,8 @@ for (const artifact of receipt.artifacts) {
   if (!expectedRelease) throw new Error(`Candidate package is not maintained: ${pip.manifest.packageId}`);
   const expectedFile = artifactFilename(expectedRelease);
   const expectedRelative = [
-    "packages",
+    "pip-seed",
+    "repo",
     "system",
     expectedRelease.layer,
     expectedRelease.packageId,
@@ -96,7 +98,7 @@ if (candidates.size !== maintained.length) {
 
 const selected = candidates.get(packageId);
 if (!selected) throw new Error(`Build receipt does not contain packageId: ${packageId}`);
-const destination = systemPackagePath(selectedRelease);
+const destination = systemPipFilePath(selectedRelease);
 await mkdir(path.dirname(destination), { recursive: true });
 await writeFile(destination, selected.bytes, { flag: "wx" });
 process.stdout.write(`${destination}\n`);

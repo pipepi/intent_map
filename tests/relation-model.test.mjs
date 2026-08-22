@@ -6,7 +6,7 @@ import {
   assertRelationGraph,
   createCoreRelationGraph,
   createRelationIndex,
-} from "../app/relation/model.ts";
+} from "../pip-editor/relation/index.ts";
 
 const identity = { nodeId: "relation.core.identity", relationId: "identity" };
 

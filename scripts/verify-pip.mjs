@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip as decodePipWithPolicy } from "../app/runtime/pip.ts";
-import { loadRelationDocument } from "../app/relation/document.ts";
-import { readReleaseConfig, systemPackagePath } from "./pip-release.mjs";
+import { decodePip as decodePipWithPolicy } from "../pip-editor/pip/index.ts";
+import { loadRelationDocument } from "../pip-editor/relation/document.ts";
+import { readReleaseConfig, systemPipFilePath } from "./pip-release.mjs";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 
@@ -14,7 +14,7 @@ const decodePip = (source) => decodePipWithPolicy(
 );
 
 const release = (await readReleaseConfig()).intentMap;
-const input = process.argv[2] ?? systemPackagePath(release);
+const input = process.argv[2] ?? systemPipFilePath(release);
 const pip = await decodePip(new Uint8Array(await readFile(path.resolve(input))));
 const document = loadRelationDocument(JSON.parse(pip.rootTreeText));
 process.stdout.write(

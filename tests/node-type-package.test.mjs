@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildIntentPluginSuite, INTENT_TYPES } from "../plugins/intent/suite.ts";
-import { decodeNodeTypePackage, encodeNodeTypePackage, validateNodeTypeDependencies } from "../app/_editor/plugin-editor/node-type-package.ts";
-import { NodeTypePluginRegistry } from "../app/_editor/plugin-editor/node-type-runtime.ts";
+import { buildIntentPluginSuite, INTENT_TYPES } from "../pip-editor-plugins/intent/suite.ts";
+import { decodeNodeTypePackage, encodeNodeTypePackage, validateNodeTypeDependencies } from "../pip-editor/relation-host/packages/node-type-package.ts";
+import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
 
 const dataModule = async (source) => import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 

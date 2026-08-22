@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decodeCollectionPackage, createCollectionWorkspace, encodeCollectionPackage, importRelationGraph, PortableCollectionCatalog, selectRelationClosure } from "../app/_editor/plugin-editor/collection-package.ts";
-import { activateCollectionDependencies } from "../app/_editor/plugin-editor/collection-activation.ts";
-import { assertRelationGraph } from "../app/relation/model.ts";
-import { buildScenePluginSuite } from "../plugins/scene/suite.ts";
-import { decodeZip, encodeZip } from "../app/_editor/plugin-editor/zip-package.ts";
+import { decodeCollectionPackage, createCollectionWorkspace, encodeCollectionPackage, importRelationGraph, PortableCollectionCatalog, selectRelationClosure } from "../pip-editor/relation-host/packages/collection-package.ts";
+import { activateCollectionDependencies } from "../pip-editor/relation-host/activation/collection-activation.ts";
+import { assertRelationGraph } from "../pip-editor/relation/index.ts";
+import { buildScenePluginSuite } from "../pip-editor-plugins/scene/suite.ts";
+import { decodeZip, encodeZip } from "../pip-editor/relation-host/packages/zip-package.ts";
 
 test("collection closure follows object and predicate references without persisting edges", async () => {
   const suite = await buildScenePluginSuite();

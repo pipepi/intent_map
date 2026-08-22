@@ -4,7 +4,7 @@ import path from "node:path";
 import {
   DEFAULT_PIP_LOADER_SOURCE,
   encodePip as encodePipWithPolicy,
-} from "../app/runtime/pip.ts";
+} from "../pip-editor/pip/index.ts";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);

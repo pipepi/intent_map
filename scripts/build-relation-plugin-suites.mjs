@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { buildIntentPluginSuite } from "../plugins/intent/suite.ts";
-import { buildScenePluginSuite } from "../plugins/scene/suite.ts";
+import { buildIntentPluginSuite } from "../pip-editor-plugins/intent/suite.ts";
+import { buildScenePluginSuite } from "../pip-editor-plugins/scene/suite.ts";
 
 const output = new URL("../dist/relation-plugins/", import.meta.url);
 await mkdir(output, { recursive: true });

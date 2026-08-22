@@ -78,14 +78,14 @@ const parent = path.dirname(output);
 await mkdir(parent, { recursive: true });
 const temporary = await mkdtemp(path.join(parent, `.${path.basename(output)}.tmp-`));
 const buildRoot = path.join(runnerRoot, ".pip-self-hosting-build-root");
-const packagesRoot = path.join(temporary, "packages", "system");
+const pipRepoRoot = path.join(temporary, "pip-seed", "repo", "system");
 
 const run = (script) => new Promise((resolve, reject) => {
   const child = spawn(process.execPath, [path.join(buildRoot, "scripts", script)], {
     cwd: buildRoot,
     env: {
       ...process.env,
-      PIP_SYSTEM_PACKAGES_DIR: packagesRoot,
+      PIP_SYSTEM_REPO_DIR: pipRepoRoot,
       PIP_TOOLCHAIN_ROOT: runnerRoot,
     },
     stdio: "inherit",
@@ -108,22 +108,22 @@ try {
     });
   }
   await symlink(path.join(runnerRoot, "node_modules"), path.join(buildRoot, "node_modules"), "junction");
-  await run("build-system-core-pips.mjs");
-  await run("build-loader.mjs");
-  await run("build-static.mjs");
-  await run("build-pip.mjs");
+  await run("build-seed-source-pip.mjs");
+  await run("build-loader-pip.mjs");
+  await run("build-editor-static.mjs");
+  await run("build-editor-pip.mjs");
 
   const artifacts = [];
   const visitArtifacts = async (relative = "") => {
-    for (const entry of (await readdir(path.join(packagesRoot, relative), { withFileTypes: true }))
+    for (const entry of (await readdir(path.join(pipRepoRoot, relative), { withFileTypes: true }))
       .sort((left, right) => left.name.localeCompare(right.name))) {
       const child = path.join(relative, entry.name);
       if (entry.isSymbolicLink()) throw new Error(`Candidate output contains a symlink: ${child}`);
       if (entry.isDirectory()) await visitArtifacts(child);
       else if (entry.isFile()) {
-        const bytes = await readFile(path.join(packagesRoot, child));
+        const bytes = await readFile(path.join(pipRepoRoot, child));
         artifacts.push({
-          file: `packages/system/${child.split(path.sep).join("/")}`,
+          file: `pip-seed/repo/system/${child.split(path.sep).join("/")}`,
           sha256: sha256(bytes),
           bytes: bytes.length,
         });

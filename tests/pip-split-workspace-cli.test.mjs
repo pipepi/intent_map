@@ -5,9 +5,9 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-import { decodePip } from "../app/runtime/pip.ts";
-import { UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
-import { readWorkspaceResourceIndex } from "../a3/workspace/resource-index.ts";
+import { decodePip } from "../pip-editor/pip/index.ts";
+import { UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/io-policy.ts";
+import { readWorkspaceResourceIndex } from "../pip-editor/pip/workspace/resource-index.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 

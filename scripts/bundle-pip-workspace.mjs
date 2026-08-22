@@ -1,9 +1,9 @@
 import path from "node:path";
 
-import { decodePip, pipFilename } from "../app/runtime/pip.ts";
-import { streamNodeWorkspaceBundle } from "../a3/bundle/node-streaming-bundle.ts";
-import { openNodeSplitWorkspace } from "../a3/workspace/node-directory-store.ts";
-import { openWorkspaceResourceSession } from "../a3/workspace/resource-store.ts";
+import { decodePip, pipFilename } from "../pip-editor/pip/index.ts";
+import { streamNodeWorkspaceBundle } from "../pip-editor/pip/bundle/node-streaming-bundle.ts";
+import { openNodeSplitWorkspace } from "../pip-editor/pip/workspace/node-directory-store.ts";
+import { openWorkspaceResourceSession } from "../pip-editor/pip/workspace/resource-store.ts";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 
 const [workspaceArgument, outputArgument] = process.argv.slice(2);

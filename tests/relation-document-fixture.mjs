@@ -1,5 +1,5 @@
-import { createRelationDocument } from "../app/relation/document.ts";
-import { createCoreRelationGraph } from "../app/relation/model.ts";
+import { createRelationDocument } from "../pip-editor/relation/document.ts";
+import { createCoreRelationGraph } from "../pip-editor/relation/index.ts";
 
 const identity = { nodeId: "relation.core.identity", relationId: "identity" };
 const relation = (id, value) => ({ id, predicate: identity, object: { kind: "const", value }, relations: [] });

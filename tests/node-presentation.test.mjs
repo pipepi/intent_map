@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveNodePresentation } from "../app/_editor/plugin-editor/node-presentation.ts";
-import { createCoreRelationGraph } from "../app/relation/model.ts";
+import { resolveNodePresentation } from "../pip-editor/relation-host/projection/resolve-presentation.ts";
+import { createCoreRelationGraph } from "../pip-editor/relation/index.ts";
 
 test("node presentation reads mutable registries on every resolution", () => {
   const graph = createCoreRelationGraph();

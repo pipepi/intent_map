@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip } from "../app/runtime/pip.ts";
+import { decodePip } from "../pip-editor/pip/index.ts";
 import { collectSourceAssets } from "./pip-source-assets.mjs";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 import {
   artifactFilename,
   projectRoot,
   readReleaseConfig,
-  systemPackagePath,
+  systemPipFilePath,
 } from "./pip-release.mjs";
 import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
 
@@ -29,7 +29,7 @@ const release = await readReleaseConfig();
 const selected = [release.seed, release.loader, release.intentMap];
 const packages = [];
 for (const item of selected) {
-  const packagePath = systemPackagePath(item);
+  const packagePath = systemPipFilePath(item);
   const packageBytes = new Uint8Array(await readFile(packagePath));
   const pip = await decodePip(packageBytes, trustedBuildPipIo);
   const expected = (await collectSourceAssets(

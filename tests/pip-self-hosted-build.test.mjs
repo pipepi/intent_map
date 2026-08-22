@@ -21,7 +21,7 @@ test("self-hosted source builds isolated a0 through a2 candidates with a receipt
   const repeatedCandidates = path.join(temporary, "candidates-repeated");
   const extracted = run("extract-system-sources.mjs", source);
   assert.equal(extracted.status, 0, extracted.stderr);
-  await appendFile(path.join(source, "app", "relation", "model.ts"), "\n// Candidate self-hosting edit.\n");
+  await appendFile(path.join(source, "pip-editor", "relation", "patch.ts"), "\n// Candidate self-hosting edit.\n");
   const unsealed = run("build-self-hosted-candidates.mjs", source, candidates);
   assert.notEqual(unsealed.status, 0);
   assert.match(unsealed.stderr, /no longer matches its receipt/);
@@ -35,7 +35,7 @@ test("self-hosted source builds isolated a0 through a2 candidates with a receipt
   assert.match(receipt.sourceTreeSha256, /^[a-f0-9]{64}$/);
   assert.equal(receipt.artifacts.length, 3);
   assert.deepEqual(
-    receipt.artifacts.map(({ file }) => file.match(/packages\/system\/(a[0-2])\//)?.[1]),
+    receipt.artifacts.map(({ file }) => file.match(/pip-seed\/repo\/system\/(a[0-2])\//)?.[1]),
     ["a0", "a1", "a2"],
   );
   for (const artifact of receipt.artifacts) {

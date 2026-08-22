@@ -6,13 +6,13 @@ import {
   decodePip as decodePipWithPolicy,
   encodePip as encodePipWithPolicy,
   pipFilename,
-} from "../app/runtime/pip.ts";
+} from "../pip-editor/pip/index.ts";
 import {
   ASK_PIP_IO_POLICY,
   UNLIMITED_PIP_IO_POLICY,
   pipLimit,
-} from "../app/runtime/pip-io-policy.ts";
-import { loadRelationDocument, serializeRelationDocument } from "../app/relation/document.ts";
+} from "../pip-editor/pip/io-policy.ts";
+import { loadRelationDocument, serializeRelationDocument } from "../pip-editor/relation/document.ts";
 import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 
 const manifest = {

@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { decodePip, pipSha256 } from "../app/runtime/pip.ts";
-import { UNLIMITED_PIP_IO_POLICY } from "../app/runtime/pip-io-policy.ts";
+import { decodePip, pipSha256 } from "../pip-editor/pip/index.ts";
+import { UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/io-policy.ts";
 import { collectSourceAssets } from "../scripts/pip-source-assets.mjs";
 import {
   SYSTEM_SOURCE_ENTRIES,
@@ -13,9 +13,9 @@ import {
 
 const root = path.resolve(import.meta.dirname, "..");
 const packages = {
-  "pip-seed": "packages/system/a0/pip-seed/a0_pip_seed_1_0_0_20260806.pip",
-  "pip-loader": "packages/system/a1/pip-loader/a1_loader_1_0_0_20260806.pip",
-  "intent-map": "packages/system/a2/intent-map/a2_intent_map_1_0_0_20260806.pip",
+  "pip-seed": "pip-seed/repo/system/a0/pip-seed/a0_pip_seed_1_0_0_20260806.pip",
+  "pip-loader": "pip-seed/repo/system/a1/pip-loader/a1_loader_1_0_0_20260806.pip",
+  "intent-map": "pip-seed/repo/system/a2/intent-map/a2_intent_map_1_0_0_20260806.pip",
 };
 
 test("every maintained system package has one explicit source boundary", () => {

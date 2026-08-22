@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCollectionWorkspace } from "../app/_editor/plugin-editor/collection-package.ts";
-import { WorkspaceSessionStore } from "../app/_editor/plugin-editor/types.ts";
-import { buildScenePluginSuite } from "../plugins/scene/suite.ts";
+import { createCollectionWorkspace } from "../pip-editor/relation-host/packages/collection-package.ts";
+import { WorkspaceSessionStore } from "../pip-editor/relation-host/workspace/workspace-store.ts";
+import { buildScenePluginSuite } from "../pip-editor-plugins/scene/suite.ts";
 
 const session = async () => {
   const suite = await buildScenePluginSuite();
