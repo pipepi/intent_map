@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("application routes expose the generic RelationHost", async () => {
-  const [home, system, host] = await Promise.all([
+test("the application root exposes the generic RelationHost", async () => {
+  const [home, host] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/system-editor/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_editor/relation-host.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(home, /<RelationHost/); assert.match(system, /<RelationHost/);
+  assert.match(home, /<RelationHost/);
   assert.match(host, /核心为空白宿主/);
   assert.doesNotMatch(host, /IntentNode|SceneNode|CanvasNode/);
 });

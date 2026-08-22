@@ -1,6 +1,6 @@
 # Three-layer browser acceptance
 
-- 打开 `/relation-host`，确认没有预装领域包，原始 RelationGraph 宿主可正常显示。
+- 打开 `/`，确认没有预装领域包，原始 RelationGraph 宿主可正常显示。
 - 运行 `npm run plugins:relation:build`，分别手动安装 Intent 的 element、node-type、collection ZIP；打开集合并验证节点投影、编辑、命令、执行和 undo/redo。
 - 新建另一工作区并安装 Scene 三包；确认象限和管道两个 Web Component 同时出现，宽屏两列、窄屏纵向堆叠，而非视图切换。
 - 验证两个视图读取同一份 8 个实体和 13 个事件：事件几何中心、起止时间、坐标轴、时间轴、关系线、标签、图例和 Inspector 均可见。

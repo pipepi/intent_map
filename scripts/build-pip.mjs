@@ -74,12 +74,7 @@ if (!assetsInfo.isDirectory()) {
   throw new Error(`PIP asset source is not a directory: ${assetsDirectory}`);
 }
 const collectedRuntimeAssets = await collectAssets(assetsDirectory);
-const systemEditorIndex = collectedRuntimeAssets.find((asset) => asset.path === "system-editor/index.html");
-if (!systemEditorIndex) throw new Error("static export is missing the system a2 editor entry");
-const runtimeAssets = [
-  ...collectedRuntimeAssets.filter((asset) => asset.path !== "index.html"),
-  { ...systemEditorIndex, path: "index.html" },
-];
+const runtimeAssets = collectedRuntimeAssets;
 const sourceAssets = await collectSourceAssets(
   root,
   systemSourceEntriesFor(release.packageId),

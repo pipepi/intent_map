@@ -21,7 +21,7 @@ npm run build
 npm test
 ```
 
-访问 `/relation-host` 或 `/system-editor` 可打开空白通用宿主。生成可手动安装的 Intent/Scene 三层插件包：
+访问 `/` 可打开空白通用宿主。生成可手动安装的 Intent/Scene 三层插件包：
 
 ```bash
 npm run plugins:relation:build
