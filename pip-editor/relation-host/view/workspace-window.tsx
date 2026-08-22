@@ -18,9 +18,9 @@ function resized(start: WorkspaceWindowFrame, direction: Direction | undefined, 
   return { ...start, x, y, width, height };
 }
 
-export function WorkspaceWindow({ id, frame, views, children, system = false, onFrame, onClose }: {
+export function WorkspaceWindow({ id, frame, views, children, system = false, active = false, onFrame, onActivate, onClose }: {
   id: string; frame: WorkspaceWindowFrame; views: FreeLayoutWorkspaceViews; children: ReactNode; system?: boolean;
-  onFrame: (frame: WorkspaceWindowFrame) => void; onClose?: () => void;
+  active?: boolean; onFrame: (frame: WorkspaceWindowFrame) => void; onActivate?: () => void; onClose?: () => void;
 }) {
   const [preview, setPreview] = useState(frame), gesture = useRef<Gesture | undefined>(undefined);
   useEffect(() => { if (!gesture.current) setPreview(frame); }, [frame]);
@@ -48,7 +48,8 @@ export function WorkspaceWindow({ id, frame, views, children, system = false, on
   };
   const handles = preview.resizeMode === "simple" ? ["e", "s", "se"] : directions;
   return <article className={`${styles.freeWindow} ${system ? styles.systemWindow : ""}`} data-node-id={id}
-    style={{ left: preview.x, top: preview.y, width: preview.width, height: preview.height }}
+    style={{ left: preview.x, top: preview.y, width: preview.width, height: preview.height, zIndex: active ? 12 : system ? 8 : 2 }}
+    onPointerDownCapture={() => { if (!active) onActivate?.(); }}
     onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setPreview(frame); }}
     onClickCapture={(event) => {
       const path = event.nativeEvent.composedPath() as HTMLElement[];

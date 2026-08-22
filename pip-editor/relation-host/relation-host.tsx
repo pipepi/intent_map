@@ -135,7 +135,7 @@ export function RelationHost() {
   return <main className={styles.shell}><div className={styles.layout}><section className={styles.workspaceArea}>
     <WorkspaceTabs workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} nameFor={nameFor} onActivate={setActiveWorkspaceId} onClose={requestClose} onNew={() => { const workspace = scratchWorkspace(); workspaceStore.add(workspace); setActiveWorkspaceId(workspace.id); }} onReorder={(id, before) => workspaceStore.reorder(id, before)} />
     {active ? <NodeCanvas workspace={active} elements={elements} nodeTypes={nodeTypes} pluginManager={pluginManager} onSelectionChange={(selection) => workspaceStore.select(active.id, selection)} onRequest={request}
-      onViewsChange={(views) => workspaceStore.updateViews(active.id, views)} onInvokeCreator={(id, point, origin) => void invokeCreator(id, point, undefined, origin)}
+      onViewsChange={(views) => workspaceStore.updateViews(active.id, views)} onActivateWindow={(id) => workspaceStore.activateWindow(active.id, id)} onInvokeCreator={(id, point, origin) => void invokeCreator(id, point, undefined, origin)}
       onOpenPluginManager={(point) => workspaceStore.openPluginManager(active.id, point)} onClosePluginManager={() => workspaceStore.closeSystemWindow(active.id, "host.plugin-manager")} /> : <section className={styles.canvasWrap}><div className={styles.empty}>点击 + 新建工作区标签</div></section>}
   </section></div>{pendingClose && <CloseWorkspaceDialog name={nameFor(workspaces.find((item) => item.id === pendingClose)!)} onCancel={() => setPendingClose(undefined)} onDiscard={() => closeNow(pendingClose)} onExport={() => void exportWorkspace(workspaces.find((item) => item.id === pendingClose)).then((ok) => { if (ok) closeNow(pendingClose); })} />}</main>;
 }

@@ -73,10 +73,19 @@ export class WorkspaceSessionStore {
     if (views.projections[windowId]) views.projections[windowId] = structuredClone(frame);
     else if (views.systemWindows[windowId]) {
       views.systemWindows[windowId].frame = structuredClone(frame);
-      if ((workspace.views as { kind?: unknown })?.kind !== "free-layout") return void this.updateViews(workspaceId, withSystemWindows(workspace.views, views.systemWindows));
+      if ((workspace.views as { kind?: unknown })?.kind !== "free-layout") return void this.updateViews(workspaceId, withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId));
     }
     else throw new Error(`Unknown workspace window ${windowId}`);
     this.updateViews(workspaceId, views);
+  }
+
+  activateWindow(workspaceId: string, windowId: string) {
+    const workspace = this.#workspace(workspaceId), views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
+    if (!views.projections[windowId] && !views.systemWindows[windowId]) throw new Error(`Unknown workspace window ${windowId}`);
+    if (views.activeWindowId === windowId) return;
+    views.activeWindowId = windowId;
+    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout"
+      ? views : withSystemWindows(workspace.views, views.systemWindows, windowId));
   }
 
   openPluginManager(workspaceId: string, point: WorkspacePoint) {
@@ -84,12 +93,15 @@ export class WorkspaceSessionStore {
     const width = 640, height = 720;
     const x = Math.max(0, Math.min(views.world.width - width, point.x)), y = Math.max(0, Math.min(views.world.height - height, point.y));
     views.systemWindows["host.plugin-manager"] = { id: "host.plugin-manager", type: "plugin-manager", frame: { x, y, width, height, resizeMode: "full" } };
-    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows));
+    views.activeWindowId = "host.plugin-manager";
+    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId));
   }
 
   closeSystemWindow(workspaceId: string, windowId: string) {
     const workspace = this.#workspace(workspaceId), views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
-    delete views.systemWindows[windowId]; this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows));
+    delete views.systemWindows[windowId];
+    if (views.activeWindowId === windowId) views.activeWindowId = undefined;
+    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId));
   }
 
   setDiagnostics(workspaceId: string, diagnostics: CapabilityDiagnostic[]) {

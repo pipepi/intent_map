@@ -8,10 +8,11 @@ export type FreeLayoutWorkspaceViews = {
   camera: { scale: number; x: number; y: number };
   projections: Record<string, WorkspaceWindowFrame>;
   systemWindows: Record<string, SystemWorkspaceWindow>;
+  activeWindowId?: string;
 };
 
 const DEFAULT_WORLD = { width: 2600, height: 1600 };
-const DEFAULT_CAMERA = { scale: .72, x: 36, y: 36 };
+const DEFAULT_CAMERA = { scale: .72, x: 0, y: 0 };
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 export const defaultFrame = (index = 0): WorkspaceWindowFrame => ({
@@ -33,7 +34,7 @@ export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): Fr
   const world = worldValue && finite(worldValue.width) && finite(worldValue.height) && worldValue.width >= 560 && worldValue.height >= 420 ? { width: worldValue.width, height: worldValue.height } : { ...DEFAULT_WORLD };
   const cameraValue = free ? record(source.camera) : undefined;
   const camera = cameraValue && finite(cameraValue.scale) && finite(cameraValue.x) && finite(cameraValue.y)
-    ? { scale: Math.min(2, Math.max(.5, cameraValue.scale)), x: cameraValue.x, y: cameraValue.y } : { ...DEFAULT_CAMERA };
+    ? { scale: Math.min(2, Math.max(.5, cameraValue.scale)), x: Math.min(0, cameraValue.x), y: Math.min(0, cameraValue.y) } : { ...DEFAULT_CAMERA };
   const projectionValue = free ? record(source.projections) : undefined;
   const projections: Record<string, WorkspaceWindowFrame> = {};
   rootNodeIds.forEach((id, index) => {
@@ -51,18 +52,26 @@ export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): Fr
       systemWindows[id] = { id, type: "plugin-manager", frame: structuredClone(item.frame as WorkspaceWindowFrame) };
     } catch { continue; }
   }
-  return { kind: "free-layout", world, camera, projections, systemWindows };
+  const activeWindowId = typeof source?.activeWindowId === "string" && (projections[source.activeWindowId] || systemWindows[source.activeWindowId])
+    ? source.activeWindowId : undefined;
+  return { kind: "free-layout", world, camera, projections, systemWindows, activeWindowId };
 }
 
 export const exportedWorkspaceViews = (value: JsonValue): JsonValue => {
   const source = record(structuredClone(value));
-  if (source) source.systemWindows = {};
+  if (source) {
+    source.systemWindows = {};
+    const projections = record(source.projections);
+    if (typeof source.activeWindowId === "string" && !projections?.[source.activeWindowId]) delete source.activeWindowId;
+  }
   return (source ?? value) as JsonValue;
 };
 
-export const withSystemWindows = (value: JsonValue, systemWindows: Record<string, SystemWorkspaceWindow>): JsonValue => {
+export const withSystemWindows = (value: JsonValue, systemWindows: Record<string, SystemWorkspaceWindow>, activeWindowId?: string): JsonValue => {
   const source = record(structuredClone(value)) ?? {};
   source.systemWindows = structuredClone(systemWindows);
+  if (activeWindowId) source.activeWindowId = activeWindowId;
+  else delete source.activeWindowId;
   return source as JsonValue;
 };
 

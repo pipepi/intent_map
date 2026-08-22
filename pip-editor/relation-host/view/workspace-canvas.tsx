@@ -16,10 +16,10 @@ type Gesture = { kind: "pan" | "wire"; pointerId: number; start: WorkspacePoint;
 const pointIn = (element: HTMLElement, clientX: number, clientY: number) => { const rect = element.getBoundingClientRect(); return { x: clientX - rect.left, y: clientY - rect.top }; };
 const isFree = (views: unknown) => Boolean(views && typeof views === "object" && ["free-layout", "parallel-projections"].includes(String((views as { kind?: unknown }).kind)));
 
-export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSelectionChange, onRequest, onViewsChange, onInvokeCreator, onOpenPluginManager, onClosePluginManager }: {
+export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSelectionChange, onRequest, onViewsChange, onActivateWindow, onInvokeCreator, onOpenPluginManager, onClosePluginManager }: {
   workspace: WorkspaceSession; elements: ElementPluginRegistry; nodeTypes: NodeTypePluginRegistry; pluginManager?: ReactNode;
   onSelectionChange: (selection: string[]) => void; onRequest: (request: RelationElementRequest) => void;
-  onViewsChange: (views: FreeLayoutWorkspaceViews) => void; onInvokeCreator: (creatorId: string, point: WorkspacePoint, origin?: RelationRef) => void;
+  onViewsChange: (views: FreeLayoutWorkspaceViews) => void; onActivateWindow: (windowId: string) => void; onInvokeCreator: (creatorId: string, point: WorkspacePoint, origin?: RelationRef) => void;
   onOpenPluginManager: (point: WorkspacePoint) => void; onClosePluginManager: () => void;
 }) {
   const nodes = Object.values(workspace.graph.nodes), roots = workspace.rootNodeIds.map((id) => workspace.graph.nodes[id]).filter(Boolean);
@@ -89,18 +89,18 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
     const frames = [...Object.values(views.projections), ...Object.values(views.systemWindows).map((item) => item.frame)]; if (!frames.length || !viewport.current) return;
     const minX = Math.min(...frames.map((item) => item.x)), minY = Math.min(...frames.map((item) => item.y));
     const maxX = Math.max(...frames.map((item) => item.x + item.width)), maxY = Math.max(...frames.map((item) => item.y + item.height));
-    const scale = Math.max(.5, Math.min(2, Math.min((viewport.current.clientWidth - 112) / (maxX - minX), (viewport.current.clientHeight - 112) / (maxY - minY))));
-    persistCamera({ scale, x: 56 - minX * scale, y: 56 - minY * scale });
+    const scale = Math.max(.5, Math.min(2, Math.min(viewport.current.clientWidth / (maxX - minX), viewport.current.clientHeight / (maxY - minY))));
+    persistCamera({ scale, x: -minX * scale, y: -minY * scale });
   };
   if (!free) return <LegacyCanvas workspace={workspace} roots={roots} nodes={nodes} hasWorkspaceProjection={hasWorkspaceProjection} elements={elements} nodeTypes={nodeTypes} pluginManager={pluginManager} onSelectionChange={onSelectionChange} onRequest={onRequest} onOpenPluginManager={onOpenPluginManager} onClosePluginManager={onClosePluginManager} />;
   return <section className={styles.canvasWrap} data-testid="relation-workspace">
     <div className={styles.canvasInfo}>RelationGraph · revision {workspace.graph.revision} · {nodes.length} 个节点 · {status}</div>
     <div ref={viewport} className={`${styles.canvas} ${styles.freeViewport}`} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setWire(undefined); }} onWheel={wheel}>
       <div className={styles.freeWorld} style={{ width: views.world.width, height: views.world.height, transform: `translate(${views.camera.x}px,${views.camera.y}px) scale(${views.camera.scale})` }}>
-        {roots.map((node) => <WorkspaceWindow key={node.id} id={node.id} frame={views.projections[node.id]} views={views} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame })}>
+        {roots.map((node) => <WorkspaceWindow key={node.id} id={node.id} frame={views.projections[node.id]} views={views} active={views.activeWindowId === node.id} onActivate={() => onActivateWindow(node.id)} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame })}>
           <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={views} graph={workspace.graph} node={node} selection={scopedSelections[node.id] ?? workspace.selection} purpose="workspace" elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
         </WorkspaceWindow>)}
-        {Object.values(views.systemWindows).map((item) => <WorkspaceWindow key={item.id} id={item.id} frame={item.frame} views={views} system onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: item.id, frame })} onClose={onClosePluginManager}>{pluginManager}</WorkspaceWindow>)}
+        {Object.values(views.systemWindows).map((item) => <WorkspaceWindow key={item.id} id={item.id} frame={item.frame} views={views} system active={views.activeWindowId === item.id} onActivate={() => onActivateWindow(item.id)} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: item.id, frame })} onClose={onClosePluginManager}>{pluginManager}</WorkspaceWindow>)}
       </div>
       {wire && <svg className={styles.creationWire}><line x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y} /><circle cx={wire.to.x} cy={wire.to.y} r="5" /></svg>}
       {creator && <NodeCreator point={creator.screen} candidates={creatorChoices()} onCancel={() => setCreator(undefined)} onChoose={(id) => { if (id === "host.plugin-manager") onOpenPluginManager(creator.world); else onInvokeCreator(id, creator.world, creator.origin); setCreator(undefined); }} />}

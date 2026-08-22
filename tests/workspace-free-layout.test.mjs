@@ -16,11 +16,23 @@ test("view-only changes preserve graph revision and history while system windows
   let current = store.list()[0], views = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.equal(current.graph.revision, 0); assert.equal(current.undo.length, 0);
   assert.equal(views.systemWindows["host.plugin-manager"].frame.x, 300);
+  assert.equal(views.activeWindowId, "host.plugin-manager");
+  store.activateWindow(workspace.id, "scene.view.quadrant");
+  current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
+  assert.equal(views.activeWindowId, "scene.view.quadrant");
   store.setWindow(workspace.id, "host.plugin-manager", { x: 360, y: 280, width: 700, height: 760, resizeMode: "simple" });
   current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.equal(views.systemWindows["host.plugin-manager"].frame.resizeMode, "simple");
   assert.deepEqual(exportedWorkspaceViews(current.views).systemWindows, {});
+  assert.equal(exportedWorkspaceViews(current.views).activeWindowId, "scene.view.quadrant");
   assert.equal(current.graph.revision, 0); assert.equal(current.undo.length, 0);
+});
+
+test("default camera exposes the world origin at the viewport corner", async () => {
+  const { workspace } = await session();
+  workspace.views.camera = { scale: .72, x: 36, y: 36 };
+  const views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
+  assert.equal(views.camera.x, 0); assert.equal(views.camera.y, 0);
 });
 
 test("creator transaction adds a projection root and undo restores graph roots and views", async () => {

@@ -69,7 +69,7 @@ assertRelationGraph(sceneNodeMapGraph);
 export const sceneNodeMapData = {
   graph: sceneNodeMapGraph,
   workspace: { views: {
-    kind: "free-layout", world: { width: 2600, height: 1600 }, camera: { scale: .72, x: 36, y: 36 },
+    kind: "free-layout", world: { width: 2600, height: 1600 }, camera: { scale: .72, x: 0, y: 0 },
     projections: {
       "scene.view.quadrant": { x: 80, y: 80, width: 1120, height: 720, resizeMode: "simple" },
       "scene.view.tube": { x: 1320, y: 80, width: 1120, height: 720, resizeMode: "simple" },
