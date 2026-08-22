@@ -6,13 +6,19 @@ import type { RelationNode } from "../../relation/index.ts";
 import type { ElementPluginRegistry } from "../activation/element-registry.ts";
 import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts";
 import type { WorkspaceSession } from "../workspace/workspace-store.ts";
-import { normalizeFreeLayout, screenToWorld, type FreeLayoutWorkspaceViews } from "../workspace/view-state.ts";
+import { normalizeFreeLayout, panWindowContent, screenToWorld, zoomWindowContentAt, type FreeLayoutWorkspaceViews } from "../workspace/view-state.ts";
 import { RelationNodeRenderer } from "../projection/projection-renderer.tsx";
+import { SemanticProjection } from "../projection/semantic-projection.tsx";
+import { ProjectionNavbar } from "./projection-navbar.tsx";
+import { forwardRoute, navigationForRoot } from "../projection/projection-routes.ts";
+import { applySemanticScale } from "../projection/semantic-zoom.ts";
+import { projectionForInstance } from "../projection/projection-instance.ts";
 import { NodeCreator, type CreatorChoice } from "./node-creator.tsx";
 import { WorkspaceWindow } from "./workspace-window.tsx";
 import styles from "../view/relation-host.module.css";
 
 type Gesture = { kind: "pan" | "wire"; pointerId: number; start: WorkspacePoint; camera: FreeLayoutWorkspaceViews["camera"]; moved: boolean; origin?: RelationRef };
+type SemanticGesture = { routeKey: string; scale: number; switched: boolean };
 const pointIn = (element: HTMLElement, clientX: number, clientY: number) => { const rect = element.getBoundingClientRect(); return { x: clientX - rect.left, y: clientY - rect.top }; };
 const isFree = (views: unknown) => Boolean(views && typeof views === "object" && ["free-layout", "parallel-projections"].includes(String((views as { kind?: unknown }).kind)));
 
@@ -27,8 +33,23 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
   const [previewCamera, setPreviewCamera] = useState<FreeLayoutWorkspaceViews["camera"]>(), [creator, setCreator] = useState<{ screen: WorkspacePoint; world: WorkspacePoint; origin?: RelationRef }>();
   const [wire, setWire] = useState<{ from: WorkspacePoint; to: WorkspacePoint }>(), viewport = useRef<HTMLDivElement>(null), gesture = useRef<Gesture | undefined>(undefined);
   const touches = useRef(new Map<number, WorkspacePoint>()), pinch = useRef<{ distance: number; world: WorkspacePoint; camera: FreeLayoutWorkspaceViews["camera"] } | undefined>(undefined);
-  const contentScales = useRef(new Map<string, number>());
+  const settleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>()), semanticGestures = useRef(new Map<string, SemanticGesture>());
   const views = useMemo(() => previewCamera ? { ...normalized, camera: previewCamera } : normalized, [normalized, previewCamera]);
+  useEffect(() => {
+    const element = viewport.current;
+    if (!free || !element) return;
+    // Free layout owns panning through its camera; stale native scroll offsets would move every window outside the viewport.
+    element.scrollLeft = 0; element.scrollTop = 0;
+    const focusCanvas = () => {
+      const focused = document.activeElement;
+      const editing = focused instanceof HTMLElement && (focused.matches("input,textarea,select,[contenteditable=true]") || Boolean(focused.closest('[role="dialog"]')));
+      if (!editing) element.focus({ preventScroll: true });
+    };
+    focusCanvas();
+    const frame = requestAnimationFrame(focusCanvas), timer = setTimeout(focusCanvas, 160);
+    addEventListener("pageshow", focusCanvas); addEventListener("focus", focusCanvas);
+    return () => { cancelAnimationFrame(frame); clearTimeout(timer); removeEventListener("pageshow", focusCanvas); removeEventListener("focus", focusCanvas); };
+  }, [free, workspace.id]);
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
       const interactive = event.target instanceof HTMLElement && (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(event.target.tagName) || event.target.isContentEditable);
@@ -41,8 +62,8 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
     };
     addEventListener("keydown", down); return () => removeEventListener("keydown", down);
   }, [views]);
-  const scopedSelections = workspace.scopedSelections ?? {};
-  const hasWorkspaceProjection = roots.some((node) => nodeTypes.projections().some((projection) => projection.purpose === "workspace" && (() => { try { return projection.matches(node, workspace.graph); } catch { return true; } })()));
+  const scopedSelections = useMemo(() => workspace.scopedSelections ?? {}, [workspace.scopedSelections]);
+  const hasWorkspaceProjection = roots.some((node) => Boolean(projectionForInstance(node, nodeTypes.projections())) || nodeTypes.projections().some((projection) => projection.purpose === "workspace" && (() => { try { return projection.matches(node, workspace.graph); } catch { return true; } })()));
   const displayName = (nodeId: string) => {
     const node = workspace.graph.nodes[nodeId]; if (!node) return nodeId;
     for (const descriptor of nodeTypes.types()) try { if (descriptor.matches?.(node, workspace.graph)) { const label = descriptor.label?.(node, workspace.graph).trim(); if (label) return label; } } catch { continue; }
@@ -57,32 +78,70 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
     const element = viewport.current; if (!free || !element) return;
     const handle = (event: globalThis.WheelEvent) => {
       event.preventDefault();
+      const path = event.composedPath() as HTMLElement[], window = path.find((item) => item?.dataset?.nodeId), windowId = window?.dataset.nodeId;
+      const frame = windowId ? views.projections[windowId] : undefined, activeProjection = Boolean(windowId && frame && views.activeWindowId === windowId);
       if (event.ctrlKey || event.metaKey) {
-        const path = event.composedPath() as HTMLElement[], window = path.find((item) => item?.dataset?.nodeId), windowId = window?.dataset.nodeId;
-        const frame = windowId ? views.projections[windowId] : undefined;
-        if (windowId && frame && views.activeWindowId === windowId) {
-          const scaleKey = `${workspace.id}:${windowId}`, current = contentScales.current.get(scaleKey) ?? frame.contentScale ?? 1;
-          const contentScale = Math.max(.5, Math.min(2, current * Math.exp(-event.deltaY * .002)));
-          contentScales.current.set(scaleKey, contentScale);
-          onViewsChange({ ...normalized, projections: { ...normalized.projections, [windowId]: { ...frame, contentScale } } });
-          return;
+        if (windowId && frame && activeProjection) {
+          const navigation = navigationForRoot(windowId, workspace.graph, nodeTypes, frame.navigation);
+          if (navigation) {
+            const focused = path.find((item) => item?.dataset?.embeddedProjection)?.dataset.embeddedProjection;
+            const selection = scopedSelections[windowId] ?? workspace.selection, route = navigation.entries[navigation.index];
+            const gestureKey = `${workspace.id}:${windowId}`, routeKey = `${navigation.index}:${route.projectionNodeId}:${route.context}`;
+            const previous = semanticGestures.current.get(gestureKey);
+            const finishGesture = () => {
+              const old = settleTimers.current.get(gestureKey); if (old) clearTimeout(old);
+              settleTimers.current.set(gestureKey, setTimeout(() => {
+                // Ending a pinch only closes its accumulator. The chosen scale remains until reset or route navigation.
+                semanticGestures.current.delete(gestureKey); settleTimers.current.delete(gestureKey);
+              }, 220));
+            };
+            // A continuous pinch may cross one semantic boundary only; later wheel frames wait for the next gesture.
+            if (previous?.switched) { finishGesture(); return; }
+            const gesture = previous?.routeKey === routeKey ? previous : { routeKey, scale: navigation.semanticScale, switched: false };
+            const scale = gesture.scale * Math.exp(-event.deltaY * .002); gesture.scale = scale;
+            const forward = forwardRoute(navigation, workspace.graph, nodeTypes, focused, selection[0]);
+            const next = applySemanticScale(navigation, scale, forward);
+            gesture.switched = next.index !== navigation.index; if (gesture.switched) gesture.scale = 1;
+            semanticGestures.current.set(gestureKey, gesture);
+            const surface = path.find((item) => item?.dataset?.projectionSurface !== undefined);
+            const semanticViewport = path.find((item) => item?.dataset?.rootWindow === windowId);
+            const unhintedNavigation = { ...next }; delete unhintedNavigation.semanticTargetProjectionId;
+            const nextNavigation = !gesture.switched && semanticViewport ? {
+              ...unhintedNavigation, semanticOrigin: pointIn(semanticViewport, event.clientX, event.clientY),
+              ...(forward ? { semanticTargetProjectionId: forward.projectionNodeId } : {}),
+            } : next;
+            const nextFrame = !gesture.switched && surface ? zoomWindowContentAt(
+              { ...frame, navigation: nextNavigation }, pointIn(surface, event.clientX, event.clientY), navigation.semanticScale, next.semanticScale,
+            ) : { ...frame, navigation: nextNavigation };
+            onViewsChange({ ...normalized, projections: { ...normalized.projections, [windowId]: nextFrame } });
+            finishGesture();
+            return;
+          }
         }
         const point = pointIn(element, event.clientX, event.clientY), before = screenToWorld(point, views);
         const scale = Math.max(.5, Math.min(2, views.camera.scale * Math.exp(-event.deltaY * .002)));
         setPreviewCamera(undefined); onViewsChange({ ...normalized, camera: { scale, x: point.x - before.x * scale, y: point.y - before.y * scale } });
+      } else if (windowId && frame && activeProjection) {
+        onViewsChange({ ...normalized, projections: { ...normalized.projections, [windowId]: panWindowContent(frame, { x: event.deltaX, y: event.deltaY }) } });
       } else {
-        setPreviewCamera(undefined); onViewsChange({ ...normalized, camera: { ...views.camera, x: views.camera.x - event.deltaX, y: views.camera.y - event.deltaY } });
+        setPreviewCamera(undefined);
+        onViewsChange({
+          ...normalized,
+          activeWindowId: windowId ? normalized.activeWindowId : undefined,
+          camera: { ...views.camera, x: views.camera.x - event.deltaX, y: views.camera.y - event.deltaY },
+        });
       }
     };
     element.addEventListener("wheel", handle, { passive: false });
     return () => element.removeEventListener("wheel", handle);
-  }, [free, normalized, onViewsChange, views, workspace.id]);
+  }, [free, nodeTypes, normalized, onViewsChange, scopedSelections, views, workspace.graph, workspace.id, workspace.selection]);
   const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!free || event.button !== 0 && event.button !== 1) return;
     const path = event.nativeEvent.composedPath() as HTMLElement[], port = path.find((item) => item?.dataset?.relationOriginNode);
     if (path.some((item) => ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"].includes(item?.tagName))) return;
     if (!port && path.some((item) => item?.dataset?.nodeId)) return;
     const element = viewport.current!, start = pointIn(element, event.clientX, event.clientY);
+    element.focus({ preventScroll: true });
     if (event.pointerType === "touch") {
       touches.current.set(event.pointerId, start);
       if (touches.current.size === 2) { const [a, b] = [...touches.current.values()], center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; pinch.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), world: screenToWorld(center, views), camera: views.camera }; gesture.current = undefined; }
@@ -107,7 +166,7 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
     if (pinch.current) { if (touches.current.size < 2) { pinch.current = undefined; if (previewCamera) persistCamera(previewCamera); } return; }
     const current = gesture.current; if (!current || current.pointerId !== event.pointerId) return;
     const screen = pointIn(viewport.current!, event.clientX, event.clientY); gesture.current = undefined;
-    if (current.kind === "pan") { if (current.moved) onViewsChange(views); setPreviewCamera(undefined); }
+    if (current.kind === "pan") { onViewsChange({ ...views, activeWindowId: undefined }); setPreviewCamera(undefined); }
     else { setWire(undefined); if (current.moved) setCreator({ screen, world: screenToWorld(screen, views), origin: current.origin }); }
   };
   const fit = () => {
@@ -120,12 +179,25 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
   if (!free) return <LegacyCanvas workspace={workspace} roots={roots} nodes={nodes} hasWorkspaceProjection={hasWorkspaceProjection} elements={elements} nodeTypes={nodeTypes} pluginManager={pluginManager} onSelectionChange={onSelectionChange} onRequest={onRequest} onOpenPluginManager={onOpenPluginManager} onClosePluginManager={onClosePluginManager} />;
   return <section className={styles.canvasWrap} data-testid="relation-workspace">
     <div className={styles.canvasInfo}>RelationGraph · revision {workspace.graph.revision} · {nodes.length} 个节点 · {status}</div>
-    <div ref={viewport} className={`${styles.canvas} ${styles.freeViewport}`} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setWire(undefined); }}>
+    <div ref={viewport} tabIndex={-1} className={`${styles.canvas} ${styles.freeViewport}`} onScroll={(event) => { event.currentTarget.scrollLeft = 0; event.currentTarget.scrollTop = 0; }}
+      onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setWire(undefined); }}>
       <div className={styles.freeWorld} style={{ width: views.world.width, height: views.world.height, transform: `translate(${views.camera.x}px,${views.camera.y}px) scale(${views.camera.scale})` }}>
-        {roots.map((node) => <WorkspaceWindow key={node.id} id={node.id} frame={views.projections[node.id]} views={views} active={views.activeWindowId === node.id} onActivate={() => onActivateWindow(node.id)} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame })}>
-          <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={views} graph={workspace.graph} node={node} selection={scopedSelections[node.id] ?? workspace.selection} purpose="workspace" elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
-        </WorkspaceWindow>)}
-        {Object.values(views.systemWindows).map((item) => <WorkspaceWindow key={item.id} id={item.id} frame={item.frame} views={views} system active={views.activeWindowId === item.id} onActivate={() => onActivateWindow(item.id)} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: item.id, frame })} onClose={onClosePluginManager}>{pluginManager}</WorkspaceWindow>)}
+        {roots.map((node) => {
+          const frame = views.projections[node.id], navigation = navigationForRoot(node.id, workspace.graph, nodeTypes, frame.navigation);
+          const setNavigation = (next: NonNullable<typeof navigation>) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame: { ...frame, navigation: next } });
+          const resetProjection = () => navigation && onViewsChange({
+            ...normalized,
+            projections: { ...normalized.projections, [node.id]: { ...frame, contentOffset: { x: 0, y: 0 }, navigation: { ...navigation, semanticScale: 1 } } },
+          });
+          return <WorkspaceWindow key={node.id} id={node.id} frame={frame} views={views} active={views.activeWindowId === node.id} front={views.frontWindowId === node.id} onActivate={() => onActivateWindow(node.id)} onFrame={(next) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame: next })}>
+            {navigation ? <div className={styles.projectionShell}><ProjectionNavbar navigation={navigation} resizeMode={frame.resizeMode} graph={workspace.graph} nodeTypes={nodeTypes} onChange={setNavigation}
+              onReset={resetProjection}
+              onClose={() => onRequest({ kind: "close-workspace-root", nodeId: node.id })} />
+              <SemanticProjection workspace={workspace} rootWindowId={node.id} navigation={navigation} contentOffset={frame.contentOffset ?? { x: 0, y: 0 }} elements={elements} nodeTypes={nodeTypes} selection={scopedSelections[node.id] ?? workspace.selection} onRequest={onRequest} /></div>
+              : <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={views} graph={workspace.graph} node={node} selection={scopedSelections[node.id] ?? workspace.selection} purpose="workspace" elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />}
+          </WorkspaceWindow>;
+        })}
+        {Object.values(views.systemWindows).map((item) => <WorkspaceWindow key={item.id} id={item.id} frame={item.frame} views={views} system active={views.activeWindowId === item.id} front={views.frontWindowId === item.id} onActivate={() => onActivateWindow(item.id)} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: item.id, frame })} onClose={onClosePluginManager}>{pluginManager}</WorkspaceWindow>)}
       </div>
       {wire && <svg className={styles.creationWire}><line x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y} /><circle cx={wire.to.x} cy={wire.to.y} r="5" /></svg>}
       {creator && <NodeCreator point={creator.screen} candidates={creatorChoices()} onCancel={() => setCreator(undefined)} onChoose={(id) => { if (id === "host.plugin-manager") onOpenPluginManager(creator.world); else onInvokeCreator(id, creator.world, creator.origin); setCreator(undefined); }} />}

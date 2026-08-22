@@ -1,10 +1,10 @@
 import { moveEntity, updateCamera } from "./commands.js";
 import { languageProvider } from "./language.js";
 import { projectScene } from "./project.js";
-import { isSceneType, nameOf, projectionId, relationBy, target, typeId } from "./selectors.js";
+import { isSceneType, nameOf, projectionId, relationBy, observedScene, typeId } from "./selectors.js";
 import { sceneCreators } from "./creators.js";
 
-const typeIds = ["scene", "projection-instance", "person", "physical", "virtual", "event"].map((kind) => `scene.type.${kind}`);
+const typeIds = ["scene", "person", "physical", "virtual", "event"].map((kind) => `scene.type.${kind}`);
 function validate(graph) {
   for (const node of Object.values(graph.nodes)) {
     if (typeId(node) === "scene.type.event") {
@@ -14,9 +14,8 @@ function validate(graph) {
         }
       }
     }
-    if (isSceneType(node, "projection-instance")) {
-      const scene = graph.nodes[target(node, "observes")?.nodeId];
-      const projection = projectionId(node);
+    if (["scene.projection.quadrant", "scene.projection.tube"].includes(projectionId(node))) {
+      const scene = observedScene(node, graph), projection = projectionId(node);
       if (!isSceneType(scene, "scene")) throw new Error(`Scene projection ${node.id} must observe a Scene`);
       if (!["scene.projection.quadrant", "scene.projection.tube"].includes(projection)) throw new Error(`Scene projection ${node.id} is unsupported`);
       if (!relationBy(node, "camera")) throw new Error(`Scene projection ${node.id} has no camera`);
@@ -30,21 +29,18 @@ export default function register(host) {
     type: { nodeId, relationId: "identity" }, name: nodeId.split(".").at(-1),
     matches(node) { return typeId(node) === nodeId; },
     label(node, graph) {
-      if (nodeId === "scene.type.projection-instance") {
-        return projectionId(node) === "scene.projection.quadrant" ? "象限" : "管道";
-      }
       return nameOf(graph, node.id);
     },
   }));
   releases.push(host.registerProjection({
-    id: "scene.quadrant", purpose: "workspace",
-    matches(node) { return isSceneType(node, "projection-instance") && projectionId(node) === "scene.projection.quadrant"; },
+    id: "scene.quadrant", name: "单象限", icon: "⌗", definition: { nodeId: "scene.projection.quadrant", relationId: "identity" }, contexts: ["self-workspace"],
+    matches(node) { return projectionId(node) === "scene.projection.quadrant"; },
     project({ node, graph, selection }) { return projectScene("quadrant", node, graph, selection); },
     element: { pluginId: "official.scene-elements", elementId: "quadrant" },
   }));
   releases.push(host.registerProjection({
-    id: "scene.tube", purpose: "workspace",
-    matches(node) { return isSceneType(node, "projection-instance") && projectionId(node) === "scene.projection.tube"; },
+    id: "scene.tube", name: "管道", icon: "⌁", definition: { nodeId: "scene.projection.tube", relationId: "identity" }, contexts: ["self-workspace"],
+    matches(node) { return projectionId(node) === "scene.projection.tube"; },
     project({ node, graph, selection }) { return projectScene("tube", node, graph, selection); },
     element: { pluginId: "official.scene-elements", elementId: "tube" },
   }));

@@ -40,6 +40,7 @@ test("independent workspaces switch through a Chrome-like tab strip", async () =
   assert.match(tabs, /workspaceTabAdd/);
   assert.match(tabs, /onClose\(workspace\.id\)/);
   assert.match(tabs, /draggable/);
+  assert.match(tabs, /event\.currentTarget\.blur\(\); onActivate/); assert.match(tabs, /event\.currentTarget\.blur\(\); onNew/);
   assert.doesNotMatch(panel, /独立工作区|onActivateWorkspace/);
 });
 
@@ -50,12 +51,17 @@ test("free-layout canvas exposes creator wire, camera controls, and system manag
     readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(canvas, /event\.altKey/); assert.match(canvas, /event\.code === "Space"/); assert.match(canvas, /clientWidth \/ 2/); assert.match(canvas, /creationWire/); assert.match(canvas, /screenToWorld/);
+  assert.match(canvas, /element\.scrollLeft = 0; element\.scrollTop = 0/);
+  assert.match(canvas, /event\.currentTarget\.scrollLeft = 0; event\.currentTarget\.scrollTop = 0/);
+  assert.match(canvas, /matches\("input,textarea,select,\[contenteditable=true\]"\)/); assert.match(canvas, /element\.focus\(\{ preventScroll: true \}\)/); assert.match(canvas, /tabIndex=\{-1\}/);
+  assert.match(canvas, /addEventListener\("pageshow", focusCanvas\)/); assert.match(canvas, /addEventListener\("focus", focusCanvas\)/); assert.match(canvas, /setTimeout\(focusCanvas, 160\)/);
+  assert.match(canvas, /element\.focus\(\{ preventScroll: true \}\);/);
   assert.match(canvas, />适应</); assert.match(manager, /data-window-drag/); assert.match(manager, /data-resize-toggle/);
   assert.match(canvas, /\["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"\]\.includes/);
   assert.doesNotMatch(host, /panelCollapsed|layoutPanelCollapsed/);
 });
 
-test("trackpad pinch is routed to workspace or the active projection instead of browser zoom", async () => {
+test("trackpad movement and pinch route between workspace and active projection", async () => {
   const canvas = await readFile("pip-editor/relation-host/view/workspace-canvas.tsx", "utf8");
   const host = await readFile("pip-editor/relation-host/relation-host.tsx", "utf8");
   const window = await readFile("pip-editor/relation-host/view/workspace-window.tsx", "utf8");
@@ -63,8 +69,12 @@ test("trackpad pinch is routed to workspace or the active projection instead of 
   assert.match(canvas, /addEventListener\("wheel", handle, \{ passive: false \}\)/);
   assert.match(host, /preventPageZoom/);
   assert.match(canvas, /views\.activeWindowId === windowId/);
-  assert.match(canvas, /contentScale/);
-  assert.match(window, /preview\.contentScale \?\? 1/);
+  assert.match(canvas, /panWindowContent\(frame/);
+  assert.match(canvas, /activeWindowId: windowId \? normalized\.activeWindowId : undefined/);
+  assert.match(canvas, /onViewsChange\(\{ \.\.\.views, activeWindowId: undefined \}\)/);
+  assert.match(canvas, /semanticScale/); assert.match(canvas, /applySemanticScale/);
+  assert.match(canvas, /semanticGestures = useRef\(new Map/); assert.match(canvas, /gesture\.scale \* Math\.exp/); assert.match(canvas, /gesture\.switched = next\.index !== navigation\.index/);
+  assert.match(window, /preview\.contentScale \?\? 1/); // Legacy non-semantic projections retain their old scale.
   assert.doesNotMatch(canvas, /scene\.update-camera|xZoom/);
   assert.doesNotMatch(scene, /addEventListener\("wheel"|pendingZoom/);
 });
@@ -93,6 +103,13 @@ test("workspace camera controls dock to the bottom-right outside the scaled worl
   ]);
   assert.match(css, /\.cameraControls \{[^}]*position:absolute;[^}]*right:0;[^}]*bottom:0;/);
   assert.ok(canvas.indexOf("styles.freeWorld") < canvas.indexOf("styles.cameraControls"));
+});
+
+test("projection resize mode sits immediately before the projection close action", async () => {
+  const navbar = await readFile(new URL("../pip-editor/relation-host/view/projection-navbar.tsx", import.meta.url), "utf8");
+  const scene = await readFile(new URL("../pip-editor-io/scene/elements/render.js", import.meta.url), "utf8");
+  assert.ok(navbar.indexOf("data-resize-toggle") < navbar.indexOf("关闭投影窗口"));
+  assert.doesNotMatch(scene, /data-resize-toggle/);
 });
 
 test("workspace projection status names each selection scope instead of aggregating a misleading count", async () => {

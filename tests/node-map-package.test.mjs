@@ -39,7 +39,7 @@ test("thin A5 resolves already installed exact dependencies", async () => {
   const suite = await buildScenePluginSuite(), source = await decodeNodeMapPackage(suite.nodeMapPip);
   const workspace = { ...createNodeMapWorkspace(source.nodeMap, "workspace.export", source.contentSha256), undo: [], redo: [], capabilityDiagnostics: [] };
   const thin = await exportNodeMap(workspace, { source, portable: false });
-  const packages = new Map([[source.nodeTypes[0].contentSha256, source.nodeTypes[0].pipBytes], [source.elementPlugins[0].contentSha256, source.elementPlugins[0].pipBytes]]);
+  const packages = new Map([...source.nodeTypes, ...source.elementPlugins].map((plugin) => [plugin.contentSha256, plugin.pipBytes]));
   const decoded = await decodeNodeMapPackage(thin, { policy: UNLIMITED_PIP_IO_POLICY, resolvePackage: (ref) => packages.get(ref.sha256) });
   assert.deepEqual(decoded.nodeMap.graph, workspace.graph); assert.deepEqual(decoded.nodeMap.workspace.initialSelection, workspace.selection);
 });

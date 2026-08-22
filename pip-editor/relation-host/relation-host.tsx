@@ -17,6 +17,9 @@ import { WorkspaceTabs } from "./view/workspace-tabs.tsx";
 import { CloseWorkspaceDialog } from "./view/close-workspace-dialog.tsx";
 import { graphFingerprint, WorkspaceSessionStore, type WorkspaceSession } from "./workspace/workspace-store.ts";
 import { normalizeFreeLayout, preserveSystemWindows } from "./workspace/view-state.ts";
+import { navigationForRoot, routeForProjection } from "./projection/projection-routes.ts";
+import { currentRoute, navigateProjection } from "./projection/projection-navigation.ts";
+import { presentedProjections } from "./projection/projection-instance.ts";
 import styles from "./view/relation-host.module.css";
 
 const scratchWorkspace = (): WorkspaceSession => {
@@ -92,6 +95,17 @@ export function RelationHost() {
       if (request.kind === "apply-patch") workspaceStore.commitPatch(workspaceId, request.patch, nodeTypes.validators());
       if (request.kind === "select") workspaceStore.select(workspaceId, request.nodeIds, request.scopeId);
       if (request.kind === "set-workspace-window") workspaceStore.setWindow(workspaceId, request.windowId, request.frame);
+      if (request.kind === "close-workspace-root") workspaceStore.closeProjectionRoot(workspaceId, request.nodeId);
+      if (request.kind === "navigate-projection") {
+        const views = normalizeFreeLayout(active.views, active.rootNodeIds), windowId = views.activeWindowId, frame = windowId && views.projections[windowId];
+        if (!windowId || !frame) throw new Error("Projection navigation requires an active workspace window");
+        const navigation = navigationForRoot(windowId, active.graph, nodeTypes, frame.navigation), route = navigation && currentRoute(navigation);
+        const parent = route && active.graph.nodes[route.projectionNodeId];
+        if (!navigation || route?.context !== "children-workspace" || !parent || !presentedProjections(parent, active.graph).some(({ projectionNodeId }) => projectionNodeId === request.projectionNodeId)) throw new Error("Projection is not a direct child of the active internal view");
+        const target = routeForProjection(request.projectionNodeId, active.graph, nodeTypes, { parentInternalProjectionId: parent.id, childProjectionId: request.projectionNodeId });
+        if (!target) throw new Error("Projection cannot be promoted to self-workspace");
+        workspaceStore.setWindow(workspaceId, windowId, { ...frame, navigation: navigateProjection(navigation, target) });
+      }
       if (request.kind === "invoke-creator") await invokeCreator(request.creatorId, request.worldPosition, request.input, request.origin);
       if (request.kind === "command") { const command = nodeTypes.commands().get(request.commandId); if (!command) throw new Error(`Unknown relation command ${request.commandId}`); workspaceStore.commitPatch(workspaceId, await command(request.input, active.graph), nodeTypes.validators()); }
     } catch (error) { setMessage(error instanceof Error ? error.message : "关系操作失败"); }

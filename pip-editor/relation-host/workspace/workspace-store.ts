@@ -73,7 +73,7 @@ export class WorkspaceSessionStore {
     if (views.projections[windowId]) views.projections[windowId] = structuredClone(frame);
     else if (views.systemWindows[windowId]) {
       views.systemWindows[windowId].frame = structuredClone(frame);
-      if ((workspace.views as { kind?: unknown })?.kind !== "free-layout") return void this.updateViews(workspaceId, withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId));
+      if ((workspace.views as { kind?: unknown })?.kind !== "free-layout") return void this.updateViews(workspaceId, withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId, views.frontWindowId));
     }
     else throw new Error(`Unknown workspace window ${windowId}`);
     this.updateViews(workspaceId, views);
@@ -82,26 +82,38 @@ export class WorkspaceSessionStore {
   activateWindow(workspaceId: string, windowId: string) {
     const workspace = this.#workspace(workspaceId), views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
     if (!views.projections[windowId] && !views.systemWindows[windowId]) throw new Error(`Unknown workspace window ${windowId}`);
-    if (views.activeWindowId === windowId) return;
-    views.activeWindowId = windowId;
+    if (views.activeWindowId === windowId && views.frontWindowId === windowId) return;
+    views.activeWindowId = windowId; views.frontWindowId = windowId;
     this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout"
-      ? views : withSystemWindows(workspace.views, views.systemWindows, windowId));
+      ? views : withSystemWindows(workspace.views, views.systemWindows, windowId, windowId));
   }
 
   openPluginManager(workspaceId: string, point: WorkspacePoint) {
     const workspace = this.#workspace(workspaceId), views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
     const width = 640, height = 720;
-    const x = Math.max(0, Math.min(views.world.width - width, point.x)), y = Math.max(0, Math.min(views.world.height - height, point.y));
+    const x = Math.max(0, Math.min(views.world.width - width, point.x - width / 2));
+    const y = Math.max(0, Math.min(views.world.height - height, point.y - height / 2));
     views.systemWindows["host.plugin-manager"] = { id: "host.plugin-manager", type: "plugin-manager", frame: { x, y, width, height, resizeMode: "full" } };
-    views.activeWindowId = "host.plugin-manager";
-    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId));
+    views.activeWindowId = "host.plugin-manager"; views.frontWindowId = "host.plugin-manager";
+    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId, views.frontWindowId));
   }
 
   closeSystemWindow(workspaceId: string, windowId: string) {
     const workspace = this.#workspace(workspaceId), views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
     delete views.systemWindows[windowId];
     if (views.activeWindowId === windowId) views.activeWindowId = undefined;
-    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId));
+    if (views.frontWindowId === windowId) views.frontWindowId = undefined;
+    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId, views.frontWindowId));
+  }
+
+  closeProjectionRoot(workspaceId: string, nodeId: string) {
+    const workspace = this.#workspace(workspaceId);
+    if (!workspace.rootNodeIds.includes(nodeId)) throw new Error(`Unknown workspace root ${nodeId}`);
+    const rootNodeIds = workspace.rootNodeIds.filter((id) => id !== nodeId);
+    const views = normalizeFreeLayout(workspace.views, rootNodeIds);
+    if (views.activeWindowId === nodeId) views.activeWindowId = undefined;
+    if (views.frontWindowId === nodeId) views.frontWindowId = undefined;
+    this.#replace(this.#value.map((item) => item.id === workspaceId ? { ...workspace, rootNodeIds, views } : item));
   }
 
   setDiagnostics(workspaceId: string, diagnostics: CapabilityDiagnostic[]) {
@@ -139,20 +151,25 @@ export class WorkspaceSessionStore {
   }
 
   commitCreation(workspaceId: string, result: RelationCreationResult, point: WorkspacePoint, validators: RelationValidator[]) {
-    const workspace = this.#workspace(workspaceId), applied = applyRelationPatch(workspace.graph, result.patch);
-    validators.forEach((validate) => validate(applied.graph));
+    const workspace = this.#workspace(workspaceId), applied = result.patch ? applyRelationPatch(workspace.graph, result.patch) : undefined;
+    const graph = applied?.graph ?? workspace.graph;
+    validators.forEach((validate) => validate(graph));
     const roots = [...new Set([...workspace.rootNodeIds, ...(result.addRootNodeIds ?? [])])];
-    roots.forEach((id) => { if (!applied.graph.nodes[id]) throw new Error(`Creator returned unknown root ${id}`); });
+    roots.forEach((id) => { if (!graph.nodes[id]) throw new Error(`Creator returned unknown root ${id}`); });
     const views = normalizeFreeLayout(workspace.views, roots);
     if (result.preferredProjection) {
       const id = result.preferredProjection.projectionId;
       if (!roots.includes(id)) throw new Error(`Creator projection ${id} is not a root`);
       const width = result.preferredProjection.width, height = result.preferredProjection.height;
-      const frame = { x: Math.max(0, Math.min(views.world.width - width, point.x)), y: Math.max(0, Math.min(views.world.height - height, point.y)), width, height, resizeMode: "simple" as const };
-      assertWorkspaceFrame(frame, views.world); views.projections[id] = frame; views.activeWindowId = id;
+      const frame = {
+        x: Math.max(0, Math.min(views.world.width - width, point.x - width / 2)),
+        y: Math.max(0, Math.min(views.world.height - height, point.y - height / 2)),
+        width, height, resizeMode: "simple" as const,
+      };
+      assertWorkspaceFrame(frame, views.world); views.projections[id] = frame; views.activeWindowId = id; views.frontWindowId = id;
     }
-    const undo = { patch: applied.inverse, rootNodeIds: [...workspace.rootNodeIds] };
-    const next = { ...workspace, graph: applied.graph, rootNodeIds: roots, views, undo: [...workspace.undo, undo], redo: [] };
+    const undo = applied ? { patch: applied.inverse, rootNodeIds: [...workspace.rootNodeIds] } : undefined;
+    const next = { ...workspace, graph, rootNodeIds: roots, views, undo: undo ? [...workspace.undo, undo] : workspace.undo, redo: applied ? [] : workspace.redo };
     this.#replace(this.#value.map((item) => item.id === workspaceId ? next : item));
   }
 

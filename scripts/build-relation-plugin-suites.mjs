@@ -8,11 +8,16 @@ await mkdir(output, { recursive: true });
 
 for (const build of [buildIntentPluginSuite, buildScenePluginSuite]) {
   const suite = await build();
-  await Promise.all([
+  const outputs = [
     writeFile(new URL(pipFilename(suite.element.manifest), output), suite.elementPip),
     writeFile(new URL(pipFilename(suite.nodeType.manifest), output), suite.nodeTypePip),
     writeFile(new URL(pipFilename(suite.nodeMap.manifest), output), suite.nodeMapPip),
-  ]);
+  ];
+  if (suite.support) outputs.push(
+    writeFile(new URL(pipFilename(suite.support.element.manifest), output), suite.support.elementPip),
+    writeFile(new URL(pipFilename(suite.support.nodeType.manifest), output), suite.support.nodeTypePip),
+  );
+  await Promise.all(outputs);
 }
 
 console.log(`Built external RelationNode plugin suites in ${output.pathname}`);

@@ -1,11 +1,13 @@
 import type { Relation } from "../../pip-editor/relation/index.ts";
 import { assertRelationGraph } from "../../pip-editor/relation/index.ts";
 import { constRelation, mergeGraphs, ontologyGraph, refRelation, relationNode } from "../shared/relation-builders.ts";
+import { relationProjectionOntology } from "../relation-projections/domain.ts";
+import { buildProjectionBundle } from "./projection-bundle.ts";
 
 export const SCENE_ELEMENT_PLUGIN_ID = "official.scene-elements";
 export const SCENE_NODE_PLUGIN_ID = "official.scene-types";
 export const SCENE_NODE_MAP_ID = "official.today-scene";
-export const SCENE_TYPE_NAMES = ["scene", "projection-instance", "person", "physical", "virtual", "event"] as const;
+export const SCENE_TYPE_NAMES = ["scene", "person", "physical", "virtual", "event"] as const;
 export const SCENE_TYPES = SCENE_TYPE_NAMES.map((kind) => `scene.type.${kind}`);
 export const SCENE_PREDICATES = [
   "name", "type", "position", "time", "subject", "source", "target", "object",
@@ -54,16 +56,9 @@ const sceneRoot = relationNode("scene.today", [
   constRelation("name", "scene.predicate.name", "小明的今天"), refRelation("type", "scene.predicate.type", "scene.type.scene"),
   ...SCENE_BUSINESS_IDS.map((id, index) => refRelation(`contains:${index}`, "scene.predicate.contains", id)),
 ]);
-const view = (id: string, projection: "quadrant" | "tube", camera: Record<string, number>) => relationNode(id, [
-  refRelation("type", "scene.predicate.type", "scene.type.projection-instance"), refRelation("observes", "scene.predicate.observes", "scene.today"),
-  refRelation("projection", "scene.predicate.projection", `scene.projection.${projection}`), constRelation("camera", "scene.predicate.camera", camera),
-]);
+const projectionBundle = buildProjectionBundle([sceneRoot, ...businessNodes], "scene.predicate.contains");
 
-export const sceneNodeMapGraph = mergeGraphs(sceneOntology, ontologyGraph([
-  ...businessNodes, sceneRoot,
-  view("scene.view.quadrant", "quadrant", { zRotation: 135, yAxisLength: 300, zAxisLength: 300, xZoom: 1, xPan: 0 }),
-  view("scene.view.tube", "tube", { xZoom: 1, xPan: 0 }),
-]));
+export const sceneNodeMapGraph = mergeGraphs(relationProjectionOntology, sceneOntology, ontologyGraph([...businessNodes, sceneRoot, ...projectionBundle.nodes]));
 assertRelationGraph(sceneNodeMapGraph);
 
 export const sceneNodeMapData = {

@@ -1,5 +1,6 @@
 import type { JsonValue } from "../../relation/index.ts";
 import type { WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
+import { exportedNavigation } from "../projection/projection-navigation.ts";
 
 export type SystemWorkspaceWindow = { id: string; type: "plugin-manager"; frame: WorkspaceWindowFrame };
 export type FreeLayoutWorkspaceViews = {
@@ -9,6 +10,7 @@ export type FreeLayoutWorkspaceViews = {
   projections: Record<string, WorkspaceWindowFrame>;
   systemWindows: Record<string, SystemWorkspaceWindow>;
   activeWindowId?: string;
+  frontWindowId?: string;
 };
 
 const DEFAULT_WORLD = { width: 2600, height: 1600 };
@@ -19,6 +21,22 @@ export const defaultFrame = (index = 0): WorkspaceWindowFrame => ({
   x: 80 + index % 2 * 1240, y: 80 + Math.floor(index / 2) * 800, width: 1120, height: 720, resizeMode: "simple", contentScale: 1,
 });
 
+export const panWindowContent = (frame: WorkspaceWindowFrame, delta: WorkspacePoint): WorkspaceWindowFrame => {
+  const current = frame.contentOffset ?? { x: 0, y: 0 };
+  const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
+  return { ...frame, contentOffset: { x: clamp(current.x - delta.x, frame.width), y: clamp(current.y - delta.y, frame.height) } };
+};
+
+/** Keeps the world coordinate under the pointer fixed while an A3 spatial surface changes scale. */
+export const zoomWindowContentAt = (frame: WorkspaceWindowFrame, point: WorkspacePoint, previousScale: number, nextScale: number): WorkspaceWindowFrame => {
+  if (!(previousScale > 0) || !(nextScale > 0)) return frame;
+  const offset = frame.contentOffset ?? { x: 0, y: 0 }, ratio = nextScale / previousScale;
+  return { ...frame, contentOffset: {
+    x: point.x - (point.x - offset.x) * ratio,
+    y: point.y - (point.y - offset.y) * ratio,
+  } };
+};
+
 export function assertWorkspaceFrame(value: unknown, world = DEFAULT_WORLD): asserts value is WorkspaceWindowFrame {
   const item = record(value);
   if (!item || !finite(item.x) || !finite(item.y) || !finite(item.width) || !finite(item.height) || !["simple", "full"].includes(String(item.resizeMode))) {
@@ -26,7 +44,17 @@ export function assertWorkspaceFrame(value: unknown, world = DEFAULT_WORLD): ass
   }
   if (item.width < 560 || item.height < 420 || item.width > 1800 || item.height > 1200) throw new Error("Workspace window size is outside supported bounds");
   if (item.contentScale !== undefined && (!finite(item.contentScale) || item.contentScale < .5 || item.contentScale > 2)) throw new Error("Workspace content scale is outside supported bounds");
-  if (item.x < 0 || item.y < 0 || item.x + item.width > world.width || item.y + item.height > world.height) throw new Error("Workspace window is outside the world");
+  const offset = item.contentOffset === undefined ? undefined : record(item.contentOffset);
+  if (item.contentOffset !== undefined && (!offset || !finite(offset.x) || !finite(offset.y))) throw new Error("Workspace content offset is invalid");
+  if (item.navigation !== undefined) {
+    const navigation = record(item.navigation), entries = navigation?.entries, origin = navigation?.semanticOrigin === undefined ? undefined : record(navigation.semanticOrigin);
+    if (!navigation || !Array.isArray(entries) || !entries.length || !Number.isInteger(navigation.index) || Number(navigation.index) < 0 || Number(navigation.index) >= entries.length || !finite(navigation.semanticScale)) {
+      throw new Error("Workspace projection navigation is invalid");
+    }
+    if (navigation.semanticOrigin !== undefined && (!origin || !finite(origin.x) || !finite(origin.y))) throw new Error("Workspace projection semantic origin is invalid");
+    if (navigation.semanticTargetProjectionId !== undefined && typeof navigation.semanticTargetProjectionId !== "string") throw new Error("Workspace projection semantic target is invalid");
+  }
+  if (item.x + item.width > world.width || item.y + item.height > world.height) throw new Error("Workspace window is outside the world");
 }
 
 export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): FreeLayoutWorkspaceViews {
@@ -35,7 +63,8 @@ export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): Fr
   const world = worldValue && finite(worldValue.width) && finite(worldValue.height) && worldValue.width >= 560 && worldValue.height >= 420 ? { width: worldValue.width, height: worldValue.height } : { ...DEFAULT_WORLD };
   const cameraValue = free ? record(source.camera) : undefined;
   const camera = cameraValue && finite(cameraValue.scale) && finite(cameraValue.x) && finite(cameraValue.y)
-    ? { scale: Math.min(2, Math.max(.5, cameraValue.scale)), x: Math.min(0, cameraValue.x), y: Math.min(0, cameraValue.y) } : { ...DEFAULT_CAMERA };
+    // Camera translation is intentionally unbounded so the world origin can move away from the viewport's top-left corner.
+    ? { scale: Math.min(2, Math.max(.5, cameraValue.scale)), x: cameraValue.x, y: cameraValue.y } : { ...DEFAULT_CAMERA };
   const projectionValue = free ? record(source.projections) : undefined;
   const projections: Record<string, WorkspaceWindowFrame> = {};
   rootNodeIds.forEach((id, index) => {
@@ -55,7 +84,9 @@ export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): Fr
   }
   const activeWindowId = typeof source?.activeWindowId === "string" && (projections[source.activeWindowId] || systemWindows[source.activeWindowId])
     ? source.activeWindowId : undefined;
-  return { kind: "free-layout", world, camera, projections, systemWindows, activeWindowId };
+  const frontWindowId = typeof source?.frontWindowId === "string" && (projections[source.frontWindowId] || systemWindows[source.frontWindowId])
+    ? source.frontWindowId : activeWindowId;
+  return { kind: "free-layout", world, camera, projections, systemWindows, activeWindowId, frontWindowId };
 }
 
 export const exportedWorkspaceViews = (value: JsonValue): JsonValue => {
@@ -63,23 +94,31 @@ export const exportedWorkspaceViews = (value: JsonValue): JsonValue => {
   if (source) {
     source.systemWindows = {};
     const projections = record(source.projections);
+    for (const frame of Object.values(projections ?? {})) {
+      const item = record(frame), navigation = item?.navigation;
+      if (navigation && typeof navigation === "object") item!.navigation = exportedNavigation(navigation as import("../contracts/package-types.ts").ProjectionNavigationState);
+    }
     if (typeof source.activeWindowId === "string" && !projections?.[source.activeWindowId]) delete source.activeWindowId;
+    if (typeof source.frontWindowId === "string" && !projections?.[source.frontWindowId]) delete source.frontWindowId;
   }
   return (source ?? value) as JsonValue;
 };
 
-export const withSystemWindows = (value: JsonValue, systemWindows: Record<string, SystemWorkspaceWindow>, activeWindowId?: string): JsonValue => {
+export const withSystemWindows = (value: JsonValue, systemWindows: Record<string, SystemWorkspaceWindow>, activeWindowId?: string, frontWindowId?: string): JsonValue => {
   const source = record(structuredClone(value)) ?? {};
   source.systemWindows = structuredClone(systemWindows);
   if (activeWindowId) source.activeWindowId = activeWindowId;
   else delete source.activeWindowId;
+  if (frontWindowId) source.frontWindowId = frontWindowId;
+  else delete source.frontWindowId;
   return source as JsonValue;
 };
 
 export const preserveSystemWindows = (value: JsonValue, previous: JsonValue, previousRootNodeIds: string[]): JsonValue => {
   const local = normalizeFreeLayout(previous, previousRootNodeIds);
   const activeWindowId = local.activeWindowId && local.systemWindows[local.activeWindowId] ? local.activeWindowId : undefined;
-  return withSystemWindows(value, local.systemWindows, activeWindowId);
+  const frontWindowId = local.frontWindowId && local.systemWindows[local.frontWindowId] ? local.frontWindowId : undefined;
+  return withSystemWindows(value, local.systemWindows, activeWindowId, frontWindowId);
 };
 
 export const screenToWorld = (point: WorkspacePoint, views: FreeLayoutWorkspaceViews): WorkspacePoint => ({

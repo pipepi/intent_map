@@ -6,6 +6,7 @@ import { encodeNodeMapPackage } from "../../pip-editor/relation-host/packages/no
 import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/relation-host/packages/node-type-package.ts";
 import { exactPackageRef } from "../../pip-editor/relation-host/packages/pip-package.ts";
 import { baseElementManifest, baseNodeMapManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
+import { buildRelationProjectionPlugins } from "../relation-projections/suite.ts";
 import { sceneNodeMapData, sceneOntology, SCENE_NODE_MAP_ID, SCENE_ELEMENT_PLUGIN_ID, SCENE_NODE_PLUGIN_ID, SCENE_TYPES } from "./domain.ts";
 
 export * from "./domain.ts";
@@ -34,7 +35,8 @@ async function bundle(entry: string) {
 }
 
 export async function buildScenePluginSuite() {
-  const [elementSources, nodeSources, elementSource, nodeTypeSource] = await Promise.all([
+  const [support, elementSources, nodeSources, elementSource, nodeTypeSource] = await Promise.all([
+    buildRelationProjectionPlugins(),
     sources(elementFiles), sources(nodeTypeFiles), bundle("elements/entry.js"), bundle("runtime/entry.js"),
   ]);
   const elementManifest = {
@@ -52,9 +54,11 @@ export async function buildScenePluginSuite() {
   const nodeTypePip = await encodeNodeTypePackage(nodeManifest, sceneOntology, nodeTypeSource, nodeSources);
   const nodeType = await decodeNodeTypePackage(nodeTypePip);
   const nodeMap = {
-    manifest: baseNodeMapManifest(SCENE_NODE_MAP_ID, "小明的今天", [], [await exactPackageRef(nodeTypePip, nodeType.manifest)], "scene.today"),
+    manifest: baseNodeMapManifest(SCENE_NODE_MAP_ID, "小明的今天", [], [
+      await exactPackageRef(support.nodeTypePip, support.nodeType.manifest), await exactPackageRef(nodeTypePip, nodeType.manifest),
+    ], "scene.today"),
     ...sceneNodeMapData,
   };
-  const nodeMapPip = await encodeNodeMapPackage({ nodeMap, nodeTypes: [nodeType], elementPlugins: [element] });
-  return { elementPip, nodeTypePip, nodeMapPip, element, nodeType, nodeMap };
+  const nodeMapPip = await encodeNodeMapPackage({ nodeMap, nodeTypes: [support.nodeType, nodeType], elementPlugins: [support.element, element] });
+  return { elementPip, nodeTypePip, nodeMapPip, element, nodeType, nodeMap, support };
 }

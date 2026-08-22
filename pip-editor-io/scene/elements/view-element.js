@@ -27,8 +27,7 @@ export class SceneViewElement extends HTMLElement {
       this.shadowRoot.innerHTML = `<p>等待 ${this.expectedMode} Scene projection</p>`;
       return;
     }
-    const frame = this._context?.workspaceView?.projections?.[data.viewId];
-    this.shadowRoot.innerHTML = renderView(data, frame);
+    this.shadowRoot.innerHTML = renderView(data);
   }
   command(commandId, input) {
     this.dispatchEvent(new CustomEvent("intent-relation-request", {

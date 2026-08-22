@@ -9,18 +9,19 @@ type Gesture = { pointerId: number; startX: number; startY: number; start: Works
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 function resized(start: WorkspaceWindowFrame, direction: Direction | undefined, dx: number, dy: number, world: FreeLayoutWorkspaceViews["world"]) {
-  if (!direction) return { ...start, x: clamp(start.x + dx, 0, world.width - start.width), y: clamp(start.y + dy, 0, world.height - start.height) };
+  // The world has no left/top wall; only its right/bottom extent constrains window movement.
+  if (!direction) return { ...start, x: Math.min(start.x + dx, world.width - start.width), y: Math.min(start.y + dy, world.height - start.height) };
   let { x, y, width, height } = start;
   if (direction.includes("e")) width = clamp(start.width + dx, 560, Math.min(1800, world.width - x));
   if (direction.includes("s")) height = clamp(start.height + dy, 420, Math.min(1200, world.height - y));
-  if (direction.includes("w")) { const right = start.x + start.width; width = clamp(start.width - dx, 560, Math.min(1800, right)); x = right - width; }
-  if (direction.includes("n")) { const bottom = start.y + start.height; height = clamp(start.height - dy, 420, Math.min(1200, bottom)); y = bottom - height; }
+  if (direction.includes("w")) { const right = start.x + start.width; width = clamp(start.width - dx, 560, 1800); x = right - width; }
+  if (direction.includes("n")) { const bottom = start.y + start.height; height = clamp(start.height - dy, 420, 1200); y = bottom - height; }
   return { ...start, x, y, width, height };
 }
 
-export function WorkspaceWindow({ id, frame, views, children, system = false, active = false, onFrame, onActivate, onClose }: {
+export function WorkspaceWindow({ id, frame, views, children, system = false, active = false, front = false, onFrame, onActivate, onClose }: {
   id: string; frame: WorkspaceWindowFrame; views: FreeLayoutWorkspaceViews; children: ReactNode; system?: boolean;
-  active?: boolean; onFrame: (frame: WorkspaceWindowFrame) => void; onActivate?: () => void; onClose?: () => void;
+  active?: boolean; front?: boolean; onFrame: (frame: WorkspaceWindowFrame) => void; onActivate?: () => void; onClose?: () => void;
 }) {
   const [preview, setPreview] = useState(frame), gesture = useRef<Gesture | undefined>(undefined);
   useEffect(() => { if (!gesture.current) setPreview(frame); }, [frame]);
@@ -48,7 +49,7 @@ export function WorkspaceWindow({ id, frame, views, children, system = false, ac
   };
   const handles = preview.resizeMode === "simple" ? ["e", "s", "se"] : directions;
   return <article className={`${styles.freeWindow} ${system ? styles.systemWindow : ""}`} data-node-id={id}
-    style={{ left: preview.x, top: preview.y, width: preview.width, height: preview.height, zIndex: active ? 12 : system ? 8 : 2 }}
+    style={{ left: preview.x, top: preview.y, width: preview.width, height: preview.height, zIndex: front ? 12 : system ? 8 : 2 }}
     onPointerDownCapture={() => { if (!active) onActivate?.(); }}
     onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setPreview(frame); }}
     onClickCapture={(event) => {

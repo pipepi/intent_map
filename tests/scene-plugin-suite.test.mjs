@@ -11,6 +11,7 @@ const byPredicate = (node, name) => node.relations.filter(({ predicate }) => pre
 async function installed() {
   const suite = await buildScenePluginSuite();
   const registry = new NodeTypePluginRegistry({ load: dataModule });
+  await registry.install(suite.support.nodeType);
   await registry.install(suite.nodeType);
   return { suite, registry };
 }
@@ -25,8 +26,8 @@ test("Scene collection opens with one world and no projection roots", async () =
   assert.equal(byPredicate(scene, "contains").length, 21);
   for (const id of ["scene.view.quadrant", "scene.view.tube"]) {
     const view = graph.nodes[id];
-    assert.equal(byPredicate(view, "type")[0].object.target.nodeId, "scene.type.projection-instance");
-    assert.equal(byPredicate(view, "observes")[0].object.target.nodeId, scene.id);
+    assert.equal(view.relations.find(({ predicate }) => predicate.nodeId === "relation.core.type").object.target.nodeId, "relation.projection.type.instance");
+    assert.equal(view.relations.find(({ predicate }) => predicate.nodeId === "relation.projection.predicate.observes").object.target.nodeId, scene.id);
     assert.equal(byPredicate(view, "selection").length, 0);
   }
   const members = SCENE_BUSINESS_IDS.map((id) => graph.nodes[id]);
@@ -49,14 +50,14 @@ test("quadrant and tube project the same world with independent view state", asy
   assert.ok(quadrantData.axes); assert.equal(tubeData.axes, null);
   const projectionType = registry.types().find(({ name }) => name === "projection-instance");
   const eventType = registry.types().find(({ name }) => name === "event");
-  assert.equal(projectionType.label(graph.nodes["scene.view.quadrant"], graph), "象限");
-  assert.equal(projectionType.label(graph.nodes["scene.view.tube"], graph), "管道");
+  assert.match(projectionType.label(graph.nodes["scene.view.quadrant"], graph), /小明的今天/);
+  assert.match(projectionType.label(graph.nodes["scene.view.tube"], graph), /小明的今天/);
   assert.equal(eventType.label(graph.nodes["scene.take-chicken-home"], graph), "小明把烤鸡带回家");
 });
 
 test("Scene projections remain JSON when a new view has no selection", async () => {
   const { suite, registry } = await installed(), graph = suite.nodeMap.graph;
-  for (const projection of registry.projections()) {
+  for (const projection of registry.projections().filter(({ id }) => id.startsWith("scene."))) {
     const view = graph.nodes[projection.id.endsWith("quadrant") ? "scene.view.quadrant" : "scene.view.tube"];
     const data = projection.project({ workspaceId: "workspace.scene", rootNodeIds: [], workspaceView: {}, graph, node: view, selection: [] });
     assert.doesNotThrow(() => assertJsonValue(data)); assert.equal(data.selectedId, null);
@@ -82,13 +83,13 @@ test("Scene selection is an ephemeral scoped request while commands mutate camer
   assert.notDeepEqual(data("scene.tube", "scene.view.tube").entities.find(({ id }) => id === "scene.xiaoming").surface, { y: .32, z: .18 });
 });
 
-test("Scene A4 registers creators for new quadrant and tube projection roots", async () => {
+test("Scene A4 creators open persistent quadrant and tube projection roots", async () => {
   const { suite, registry } = await installed(), creators = registry.creators();
   assert.deepEqual(creators.map(({ id }) => id), ["scene.create-quadrant", "scene.create-tube"]);
   const context = { workspaceId: "workspace.scene", graph: suite.nodeMap.graph, rootNodeIds: suite.nodeMap.manifest.rootNodeIds, worldPosition: { x: 400, y: 300 } };
   const result = await creators[0].create(context);
-  assert.equal(result.patch.baseRevision, 0); assert.equal(result.patch.operations[0].op, "put-node");
-  assert.deepEqual(byPredicate(result.patch.operations[0].node, "camera")[0].object.value, { zRotation: 135, yAxisLength: 300, zAxisLength: 300, xZoom: 1, xPan: 0 });
-  assert.deepEqual(result.addRootNodeIds, [result.patch.operations[0].node.id]);
-  assert.equal(result.preferredProjection.projectionId, result.patch.operations[0].node.id);
+  assert.equal(result.patch, undefined);
+  assert.deepEqual(result.addRootNodeIds, ["scene.view.quadrant"]);
+  assert.equal(result.preferredProjection.projectionId, "scene.view.quadrant");
+  assert.deepEqual(byPredicate(suite.nodeMap.graph.nodes["scene.view.quadrant"], "camera")[0].object.value, { zRotation: 135, yAxisLength: 300, zAxisLength: 300, xZoom: 1, xPan: 0 });
 });
