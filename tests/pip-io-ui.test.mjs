@@ -37,7 +37,21 @@ test("independent workspaces switch through a Chrome-like tab strip", async () =
   assert.match(tabs, /role="tablist"/);
   assert.match(tabs, /role="tab" aria-selected=\{active\}/);
   assert.match(tabs, /onActivate\(workspace\.id\)/);
+  assert.match(tabs, /workspaceTabAdd/);
+  assert.match(tabs, /onClose\(workspace\.id\)/);
+  assert.match(tabs, /draggable/);
   assert.doesNotMatch(panel, /独立工作区|onActivateWorkspace/);
+});
+
+test("free-layout canvas exposes creator wire, camera controls, and system manager window", async () => {
+  const [canvas, manager, host] = await Promise.all([
+    readFile(new URL("../pip-editor/relation-host/view/workspace-canvas.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/view/plugin-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(canvas, /event\.altKey/); assert.match(canvas, /creationWire/); assert.match(canvas, /screenToWorld/);
+  assert.match(canvas, />适应</); assert.match(manager, /data-window-drag/); assert.match(manager, /data-resize-toggle/);
+  assert.doesNotMatch(host, /panelCollapsed|layoutPanelCollapsed/);
 });
 
 test("undo and redo live in the plugin panel without a global header", async () => {

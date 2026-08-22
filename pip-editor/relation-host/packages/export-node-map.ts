@@ -2,6 +2,7 @@
 import type { NodeMap } from "../contracts/package-types.ts";
 import type { WorkspaceSession } from "../workspace/workspace-store.ts";
 import { encodeNodeMapPackage, type PortableNodeMap } from "./node-map-package.ts";
+import { exportedWorkspaceViews } from "../workspace/view-state.ts";
 
 export type ExportNodeMapOptions = {
   source: PortableNodeMap;
@@ -12,7 +13,7 @@ export function exportNodeMap(workspace: WorkspaceSession, options: ExportNodeMa
   const nodeMap: NodeMap = {
     manifest: structuredClone(options.source.nodeMap.manifest),
     graph: structuredClone(workspace.graph),
-    workspace: { views: structuredClone(workspace.views), initialSelection: [...workspace.selection] },
+    workspace: { views: exportedWorkspaceViews(workspace.views), initialSelection: [...workspace.selection] },
   };
   return encodeNodeMapPackage({
     nodeMap,

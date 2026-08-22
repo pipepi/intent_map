@@ -69,3 +69,13 @@ test("Scene selection is an ephemeral scoped request while commands mutate camer
   assert.equal(data("scene.quadrant", "scene.view.quadrant").entities.find(({ id }) => id === "scene.xiaoming").surface.y, position.sector);
   assert.notDeepEqual(data("scene.tube", "scene.view.tube").entities.find(({ id }) => id === "scene.xiaoming").surface, { y: .32, z: .18 });
 });
+
+test("Scene A4 registers creators for new quadrant and tube projection roots", async () => {
+  const { suite, registry } = await installed(), creators = registry.creators();
+  assert.deepEqual(creators.map(({ id }) => id), ["scene.create-quadrant", "scene.create-tube"]);
+  const context = { workspaceId: "workspace.scene", graph: suite.nodeMap.graph, rootNodeIds: suite.nodeMap.manifest.rootNodeIds, worldPosition: { x: 400, y: 300 } };
+  const result = await creators[0].create(context);
+  assert.equal(result.patch.baseRevision, 0); assert.equal(result.patch.operations[0].op, "put-node");
+  assert.deepEqual(result.addRootNodeIds, [result.patch.operations[0].node.id]);
+  assert.equal(result.preferredProjection.projectionId, result.patch.operations[0].node.id);
+});

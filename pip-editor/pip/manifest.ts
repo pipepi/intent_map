@@ -47,7 +47,7 @@ const validElementManifest = (manifest: Extract<PipManifest, { layer: "a3" }>) =
   manifest.elementAbi === "relation-element/2" && manifest.entry === "entry.mjs" && manifest.providedCapabilities.length > 0 &&
   Array.isArray(manifest.elements) && manifest.elements.length > 0 && manifest.elements.every((item) => item && !!item.id &&
     /^[a-z][a-z0-9._-]*$/.test(item.id) && /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/.test(item.tag) &&
-    ["control", "preview", "node", "projection", "panel"].includes(item.purpose)) && validExecutableFields(manifest);
+    ["control", "preview", "node", "projection", "panel", "creator", "workspace-window"].includes(item.purpose)) && validExecutableFields(manifest);
 const validExecutableFields = (manifest: { permissions: string[]; sourcePaths: string[]; sourceSha256: string; entrySha256: string; redistributable: boolean }) =>
   Array.isArray(manifest.permissions) && manifest.permissions.every(Boolean) && Array.isArray(manifest.sourcePaths) &&
   manifest.sourcePaths.length > 0 && manifest.sourcePaths.every((path) => typeof path === "string" && path.startsWith("source/") && !path.includes("..")) &&

@@ -2,6 +2,7 @@ import { moveEntity, updateCamera } from "./commands.js";
 import { languageProvider } from "./language.js";
 import { projectScene } from "./project.js";
 import { isSceneType, nameOf, projectionId, relationBy, target, typeId } from "./selectors.js";
+import { sceneCreators } from "./creators.js";
 
 const typeIds = ["scene", "projection-instance", "person", "physical", "virtual", "event"].map((kind) => `scene.type.${kind}`);
 function validate(graph) {
@@ -51,5 +52,6 @@ export default function register(host) {
   releases.push(host.registerCommand("scene.update-camera", updateCamera));
   releases.push(host.registerCommand("scene.move-entity", moveEntity));
   releases.push(host.registerLanguageProvider(languageProvider));
+  for (const creator of sceneCreators) releases.push(host.registerCreator(creator));
   return () => releases.reverse().forEach((release) => typeof release === "function" ? release() : release.dispose());
 }

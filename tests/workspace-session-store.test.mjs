@@ -29,9 +29,12 @@ test("workspace store commits, rejects stale commands, and maintains undo redo",
   const patch = { schemaVersion: 1, baseRevision: 0, operations: [{ op: "put-relation", nodeId: "scene.xiaoming", relation: { ...name, object: { kind: "const", value: "新名字" } } }] };
   store.commitPatch(initial.id, patch, []);
   assert.equal(store.list()[0].graph.revision, 1);
+  store.setWindow(initial.id, "scene.view.quadrant", { x: 180, y: 160, width: 1120, height: 720, resizeMode: "full" });
   assert.throws(() => store.commitPatch(initial.id, patch, []), /Stale relation patch/);
   store.history(initial.id, "undo", []);
   assert.equal(store.list()[0].graph.nodes["scene.xiaoming"].relations.find(({ id }) => id === "name").object.value, "小明");
+  assert.equal(store.list()[0].views.projections["scene.view.quadrant"].x, 180);
+  assert.equal(store.list()[0].views.projections["scene.view.quadrant"].resizeMode, "full");
   store.history(initial.id, "redo", []);
   assert.equal(store.list()[0].graph.nodes["scene.xiaoming"].relations.find(({ id }) => id === "name").object.value, "新名字");
   store.select(initial.id, ["scene.xiaoming", "scene.xiaoming"]);

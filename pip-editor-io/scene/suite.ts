@@ -14,6 +14,7 @@ const elementFiles = ["elements/styles.js", "elements/render.js", "elements/view
 const nodeTypeFiles = [
   "runtime/selectors.js", "runtime/geometry.js", "runtime/project.js",
   "runtime/commands.js", "runtime/language.js", "runtime/entry.js",
+  "runtime/creators.js",
 ];
 
 async function sources(paths: string[]) {

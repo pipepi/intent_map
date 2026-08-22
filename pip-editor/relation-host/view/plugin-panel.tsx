@@ -2,26 +2,26 @@ import type { PortableNodeMap } from "../packages/node-map-package.ts";
 import type { ElementPluginPackage, NodeTypePluginPackage } from "../contracts/package-types.ts";
 import styles from "./relation-host.module.css";
 
-export function PluginPanel({ elements, nodeTypes, disabledElements, disabledNodeTypes, nodeMaps, activeWorkspaceId, message, collapsed, canUndo, canRedo, onToggle, onUndo, onRedo, onInstall, onExport, onExportNative, onDisableElement, onDisableNodeType, onUninstallElement, onUninstallNodeType, onOpenNodeMap }: {
+export function PluginPanel({ elements, nodeTypes, disabledElements, disabledNodeTypes, nodeMaps, activeWorkspaceId, message, canUndo, canRedo, onUndo, onRedo, onInstall, onExport, onExportNative, onDisableElement, onDisableNodeType, onUninstallElement, onUninstallNodeType, onOpenNodeMap }: {
   elements: ElementPluginPackage[]; nodeTypes: NodeTypePluginPackage[]; nodeMaps: PortableNodeMap[];
   disabledElements: Set<string>; disabledNodeTypes: Set<string>;
-  activeWorkspaceId?: string; message: string; collapsed: boolean; canUndo: boolean; canRedo: boolean;
-  onToggle: () => void; onUndo: () => void; onRedo: () => void;
+  activeWorkspaceId?: string; message: string; canUndo: boolean; canRedo: boolean;
+  onUndo: () => void; onRedo: () => void;
   onInstall: (file: File) => void; onDisableElement: (id: string) => void; onDisableNodeType: (id: string) => void;
   onExport: () => void; onExportNative?: () => void;
   onUninstallElement: (id: string) => void; onUninstallNodeType: (id: string) => void;
   onOpenNodeMap: (nodeMap: PortableNodeMap) => void | Promise<void>;
 }) {
-  return <aside className={`${styles.panel} ${collapsed ? styles.panelCollapsed : ""}`} data-testid="plugin-manager">
-    <div className={styles.panelTitle}>
+  return <section className={styles.panel} data-testid="plugin-manager">
+    <div className={styles.panelTitle} data-window-drag>
       <div className={styles.panelIdentity}><span>PIP EDITOR I/O</span><h2>A3–A5 分层包</h2></div>
       <div className={styles.panelTitleActions}>
-        <button type="button" disabled={!canUndo} onClick={onUndo} title="撤销" aria-label="撤销">{collapsed ? "↶" : "撤销"}</button>
-        <button type="button" disabled={!canRedo} onClick={onRedo} title="重做" aria-label="重做">{collapsed ? "↷" : "重做"}</button>
-        <button type="button" onClick={onToggle}>{collapsed ? "展开" : "收起"}</button>
+        <button type="button" disabled={!canUndo} onClick={onUndo} title="撤销" aria-label="撤销">撤销</button>
+        <button type="button" disabled={!canRedo} onClick={onRedo} title="重做" aria-label="重做">重做</button>
+        <button type="button" data-resize-toggle title="切换三向/八向缩放">⤢</button>
+        <button type="button" data-window-close title="关闭插件管理器">×</button>
       </div>
     </div>
-    {collapsed ? null : <>
     <div className={styles.panelActions}><label className={styles.primary} htmlFor="pip-import">导入 .pip</label><button disabled={!activeWorkspaceId} onClick={onExport}>导出 A5</button>{onExportNative && <button disabled={!activeWorkspaceId} onClick={onExportNative}>导出原生包</button>}</div>
     <input id="pip-import" type="file" accept=".pip,application/vnd.intent-map.pip" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onInstall(file); event.currentTarget.value = ""; }} />
     <p className={styles.message} data-testid="status-message">{message}</p>
@@ -44,6 +44,5 @@ export function PluginPanel({ elements, nodeTypes, disabledElements, disabledNod
       <p>{nodeMap.manifest.rootNodeIds.join("、")}</p><small>{nodeMap.manifest.packageId}@{nodeMap.manifest.packageVersion}</small>
     </article>; }) : <div className={styles.empty}>未导入 A5；核心不会自动获得领域能力。</div>}</div>
 
-    </>}
-  </aside>;
+  </section>;
 }

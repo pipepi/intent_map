@@ -7,6 +7,7 @@ import type {
   RelationExecutor,
   RelationLanguageProvider,
   RelationProjection,
+  RelationCreator,
   RelationValidator,
   ResolvedNodeType,
   PluginInstallStatus,
@@ -38,6 +39,7 @@ export class NodeTypePluginRegistry {
   readonly #executors = new Map<string, { pluginId: string; value: RelationExecutor }>();
   readonly #projections = new Map<string, { pluginId: string; value: RelationProjection }>();
   readonly #languages = new Map<string, { pluginId: string; value: RelationLanguageProvider }>();
+  readonly #creators = new Map<string, { pluginId: string; value: RelationCreator }>();
   readonly #installing = new Map<string, Promise<PluginInstallStatus>>();
 
   constructor(runtime: NodeTypeRuntimeAdapter) { this.runtime = runtime; }
@@ -48,6 +50,7 @@ export class NodeTypePluginRegistry {
   executors() { return new Map([...this.#executors].map(([id, item]) => [id, item.value])); }
   projections() { return [...this.#projections.values()].map(({ value }) => value); }
   languageProviders() { return [...this.#languages.values()].map(({ value }) => value); }
+  creators() { return [...this.#creators.values()].map(({ value }) => value); }
   resolveType(type: ResolvedNodeType["type"]) { return this.#types.get(typeKey(type))?.value; }
 
   install(plugin: NodeTypePluginPackage): Promise<PluginInstallStatus> {
@@ -89,6 +92,7 @@ export class NodeTypePluginRegistry {
       registerCommand: (id, command) => own(this.#commands, id, command, "Command"),
       registerExecutor: (id, executor) => own(this.#executors, id, executor, "Executor"),
       registerProjection: (projection) => own(this.#projections, projection.id, projection, "Projection"),
+      registerCreator: (creator) => own(this.#creators, creator.id, creator, "Creator"),
       registerLanguageProvider: (provider) => own(this.#languages, provider.id, provider, "Language provider"),
     };
     try {
