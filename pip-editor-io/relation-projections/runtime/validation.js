@@ -1,6 +1,6 @@
 import { P, definitionId, isProjection, observed, relationsBy, targetBy, targetOf } from "./selectors.js";
 
-const supported = new Set(["relation.projection.definition.properties", "relation.projection.definition.contains"]);
+const supported = new Set(["relation.projection.definition.properties", "relation.projection.definition.contains", "relation.projection.definition.flow"]);
 
 export function validateProjectionGraph(graph) {
   const parents = new Map();
@@ -9,7 +9,7 @@ export function validateProjectionGraph(graph) {
     if (!owner) throw new Error(`Projection ${projection.id} observes a missing node`);
     if (!supported.has(definition) && !definition?.startsWith("scene.projection.")) throw new Error(`Projection ${projection.id} uses an unsupported definition`);
     if (definition === "relation.projection.definition.properties" && !targetBy(projection, P.divesInto)) throw new Error(`Self projection ${projection.id} has no internal target`);
-    if (definition !== "relation.projection.definition.contains") continue;
+    if (!["relation.projection.definition.contains", "relation.projection.definition.flow"].includes(definition)) continue;
     const predicate = targetBy(projection, P.childPredicate)?.nodeId;
     if (!predicate) throw new Error(`Children projection ${projection.id} has no child predicate`);
     const children = owner.relations.filter((relation) => relation.predicate.nodeId === predicate).map(targetOf).filter(Boolean);

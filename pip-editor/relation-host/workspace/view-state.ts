@@ -1,5 +1,5 @@
 import type { JsonValue } from "../../relation/index.ts";
-import type { WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
+import type { ProjectionExecutionViewState, WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
 import { exportedNavigation } from "../projection/projection-navigation.ts";
 
 export type SystemWorkspaceWindow = { id: string; type: "plugin-manager"; frame: WorkspaceWindowFrame };
@@ -19,7 +19,20 @@ const finite = (value: unknown): value is number => typeof value === "number" &&
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 export const defaultFrame = (index = 0): WorkspaceWindowFrame => ({
   x: 80 + index % 2 * 1240, y: 80 + Math.floor(index / 2) * 800, width: 1120, height: 720, resizeMode: "simple", contentScale: 1,
+  execution: { flowLayerVisible: true, followActiveEvent: false },
 });
+
+export const normalizeExecutionView = (value: unknown): ProjectionExecutionViewState => {
+  const item = record(value);
+  return {
+    ...(typeof item?.sessionId === "string" ? { sessionId: item.sessionId } : {}),
+    ...(typeof item?.lineageId === "string" ? { lineageId: item.lineageId } : {}),
+    ...(Number.isInteger(item?.generation) ? { generation: Number(item?.generation) } : {}),
+    ...(Number.isInteger(item?.traceCursor) ? { traceCursor: Number(item?.traceCursor) } : {}),
+    flowLayerVisible: item?.flowLayerVisible !== false,
+    followActiveEvent: item?.followActiveEvent === true,
+  };
+};
 
 export const panWindowContent = (frame: WorkspaceWindowFrame, delta: WorkspacePoint): WorkspaceWindowFrame => {
   const current = frame.contentOffset ?? { x: 0, y: 0 };
@@ -54,6 +67,10 @@ export function assertWorkspaceFrame(value: unknown, world = DEFAULT_WORLD): ass
     if (navigation.semanticOrigin !== undefined && (!origin || !finite(origin.x) || !finite(origin.y))) throw new Error("Workspace projection semantic origin is invalid");
     if (navigation.semanticTargetProjectionId !== undefined && typeof navigation.semanticTargetProjectionId !== "string") throw new Error("Workspace projection semantic target is invalid");
   }
+  if (item.execution !== undefined) {
+    const execution = record(item.execution);
+    if (!execution || typeof execution.flowLayerVisible !== "boolean" || typeof execution.followActiveEvent !== "boolean") throw new Error("Workspace execution view is invalid");
+  }
   if (item.x + item.width > world.width || item.y + item.height > world.height) throw new Error("Workspace window is outside the world");
 }
 
@@ -69,7 +86,10 @@ export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): Fr
   const projections: Record<string, WorkspaceWindowFrame> = {};
   rootNodeIds.forEach((id, index) => {
     const candidate = projectionValue?.[id];
-    try { assertWorkspaceFrame(candidate, world); projections[id] = structuredClone(candidate as WorkspaceWindowFrame); }
+    try {
+      assertWorkspaceFrame(candidate, world);
+      const frame = structuredClone(candidate as WorkspaceWindowFrame); frame.execution = normalizeExecutionView(frame.execution); projections[id] = frame;
+    }
     catch { projections[id] = defaultFrame(index); }
   });
   const systemWindows: Record<string, SystemWorkspaceWindow> = {};
@@ -97,6 +117,7 @@ export const exportedWorkspaceViews = (value: JsonValue): JsonValue => {
     for (const frame of Object.values(projections ?? {})) {
       const item = record(frame), navigation = item?.navigation;
       if (navigation && typeof navigation === "object") item!.navigation = exportedNavigation(navigation as import("../contracts/package-types.ts").ProjectionNavigationState);
+      if (item?.execution) item.execution = { flowLayerVisible: normalizeExecutionView(item.execution).flowLayerVisible, followActiveEvent: false };
     }
     if (typeof source.activeWindowId === "string" && !projections?.[source.activeWindowId]) delete source.activeWindowId;
     if (typeof source.frontWindowId === "string" && !projections?.[source.frontWindowId]) delete source.frontWindowId;

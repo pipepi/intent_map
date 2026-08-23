@@ -99,7 +99,7 @@ test("workspace frame validation rejects invalid geometry without publishing", a
   const store = new WorkspaceSessionStore([workspace], () => { publishes += 1; });
   store.setWindow(workspace.id, "scene.view.quadrant", { x: -320, y: -180, width: 800, height: 600, resizeMode: "simple" });
   assert.deepEqual(normalizeFreeLayout(store.list()[0].views, workspace.rootNodeIds).projections["scene.view.quadrant"], {
-    x: -320, y: -180, width: 800, height: 600, resizeMode: "simple",
+    x: -320, y: -180, width: 800, height: 600, resizeMode: "simple", execution: { flowLayerVisible: true, followActiveEvent: false },
   });
   assert.throws(() => store.setWindow(workspace.id, "scene.view.quadrant", { x: 0, y: 0, width: 100, height: 100, resizeMode: "simple" }), /size/);
   assert.throws(() => store.setWindow(workspace.id, "scene.view.quadrant", { x: 2200, y: 0, width: 800, height: 600, resizeMode: "simple" }), /outside/);

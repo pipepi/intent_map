@@ -12,7 +12,8 @@ test("importPip validates an A5 closure, confirms once and dispatches A3-A4-A5",
     installNodeType: async () => { calls.push("a4"); return "installed"; },
     openNodeMap: async () => calls.push("a5"),
   });
-  assert.equal(result.layer, "a5"); assert.deepEqual(calls, ["confirm:3", "a3", "a4", "a5"]); assert.equal(trusted.length, 3);
+  assert.equal(result.layer, "a5");
+  assert.deepEqual(calls, ["confirm:5", "a3", "a3", "a4", "a4", "a5"]); assert.equal(trusted.length, 5);
 });
 
 test("failed A5 activation rolls back capabilities and persists no trust", async () => {
@@ -22,5 +23,6 @@ test("failed A5 activation rolls back capabilities and persists no trust", async
     installElement: async () => "installed", installNodeType: async () => { throw new Error("activation failed"); },
     uninstallElement: (id) => calls.push(`rollback:${id}`), uninstallNodeType: () => {}, openNodeMap: () => {},
   }), /activation failed/);
-  assert.deepEqual(trusted, []); assert.deepEqual(calls, [`rollback:${suite.element.manifest.packageId}`]);
+  assert.deepEqual(trusted, []);
+  assert.deepEqual(new Set(calls), new Set([`rollback:${suite.element.manifest.packageId}`, `rollback:${suite.support.element.manifest.packageId}`]));
 });

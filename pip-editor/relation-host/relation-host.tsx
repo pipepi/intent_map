@@ -5,7 +5,7 @@ import { createNodeMapWorkspace, PortableNodeMapCatalog, type PortableNodeMap } 
 import { browserElementRuntime, ElementPluginRegistry } from "./activation/element-registry.ts";
 import { validateNodeTypeDependencies } from "./packages/node-type-package.ts";
 import { browserNodeTypeRuntime, NodeTypePluginRegistry } from "./activation/node-type-registry.ts";
-import type { ElementPluginPackage, NodeTypePluginPackage, PluginInstallStatus, RelationElementRequest, WorkspacePoint } from "./contracts/package-types.ts";
+import type { ElementPluginPackage, ExecutionContextSnapshot, NodeTypePluginPackage, PluginInstallStatus, RelationElementRequest, WorkspacePoint } from "./contracts/package-types.ts";
 import { browserTrustHashes, importPip } from "./packages/import-pip.ts";
 import { exportNativeNodeMap, exportNodeMap } from "./packages/export-node-map.ts";
 import { readHostCatalog, readHostLaunchPackage, readHostPackage, trustPackageHashes } from "../pip/host-client.ts";
@@ -20,6 +20,8 @@ import { normalizeFreeLayout, preserveSystemWindows } from "./workspace/view-sta
 import { navigationForRoot, routeForProjection } from "./projection/projection-routes.ts";
 import { currentRoute, navigateProjection } from "./projection/projection-navigation.ts";
 import { presentedProjections } from "./projection/projection-instance.ts";
+import { ExecutionSessionManager } from "./execution/session-manager.ts";
+import { TriggerRuntime } from "./execution/trigger-runtime.ts";
 import styles from "./view/relation-host.module.css";
 
 const scratchWorkspace = (): WorkspaceSession => {
@@ -36,6 +38,9 @@ export function RelationHost() {
   if (!elementRegistryRef.current) elementRegistryRef.current = new ElementPluginRegistry(browserElementRuntime());
   if (!nodeTypeRegistryRef.current) nodeTypeRegistryRef.current = new NodeTypePluginRegistry(browserNodeTypeRuntime());
   const elements = elementRegistryRef.current, nodeTypes = nodeTypeRegistryRef.current;
+  const [execution, setExecution] = useState<ExecutionContextSnapshot>({ sessions: [] }), executionRef = useRef<ExecutionSessionManager | null>(null);
+  if (!executionRef.current) executionRef.current = new ExecutionSessionManager(nodeTypes, setExecution);
+  const executionManager = executionRef.current;
   const [elementPackages, setElementPackages] = useState<ElementPluginPackage[]>([]), [nodeTypePackages, setNodeTypePackages] = useState<NodeTypePluginPackage[]>([]);
   const [disabledElements, setDisabledElements] = useState(new Set<string>()), [disabledNodeTypes, setDisabledNodeTypes] = useState(new Set<string>()), [nodeMaps, setNodeMaps] = useState<PortableNodeMap[]>([]);
   const nodeMapCatalogRef = useRef(new PortableNodeMapCatalog()), initialRef = useRef<WorkspaceSession[]>([scratchWorkspace()]);
@@ -43,6 +48,14 @@ export function RelationHost() {
   if (!workspaceStoreRef.current) workspaceStoreRef.current = new WorkspaceSessionStore(initialRef.current, setWorkspaces);
   const workspaceStore = workspaceStoreRef.current, [activeWorkspaceId, setActiveWorkspaceId] = useState(initialRef.current[0].id);
   const [message, setMessage] = useState("核心为空白宿主；Alt/Option + 左键拖拽，或按一下空格，可打开节点创建器。"), [pendingClose, setPendingClose] = useState<string>();
+  const triggerRef = useRef<TriggerRuntime | null>(null);
+  if (!triggerRef.current) triggerRef.current = new TriggerRuntime({
+    registry: nodeTypes,
+    fire: async (workspace, triggerNodeId, payload) => { await executionManager.trigger({ workspaceId: workspace.id, graph: workspace.graph, triggerNodeId, payload }); },
+    close: (workspaceId, triggerNodeId) => executionManager.closeTrigger(workspaceId, triggerNodeId),
+    error: (error) => setMessage(error instanceof Error ? error.message : "自动触发执行失败"),
+  });
+  const triggerRuntime = triggerRef.current;
   const active = workspaces.find((workspace) => workspace.id === activeWorkspaceId), launchRead = useRef(false);
   const nameFor = (workspace: WorkspaceSession) => workspace.source.id === "host.new-tab" ? "新标签" : nodeMaps.find((item) => item.contentSha256 === workspace.source.contentSha256)?.nodeMap.manifest.name ?? workspace.source.id;
   const persistTrust = async (hashes: string[]) => location.protocol === "pip:" ? trustPackageHashes(hashes) : browserTrustHashes(hashes);
@@ -95,6 +108,11 @@ export function RelationHost() {
       if (request.kind === "apply-patch") workspaceStore.commitPatch(workspaceId, request.patch, nodeTypes.validators());
       if (request.kind === "select") workspaceStore.select(workspaceId, request.nodeIds, request.scopeId);
       if (request.kind === "set-workspace-window") workspaceStore.setWindow(workspaceId, request.windowId, request.frame);
+      if (request.kind === "set-execution-view") {
+        const views = normalizeFreeLayout(active.views, active.rootNodeIds), frame = views.projections[request.windowId];
+        if (!frame) throw new Error(`Unknown projection window ${request.windowId}`);
+        workspaceStore.setWindow(workspaceId, request.windowId, { ...frame, execution: structuredClone(request.state) });
+      }
       if (request.kind === "close-workspace-root") workspaceStore.closeProjectionRoot(workspaceId, request.nodeId);
       if (request.kind === "navigate-projection") {
         const views = normalizeFreeLayout(active.views, active.rootNodeIds), windowId = views.activeWindowId, frame = windowId && views.projections[windowId];
@@ -108,6 +126,15 @@ export function RelationHost() {
       }
       if (request.kind === "invoke-creator") await invokeCreator(request.creatorId, request.worldPosition, request.input, request.origin);
       if (request.kind === "command") { const command = nodeTypes.commands().get(request.commandId); if (!command) throw new Error(`Unknown relation command ${request.commandId}`); workspaceStore.commitPatch(workspaceId, await command(request.input, active.graph), nodeTypes.validators()); }
+      if (request.kind === "start-execution") {
+        const sessionId = await executionManager.start({ workspaceId, graph: active.graph, targetNodeId: request.targetNodeId, triggerNodeId: request.triggerNodeId, value: request.input, continuous: request.continuous });
+        const views = normalizeFreeLayout(active.views, active.rootNodeIds), windowId = views.activeWindowId;
+        if (windowId && views.projections[windowId]) workspaceStore.setWindow(workspaceId, windowId, { ...views.projections[windowId], execution: { ...(views.projections[windowId].execution ?? { flowLayerVisible: true, followActiveEvent: false }), sessionId } });
+      }
+      if (request.kind === "push-execution-frame") await executionManager.push(request.sessionId, request.input);
+      if (request.kind === "close-execution-input") executionManager.close(request.sessionId);
+      if (request.kind === "cancel-execution") executionManager.cancel(request.sessionId);
+      if (request.kind === "persist-execution-result") workspaceStore.commitPatch(workspaceId, executionManager.persistencePatch(request.sessionId, active.graph.revision), nodeTypes.validators());
     } catch (error) { setMessage(error instanceof Error ? error.message : "关系操作失败"); }
   }
   async function invokeCreator(creatorId: string, point: WorkspacePoint, input?: import("../relation/index.ts").JsonValue, origin?: import("../relation/index.ts").RelationRef) {
@@ -147,6 +174,16 @@ export function RelationHost() {
       if (event.key.toLowerCase() === "z") { event.preventDefault(); history(event.shiftKey ? "redo" : "undo"); }
     }; addEventListener("keydown", keys); return () => removeEventListener("keydown", keys);
   });
+  useEffect(() => { for (const workspace of workspaces) executionManager.markWorkspaceStale(workspace.id, workspace.graph.revision); }, [executionManager, workspaces]);
+  useEffect(() => { triggerRuntime.sync(workspaces); }, [nodeTypePackages, triggerRuntime, workspaces]);
+  useEffect(() => () => triggerRuntime.dispose(), [triggerRuntime]);
+  useEffect(() => {
+    const hook = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: unknown; payload?: import("../relation/index.ts").JsonValue }>).detail;
+      if (typeof detail?.key === "string") void triggerRuntime.dispatchHook(detail.key, detail.payload ?? {}).catch((error) => setMessage(error instanceof Error ? error.message : "Hook 触发失败"));
+    };
+    addEventListener("intent-relation-hook", hook); return () => removeEventListener("intent-relation-hook", hook);
+  }, [triggerRuntime]);
   const pluginManager = active ? <SystemPluginManager elements={elementPackages} nodeTypes={nodeTypePackages} disabledElements={disabledElements} disabledNodeTypes={disabledNodeTypes} nodeMaps={nodeMaps}
     activeWorkspaceId={active.id} message={message} canUndo={Boolean(active.undo.length)} canRedo={Boolean(active.redo.length)} onUndo={() => history("undo")} onRedo={() => history("redo")} onInstall={install}
     onExport={() => void exportWorkspace(active)} onExportNative={location.protocol === "pip:" ? () => void exportWorkspace(active, true) : undefined}
@@ -156,7 +193,7 @@ export function RelationHost() {
     onUninstallNodeType={(id) => { nodeTypes.uninstall(id); setNodeTypePackages((current) => current.filter((item) => item.manifest.packageId !== id)); }} onOpenNodeMap={openNodeMap} /> : undefined;
   return <main className={styles.shell}><div className={styles.layout}><section className={styles.workspaceArea}>
     <WorkspaceTabs workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} nameFor={nameFor} onActivate={setActiveWorkspaceId} onClose={requestClose} onNew={() => { const workspace = scratchWorkspace(); workspaceStore.add(workspace); setActiveWorkspaceId(workspace.id); }} onReorder={(id, before) => workspaceStore.reorder(id, before)} />
-    {active ? <NodeCanvas workspace={active} elements={elements} nodeTypes={nodeTypes} pluginManager={pluginManager} onSelectionChange={(selection) => workspaceStore.select(active.id, selection)} onRequest={request}
+    {active ? <NodeCanvas workspace={active} elements={elements} nodeTypes={nodeTypes} execution={{ sessions: execution.sessions.filter((item) => item.workspaceId === active.id), activeSessionId: execution.activeSessionId }} pluginManager={pluginManager} onSelectionChange={(selection) => workspaceStore.select(active.id, selection)} onRequest={request}
       onViewsChange={(views) => workspaceStore.updateViews(active.id, views)} onActivateWindow={(id) => workspaceStore.activateWindow(active.id, id)} onInvokeCreator={(id, point, origin) => void invokeCreator(id, point, undefined, origin)}
       onOpenPluginManager={(point) => workspaceStore.openPluginManager(active.id, point)} onClosePluginManager={() => workspaceStore.closeSystemWindow(active.id, "host.plugin-manager")} /> : <section className={styles.canvasWrap}><div className={styles.empty}>点击 + 新建工作区标签</div></section>}
   </section></div>{pendingClose && <CloseWorkspaceDialog name={nameFor(workspaces.find((item) => item.id === pendingClose)!)} onCancel={() => setPendingClose(undefined)} onDiscard={() => closeNow(pendingClose)} onExport={() => void exportWorkspace(workspaces.find((item) => item.id === pendingClose)).then((ok) => { if (ok) closeNow(pendingClose); })} />}</main>;

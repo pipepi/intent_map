@@ -5,10 +5,13 @@ import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/rel
 import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/relation-host/packages/node-type-package.ts";
 import { exactPackageRef } from "../../pip-editor/relation-host/packages/pip-package.ts";
 import { baseElementManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
-import { PROJECTION_INSTANCE_TYPE, RELATION_ELEMENT_PLUGIN_ID, RELATION_NODE_PLUGIN_ID, relationProjectionOntology } from "./domain.ts";
+import { EXECUTION_TYPES, FLOW_TYPES, PROJECTION_INSTANCE_TYPE, RELATION_ELEMENT_PLUGIN_ID, RELATION_NODE_PLUGIN_ID, TRIGGER_TYPES, relationFlowOntology } from "./domain.ts";
 
-const elementFiles = ["elements/styles.js", "elements/properties-element.js", "elements/contains-element.js", "elements/entry.js"];
-const runtimeFiles = ["runtime/selectors.js", "runtime/project.js", "runtime/validation.js", "runtime/commands.js", "runtime/entry.js"];
+const elementFiles = ["elements/styles.js", "elements/flow-styles.js", "elements/flow-geometry.js", "elements/flow-runtime-state.js", "elements/properties-element.js", "elements/contains-element.js", "elements/entry.js"];
+const runtimeFiles = [
+  "runtime/selectors.js", "runtime/project.js", "runtime/validation.js", "runtime/commands.js", "runtime/entry.js",
+  "flow/selectors.js", "flow/compiler.js", "flow/validation.js", "flow/triggers.js", "flow/runtime.js", "flow/project.js", "flow/commands.js",
+];
 
 async function sources(paths: string[]) {
   return Object.fromEntries(await Promise.all(paths.map(async (path) => [`source/${path}`, await readFile(new URL(path, import.meta.url), "utf8")])));
@@ -31,7 +34,7 @@ export async function buildRelationProjectionPlugins() {
     ],
   };
   const elementPip = await encodeElementPackage(elementManifest, elementSource, elementSources), element = await decodeElementPackage(elementPip);
-  const nodeManifest = baseNodeTypeManifest(RELATION_NODE_PLUGIN_ID, "Relation Projection Types", [PROJECTION_INSTANCE_TYPE], [await exactPackageRef(elementPip, element.manifest)], Object.keys(runtimeSources));
-  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, relationProjectionOntology, nodeTypeSource, runtimeSources), nodeType = await decodeNodeTypePackage(nodeTypePip);
+  const nodeManifest = baseNodeTypeManifest(RELATION_NODE_PLUGIN_ID, "Relation Projection and Flow Types", [PROJECTION_INSTANCE_TYPE, ...FLOW_TYPES, ...TRIGGER_TYPES, ...EXECUTION_TYPES], [await exactPackageRef(elementPip, element.manifest)], Object.keys(runtimeSources));
+  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, relationFlowOntology, nodeTypeSource, runtimeSources), nodeType = await decodeNodeTypePackage(nodeTypePip);
   return { element, elementPip, nodeType, nodeTypePip };
 }

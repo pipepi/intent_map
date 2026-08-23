@@ -11,8 +11,12 @@ test("Intent and Scene produce strict A3, A4 and A5 PIPs", async () => {
     assert.equal(assertPipManifest(suite.nodeType.manifest).layer, "a4");
     assert.equal(assertPipManifest(suite.nodeMap.manifest).layer, "a5");
     const portable = await decodeNodeMapPackage(suite.nodeMapPip);
-    assert.equal(portable.nodeTypes[0].manifest.dependencies[0].sha256, portable.elementPlugins[0].contentSha256);
-    assert.equal(portable.nodeMap.manifest.dependencies[0].sha256, portable.nodeTypes[0].contentSha256);
+    for (const nodeType of portable.nodeTypes) for (const dependency of nodeType.manifest.dependencies) {
+      assert.equal(dependency.sha256, portable.elementPlugins.find((item) => item.manifest.packageId === dependency.packageId)?.contentSha256);
+    }
+    for (const dependency of portable.nodeMap.manifest.dependencies) {
+      assert.equal(dependency.sha256, portable.nodeTypes.find((item) => item.manifest.packageId === dependency.packageId)?.contentSha256);
+    }
   }
 });
 

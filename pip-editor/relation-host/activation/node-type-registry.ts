@@ -5,9 +5,14 @@ import type {
   NodeTypePluginPackage,
   RelationCommandHandler,
   RelationExecutor,
+  RelationEffectHandler,
+  RelationExecutionPlanner,
   RelationLanguageProvider,
+  RelationNodeRuntime,
+  RelationOperator,
   RelationProjection,
   RelationCreator,
+  RelationTriggerProvider,
   RelationValidator,
   ResolvedNodeType,
   PluginInstallStatus,
@@ -41,6 +46,11 @@ export class NodeTypePluginRegistry {
   readonly #projections = new Map<string, { pluginId: string; value: RelationProjection }>();
   readonly #languages = new Map<string, { pluginId: string; value: RelationLanguageProvider }>();
   readonly #creators = new Map<string, { pluginId: string; value: RelationCreator }>();
+  readonly #planners = new Map<string, { pluginId: string; value: RelationExecutionPlanner }>();
+  readonly #runtimes = new Map<string, { pluginId: string; value: RelationNodeRuntime }>();
+  readonly #operators = new Map<string, { pluginId: string; value: RelationOperator }>();
+  readonly #triggers = new Map<string, { pluginId: string; value: RelationTriggerProvider }>();
+  readonly #effects = new Map<string, { pluginId: string; value: RelationEffectHandler }>();
   readonly #installing = new Map<string, Promise<PluginInstallStatus>>();
 
   constructor(runtime: NodeTypeRuntimeAdapter) { this.runtime = runtime; }
@@ -52,6 +62,11 @@ export class NodeTypePluginRegistry {
   projections() { return [...this.#projections.values()].map(({ value }) => value); }
   languageProviders() { return [...this.#languages.values()].map(({ value }) => value); }
   creators() { return [...this.#creators.values()].map(({ value }) => value); }
+  executionPlanners() { return [...this.#planners.values()].map(({ value }) => value); }
+  nodeRuntimes() { return [...this.#runtimes.values()].map(({ value }) => value); }
+  relationOperators() { return new Map([...this.#operators].map(([id, item]) => [id, item.value])); }
+  triggerProviders() { return [...this.#triggers.values()].map(({ value }) => value); }
+  effectHandlers() { return new Map([...this.#effects].map(([id, item]) => [id, item.value])); }
   resolveType(type: ResolvedNodeType["type"]) { return this.#types.get(typeKey(type))?.value; }
 
   install(plugin: NodeTypePluginPackage): Promise<PluginInstallStatus> {
@@ -98,6 +113,11 @@ export class NodeTypePluginRegistry {
       },
       registerCreator: (creator) => own(this.#creators, creator.id, creator, "Creator"),
       registerLanguageProvider: (provider) => own(this.#languages, provider.id, provider, "Language provider"),
+      registerExecutionPlanner: (planner) => own(this.#planners, planner.id, planner, "Execution planner"),
+      registerNodeRuntime: (runtime) => own(this.#runtimes, runtime.id, runtime, "Node runtime"),
+      registerRelationOperator: (operator) => own(this.#operators, operator.id, operator, "Relation operator"),
+      registerTriggerProvider: (provider) => own(this.#triggers, provider.id, provider, "Trigger provider"),
+      registerEffectHandler: (handler) => own(this.#effects, handler.type, handler, "Effect handler"),
     };
     try {
       const loaded = await this.runtime.load(plugin.entrySource);

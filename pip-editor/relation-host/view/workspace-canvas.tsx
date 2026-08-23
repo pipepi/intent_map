@@ -1,6 +1,6 @@
 /** Renders relation nodes or a camera-controlled free-layout world of workspace projections. */
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import type { RelationElementRequest, WorkspacePoint } from "../contracts/package-types.ts";
+import type { ExecutionContextSnapshot, RelationElementRequest, WorkspacePoint } from "../contracts/package-types.ts";
 import type { RelationRef } from "../../relation/index.ts";
 import type { RelationNode } from "../../relation/index.ts";
 import type { ElementPluginRegistry } from "../activation/element-registry.ts";
@@ -22,8 +22,9 @@ type SemanticGesture = { routeKey: string; scale: number; switched: boolean };
 const pointIn = (element: HTMLElement, clientX: number, clientY: number) => { const rect = element.getBoundingClientRect(); return { x: clientX - rect.left, y: clientY - rect.top }; };
 const isFree = (views: unknown) => Boolean(views && typeof views === "object" && ["free-layout", "parallel-projections"].includes(String((views as { kind?: unknown }).kind)));
 
-export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSelectionChange, onRequest, onViewsChange, onActivateWindow, onInvokeCreator, onOpenPluginManager, onClosePluginManager }: {
+export function NodeCanvas({ workspace, elements, nodeTypes, execution, pluginManager, onSelectionChange, onRequest, onViewsChange, onActivateWindow, onInvokeCreator, onOpenPluginManager, onClosePluginManager }: {
   workspace: WorkspaceSession; elements: ElementPluginRegistry; nodeTypes: NodeTypePluginRegistry; pluginManager?: ReactNode;
+  execution?: ExecutionContextSnapshot;
   onSelectionChange: (selection: string[]) => void; onRequest: (request: RelationElementRequest) => void;
   onViewsChange: (views: FreeLayoutWorkspaceViews) => void; onActivateWindow: (windowId: string) => void; onInvokeCreator: (creatorId: string, point: WorkspacePoint, origin?: RelationRef) => void;
   onOpenPluginManager: (point: WorkspacePoint) => void; onClosePluginManager: () => void;
@@ -184,17 +185,18 @@ export function NodeCanvas({ workspace, elements, nodeTypes, pluginManager, onSe
       <div className={styles.freeWorld} style={{ width: views.world.width, height: views.world.height, transform: `translate(${views.camera.x}px,${views.camera.y}px) scale(${views.camera.scale})` }}>
         {roots.map((node) => {
           const frame = views.projections[node.id], navigation = navigationForRoot(node.id, workspace.graph, nodeTypes, frame.navigation);
+          const executionView = frame.execution ?? { flowLayerVisible: true, followActiveEvent: false };
           const setNavigation = (next: NonNullable<typeof navigation>) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame: { ...frame, navigation: next } });
           const resetProjection = () => navigation && onViewsChange({
             ...normalized,
             projections: { ...normalized.projections, [node.id]: { ...frame, contentOffset: { x: 0, y: 0 }, navigation: { ...navigation, semanticScale: 1 } } },
           });
           return <WorkspaceWindow key={node.id} id={node.id} frame={frame} views={views} active={views.activeWindowId === node.id} front={views.frontWindowId === node.id} onActivate={() => onActivateWindow(node.id)} onFrame={(next) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame: next })}>
-            {navigation ? <div className={styles.projectionShell}><ProjectionNavbar navigation={navigation} resizeMode={frame.resizeMode} graph={workspace.graph} nodeTypes={nodeTypes} onChange={setNavigation}
+            {navigation ? <div className={styles.projectionShell}><ProjectionNavbar navigation={navigation} resizeMode={frame.resizeMode} execution={execution} executionView={executionView} graph={workspace.graph} nodeTypes={nodeTypes} onChange={setNavigation}
               onReset={resetProjection}
               onClose={() => onRequest({ kind: "close-workspace-root", nodeId: node.id })} />
-              <SemanticProjection workspace={workspace} rootWindowId={node.id} navigation={navigation} contentOffset={frame.contentOffset ?? { x: 0, y: 0 }} elements={elements} nodeTypes={nodeTypes} selection={scopedSelections[node.id] ?? workspace.selection} onRequest={onRequest} /></div>
-              : <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={views} graph={workspace.graph} node={node} selection={scopedSelections[node.id] ?? workspace.selection} purpose="workspace" elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />}
+              <SemanticProjection workspace={workspace} rootWindowId={node.id} navigation={navigation} contentOffset={frame.contentOffset ?? { x: 0, y: 0 }} execution={execution} elements={elements} nodeTypes={nodeTypes} selection={scopedSelections[node.id] ?? workspace.selection} onRequest={onRequest} /></div>
+              : <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={views} graph={workspace.graph} node={node} selection={scopedSelections[node.id] ?? workspace.selection} purpose="workspace" execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />}
           </WorkspaceWindow>;
         })}
         {Object.values(views.systemWindows).map((item) => <WorkspaceWindow key={item.id} id={item.id} frame={item.frame} views={views} system active={views.activeWindowId === item.id} front={views.frontWindowId === item.id} onActivate={() => onActivateWindow(item.id)} onFrame={(frame) => onRequest({ kind: "set-workspace-window", windowId: item.id, frame })} onClose={onClosePluginManager}>{pluginManager}</WorkspaceWindow>)}

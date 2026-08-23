@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const excluded = new Set([".git", ".next", "node_modules", "dist", "build", "target"]);
+const excluded = new Set([".git", ".next", "node_modules", "dist", "out", "build", "target"]);
 
 async function sourceFiles(directory = root) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -15,12 +15,12 @@ async function sourceFiles(directory = root) {
     if (excluded.has(entry.name) || entry.name.startsWith(".pip-")) continue;
     const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
     if (entry.isDirectory()) files.push(...await sourceFiles(url));
-    else if (/\.(?:ts|tsx)$/.test(entry.name) && !entry.name.endsWith(".d.ts")) files.push(url);
+    else if (/\.(?:ts|tsx|js|mjs|css)$/.test(entry.name) && !entry.name.endsWith(".d.ts")) files.push(url);
   }
   return files;
 }
 
-test("handwritten TypeScript files stay at or below 300 lines", async () => {
+test("handwritten source and test files stay at or below 300 lines", async () => {
   const oversized = [];
   for (const file of await sourceFiles()) {
     const source = await readFile(file, "utf8");

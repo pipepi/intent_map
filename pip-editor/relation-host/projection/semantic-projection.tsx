@@ -2,7 +2,7 @@ import type { ElementPluginRegistry } from "../activation/element-registry.ts";
 import type { CSSProperties } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts";
-import type { ProjectionNavigationState, RelationElementRequest, WorkspacePoint } from "../contracts/package-types.ts";
+import type { ExecutionContextSnapshot, ProjectionNavigationState, RelationElementRequest, WorkspacePoint } from "../contracts/package-types.ts";
 import type { WorkspaceSession } from "../workspace/workspace-store.ts";
 import { currentRoute } from "./projection-navigation.ts";
 import { forwardRoute } from "./projection-routes.ts";
@@ -13,9 +13,10 @@ import styles from "../view/relation-host.module.css";
 type FlipFrame = { key: string; x: number; y: number; scaleX: number; scaleY: number; viewportWidth: number; viewportHeight: number };
 const mix = (from: number, to: number, progress: number) => from + (to - from) * progress;
 
-export function SemanticProjection({ workspace, rootWindowId, navigation, contentOffset, elements, nodeTypes, selection, onRequest }: {
+export function SemanticProjection({ workspace, rootWindowId, navigation, contentOffset, execution, elements, nodeTypes, selection, onRequest }: {
   workspace: WorkspaceSession; rootWindowId: string; navigation: ProjectionNavigationState; elements: ElementPluginRegistry;
   contentOffset: WorkspacePoint; nodeTypes: NodeTypePluginRegistry; selection: string[]; onRequest: (request: RelationElementRequest) => void;
+  execution?: ExecutionContextSnapshot;
 }) {
   const viewport = useRef<HTMLDivElement>(null), [flip, setFlip] = useState<FlipFrame>();
   const route = currentRoute(navigation), current = workspace.graph.nodes[route.projectionNodeId];
@@ -58,7 +59,7 @@ export function SemanticProjection({ workspace, rootWindowId, navigation, conten
       "--projection-zoom": target ? "1" : String(navigation.semanticScale),
     } as CSSProperties}>
       <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={workspace.views} graph={workspace.graph} node={node} selection={selection}
-        purpose="workspace" projectionContext={{ kind: entry.context }} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
+        purpose="workspace" projectionContext={{ kind: entry.context }} execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
     </div>;
   };
   return <div ref={viewport} className={styles.semanticViewport} data-root-window={rootWindowId}>

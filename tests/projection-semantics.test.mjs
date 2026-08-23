@@ -4,9 +4,14 @@ import test from "node:test";
 import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
 import { assertProjectionRegistration } from "../pip-editor/relation-host/projection/projection-context.ts";
 import { resolveNodePresentation } from "../pip-editor/relation-host/projection/resolve-presentation.ts";
+import { initialNavigation, navigateProjection, replaceCurrentProjection } from "../pip-editor/relation-host/projection/projection-navigation.ts";
 import { forwardRoute, navigationForRoot } from "../pip-editor/relation-host/projection/projection-routes.ts";
 import { applySemanticScale, semanticProgress } from "../pip-editor/relation-host/projection/semantic-zoom.ts";
 import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
+import { buildIntentPluginSuite } from "../pip-editor-io/intent/suite.ts";
+import { screenToElementLocal, screenToFlowWorld } from "../pip-editor-io/relation-projections/elements/flow-geometry.js";
+import { moveChild } from "../pip-editor-io/relation-projections/runtime/commands.js";
+import { canCancelFlowSession, liveFlowNodeIds } from "../pip-editor-io/relation-projections/elements/flow-runtime-state.js";
 
 const dataModule = async (source) => import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 const relation = (node, predicate) => node.relations.find((item) => item.predicate.nodeId === predicate);
@@ -63,6 +68,16 @@ test("semantic routes recurse self → children → child self without creating 
   assert.equal(semanticProgress(1.5), 0); assert.equal(semanticProgress(1.7), 1); assert.equal(semanticProgress(.6), 1);
 });
 
+test("switching sibling observations does not create a semantic zoom level", () => {
+  const self = { projectionNodeId: "self", observedNodeId: "node", context: "self-workspace" };
+  const children = { projectionNodeId: "children", observedNodeId: "node", context: "children-workspace" };
+  const flow = { projectionNodeId: "flow", observedNodeId: "node", context: "children-workspace" };
+  const entered = navigateProjection(initialNavigation(self), children);
+  const switched = replaceCurrentProjection(entered, flow);
+  assert.deepEqual(switched.entries, [self, flow]);
+  assert.equal(switched.index, 1); assert.equal(switched.semanticScale, 1);
+});
+
 test("linking an ancestor as a child is rejected before a patch is returned", async () => {
   const { graph, registry } = await fixture(), command = registry.commands().get("relation.attach-child-projection");
   assert.throws(() => command({ parentProjectionId: "scene.view.children:scene.xiaoming", childProjectionId: "scene.view.properties:scene.today", frame: { x: 0, y: 0, width: 320, height: 220, resizeMode: "simple" } }, graph), /cycle/);
@@ -79,11 +94,43 @@ test("projection panning and ordinary zoom move A3 spatial surfaces instead of t
   assert.match(semantic, /--projection-pan-x/);
   assert.match(semantic, /--projection-zoom/);
   assert.match(containsElement, /data-projection-surface/);
+  assert.match(containsElement, /visible = data\.flowOnly === true/);
+  assert.match(containsElement, /if \(data\.flowOnly\).*bindFlow/);
   assert.match(await readFile("pip-editor-io/scene/elements/render.js", "utf8"), /canvasViewport" data-projection-surface/);
   assert.match(containsStyles, /\.world\{[^}]*--projection-pan-x[^}]*--projection-zoom/);
   assert.doesNotMatch(containsStyles, /::slotted\(article\).*--projection-pan-x/);
   assert.match(containsElement, /\(x - panX\) \/ zoom - 160/);
   assert.match(sceneStyles, /\.canvas\{transform:translate\(var\(--projection-pan-x[^}]*scale\(var\(--projection-zoom/);
+  assert.match(containsStyles, /\.surface\{[^}]*background-image/);
+  assert.doesNotMatch(containsStyles, /\.world\{[^}]*background-image/);
+  assert.match(containsStyles, /:host\{[^}]*overflow:clip/);
+  assert.match(containsElement, /this\.scrollTop = 0/);
+});
+
+test("fixed Flow boundary ports are converted into the panned and zoomed world coordinate system", () => {
+  assert.deepEqual(screenToFlowWorld({ x: 44, y: 92 }, { panX: -156, panY: -108, zoom: 2 }), { x: 100, y: 100 });
+  assert.deepEqual(screenToFlowWorld({ x: 44, y: 92 }, { panX: 0, panY: 0, zoom: 1 }), { x: 44, y: 92 });
+  assert.deepEqual(screenToElementLocal(
+    { x: 36, y: 228 },
+    { left: -146, top: 87.5, width: 1022, height: 821.25 },
+    { width: 1120, height: 900 },
+  ), { x: 199.45205479452056, y: 153.97260273972603 });
+});
+
+test("dragging a child updates the shared contains and Flow projection frame in one patch", async () => {
+  const { nodeMap: { graph } } = await buildIntentPluginSuite(), frame = { x: -120, y: 360, width: 320, height: 220, resizeMode: "simple" };
+  const patch = moveChild({ parentProjectionId: "intent.view.children:intent.application-root", childProjectionId: "intent.view.properties:intent.document-loader", frame }, graph);
+  assert.equal(patch.operations.length, 2);
+  assert.deepEqual(new Set(patch.operations.map((operation) => operation.nodeId)), new Set(["intent.view.children:intent.application-root", "intent.view.flow:intent.application-root"]));
+  for (const operation of patch.operations) assert.deepEqual(operation.relation.relations.find((item) => item.predicate.nodeId === "relation.projection.predicate.frame").object.value, frame);
+});
+
+test("Flow animation follows only the latest event of an active session", () => {
+  const trace = [{ nodeId: "loader", kind: "running" }, { nodeId: "loader", kind: "success" }, { nodeId: "action", kind: "running" }];
+  assert.deepEqual([...liveFlowNodeIds({ status: "running", trace })], ["action"]);
+  assert.deepEqual([...liveFlowNodeIds({ status: "cancelled", trace })], []);
+  assert.equal(canCancelFlowSession({ status: "completed" }), false);
+  assert.equal(canCancelFlowSession({ status: "draining" }), true);
 });
 
 test("ending a partial semantic pinch preserves its chosen scale", async () => {

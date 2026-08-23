@@ -8,6 +8,11 @@ export const navigateProjection = (state: ProjectionNavigationState, entry: Proj
   entries: [...state.entries.slice(0, state.index + 1), entry], index: state.index + 1, semanticScale: 1,
 });
 
+/** Switching an observation at the same depth must not create a false semantic parent. */
+export const replaceCurrentProjection = (state: ProjectionNavigationState, entry: ProjectionRouteEntry): ProjectionNavigationState => ({
+  entries: [...state.entries.slice(0, state.index), entry], index: state.index, semanticScale: 1,
+});
+
 export const moveProjectionHistory = (state: ProjectionNavigationState, delta: -1 | 1): ProjectionNavigationState => ({
   entries: state.entries, index: Math.max(0, Math.min(state.entries.length - 1, state.index + delta)), semanticScale: 1,
 });
