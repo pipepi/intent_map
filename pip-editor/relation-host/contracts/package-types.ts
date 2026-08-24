@@ -51,7 +51,7 @@ export type RelationElementRequest =
   | { kind: "persist-execution-result"; sessionId: string };
 
 export type NodeTypePluginManifest = Extract<PipManifest, { layer: "a4" }>;
-export type NodeTypePluginPackage = { manifest: NodeTypePluginManifest; ontology: RelationGraph; entrySource: string; files: Record<string, Uint8Array>; pipBytes: Uint8Array; contentSha256: string };
+export type NodeTypePluginPackage = { manifest: NodeTypePluginManifest; ontology: RelationGraph; entrySource: string; files: Record<string, Uint8Array>; pipBytes: Uint8Array; contentSha256: string; embeddedElements: ElementPluginPackage[] };
 
 export type Disposable = { dispose(): void } | (() => void);
 export type RelationValidator = (graph: RelationGraph) => void;

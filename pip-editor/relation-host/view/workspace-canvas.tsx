@@ -139,14 +139,21 @@ export function NodeCanvas({ workspace, elements, nodeTypes, execution, pluginMa
   const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!free || event.button !== 0 && event.button !== 1) return;
     const path = event.nativeEvent.composedPath() as HTMLElement[], port = path.find((item) => item?.dataset?.relationOriginNode);
-    if (path.some((item) => ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"].includes(item?.tagName))) return;
-    if (!port && path.some((item) => item?.dataset?.nodeId)) return;
     const element = viewport.current!, start = pointIn(element, event.clientX, event.clientY);
-    element.focus({ preventScroll: true });
     if (event.pointerType === "touch") {
       touches.current.set(event.pointerId, start);
-      if (touches.current.size === 2) { const [a, b] = [...touches.current.values()], center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; pinch.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), world: screenToWorld(center, views), camera: views.camera }; gesture.current = undefined; }
+      if (touches.current.size === 2) {
+        const [a, b] = [...touches.current.values()], center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        // Touches inside a projection still belong to the canvas once a second finger arrives.
+        pinch.current = { distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), world: screenToWorld(center, views), camera: views.camera };
+        gesture.current = undefined; event.preventDefault(); element.setPointerCapture(event.pointerId); return;
+      }
+      // Preserve one-finger controls and scrolling inside the projected application.
+      if (path.some((item) => ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"].includes(item?.tagName) || item?.dataset?.nodeId)) return;
     }
+    if (path.some((item) => ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"].includes(item?.tagName))) return;
+    if (!port && path.some((item) => item?.dataset?.nodeId)) return;
+    element.focus({ preventScroll: true });
     const origin = port ? { nodeId: port.dataset.relationOriginNode!, relationId: port.dataset.relationOriginRelation ?? "identity" } : undefined;
     const kind = origin || event.altKey && event.button === 0 ? "wire" : "pan";
     event.preventDefault(); element.setPointerCapture(event.pointerId); if (!pinch.current) gesture.current = { kind, pointerId: event.pointerId, start, camera: views.camera, moved: false, origin };
@@ -170,6 +177,11 @@ export function NodeCanvas({ workspace, elements, nodeTypes, execution, pluginMa
     if (current.kind === "pan") { onViewsChange({ ...views, activeWindowId: undefined }); setPreviewCamera(undefined); }
     else { setWire(undefined); if (current.moved) setCreator({ screen, world: screenToWorld(screen, views), origin: current.origin }); }
   };
+  const cancel = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch") touches.current.delete(event.pointerId);
+    if (pinch.current && touches.current.size < 2) { pinch.current = undefined; if (previewCamera) persistCamera(previewCamera); }
+    gesture.current = undefined; setWire(undefined);
+  };
   const fit = () => {
     const frames = [...Object.values(views.projections), ...Object.values(views.systemWindows).map((item) => item.frame)]; if (!frames.length || !viewport.current) return;
     const minX = Math.min(...frames.map((item) => item.x)), minY = Math.min(...frames.map((item) => item.y));
@@ -181,7 +193,7 @@ export function NodeCanvas({ workspace, elements, nodeTypes, execution, pluginMa
   return <section className={styles.canvasWrap} data-testid="relation-workspace">
     <div className={styles.canvasInfo}>RelationGraph · revision {workspace.graph.revision} · {nodes.length} 个节点 · {status}</div>
     <div ref={viewport} tabIndex={-1} className={`${styles.canvas} ${styles.freeViewport}`} onScroll={(event) => { event.currentTarget.scrollLeft = 0; event.currentTarget.scrollTop = 0; }}
-      onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = undefined; setWire(undefined); }}>
+      onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel}>
       <div className={styles.freeWorld} style={{ width: views.world.width, height: views.world.height, transform: `translate(${views.camera.x}px,${views.camera.y}px) scale(${views.camera.scale})` }}>
         {roots.map((node) => {
           const frame = views.projections[node.id], navigation = navigationForRoot(node.id, workspace.graph, nodeTypes, frame.navigation);

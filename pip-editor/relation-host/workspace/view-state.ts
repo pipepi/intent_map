@@ -55,7 +55,7 @@ export function assertWorkspaceFrame(value: unknown, world = DEFAULT_WORLD): ass
   if (!item || !finite(item.x) || !finite(item.y) || !finite(item.width) || !finite(item.height) || !["simple", "full"].includes(String(item.resizeMode))) {
     throw new Error("Workspace window frame is invalid");
   }
-  if (item.width < 560 || item.height < 420 || item.width > 1800 || item.height > 1200) throw new Error("Workspace window size is outside supported bounds");
+  if (item.width < 360 || item.height < 420 || item.width > 1800 || item.height > 1200) throw new Error("Workspace window size is outside supported bounds");
   if (item.contentScale !== undefined && (!finite(item.contentScale) || item.contentScale < .5 || item.contentScale > 2)) throw new Error("Workspace content scale is outside supported bounds");
   const offset = item.contentOffset === undefined ? undefined : record(item.contentOffset);
   if (item.contentOffset !== undefined && (!offset || !finite(offset.x) || !finite(offset.y))) throw new Error("Workspace content offset is invalid");

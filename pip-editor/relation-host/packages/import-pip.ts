@@ -42,9 +42,16 @@ export async function importPip(bytes: Uint8Array, context: PipImportContext): P
     return { layer: "a3", package: plugin };
   }
   if (decoded.manifest.layer === "a4") {
-    const plugin = await decodeNodeTypePackage(bytes, ioOptions), hashes = [await pipSha256(bytes)];
+    const plugin = await decodeNodeTypePackage(bytes, ioOptions), hashes = [plugin.contentSha256, ...plugin.embeddedElements.map((item) => item.contentSha256)];
     if (!await context.confirmTrust(plugin.manifest, hashes)) throw new Error("用户取消信任 A4 PIP");
-    await context.installNodeType(plugin); await context.trustHashes(hashes);
+    const installedElements: string[] = [];
+    try {
+      for (const element of plugin.embeddedElements) if (await context.installElement(element) === "installed") installedElements.push(element.manifest.packageId);
+      await context.installNodeType(plugin);
+    } catch (error) {
+      installedElements.reverse().forEach((id) => context.uninstallElement?.(id)); throw error;
+    }
+    await context.trustHashes(hashes);
     return { layer: "a4", package: plugin };
   }
   const nodeMap = await decodeNodeMapPackage(bytes, { ...ioOptions, resolvePackage: context.resolvePackage }), hashes = [...new Set(closureHashes(nodeMap))];
