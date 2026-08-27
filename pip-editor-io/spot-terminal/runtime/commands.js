@@ -1,6 +1,6 @@
 import * as api from "./http.js";
 import { loadTerminal } from "./load.js";
-import { mergeLive, ordersState } from "./normalize.js";
+import { fuseSnapshot, fuseState } from "./fusion.js";
 import { clearSession, sessionFor, setSession } from "./session.js";
 import { connect, disconnect, liveFor } from "./stomp.js";
 import { configOf, patchState, stateOf, terminalNode } from "./state.js";
@@ -12,6 +12,7 @@ const failure = (graph, node, error) => patchState(graph, node.id, { ...stateOf(
 const requireSession = (node) => {
   const session = sessionFor(node.id); if (!session) throw new Error("登录状态已失效，请重新登录"); return session;
 };
+const pairFor = (state, symbol) => state.symbols?.find((pair) => pair.symbol === symbol) ?? {};
 
 export async function login(input, graph) {
   const node = terminalNode(input, graph), state = stateOf(node), { apiBase } = configOf(node);
@@ -19,7 +20,7 @@ export async function login(input, graph) {
     const username = String(input.username ?? "").trim(); if (!username) throw new Error("请输入用户名");
     const auth = await api.login(apiBase, username), token = auth?.accessToken; if (!token) throw new Error("登录响应缺少 accessToken");
     const loaded = await loadTerminal(apiBase, token);
-    setSession(node.id, { token, apiBase }); connect(node.id, apiBase, loaded.selectedSymbol, loaded.member?.memberId);
+    setSession(node.id, { token, apiBase }); connect(node.id, apiBase, loaded.selectedSymbol, loaded.member?.memberId, loaded.selectedMarketSource, loaded.selectedPeriod);
     return patchState(graph, node.id, { ...state, ...loaded, authenticated: true, loading: false, connection: "connecting", error: "", notice: "登录成功" });
   } catch (error) { return failure(graph, node, error); }
 }
@@ -28,23 +29,34 @@ export async function selectSymbol(input, graph) {
   const node = terminalNode(input, graph), state = stateOf(node);
   try {
     const session = requireSession(node), symbol = String(input.symbol ?? "");
-    const loaded = await loadTerminal(session.apiBase, session.token, symbol);
-    connect(node.id, session.apiBase, symbol, loaded.member?.memberId);
+    const loaded = await loadTerminal(session.apiBase, session.token, symbol, state.selectedPeriod);
+    connect(node.id, session.apiBase, symbol, loaded.member?.memberId, loaded.selectedMarketSource, loaded.selectedPeriod);
     session.botNextAt = undefined;
     return patchState(graph, node.id, { ...state, ...loaded, botEnabled: false, error: "", notice: "" });
+  } catch (error) { return failure(graph, node, error); }
+}
+
+export async function selectPeriod(input, graph) {
+  const node = terminalNode(input, graph), state = stateOf(node);
+  try {
+    const session = requireSession(node), period = String(input.period ?? "1min");
+    const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol, period);
+    connect(node.id, session.apiBase, loaded.selectedSymbol, loaded.member?.memberId, loaded.selectedMarketSource, loaded.selectedPeriod);
+    return patchState(graph, node.id, { ...state, ...loaded, error: "", notice: "" });
   } catch (error) { return failure(graph, node, error); }
 }
 
 export async function submitOrder(input, graph) {
   const node = terminalNode(input, graph), state = stateOf(node);
   try {
-    const session = requireSession(node), order = validateOrder(input);
+    const session = requireSession(node), order = validateOrder(input, pairFor(state, input.symbol));
     const requestKey = session.pendingRequest?.signature === JSON.stringify(order) ? session.pendingRequest.id : id();
     session.pendingRequest = { signature: JSON.stringify(order), id: requestKey };
     const orderId = await api.submit(session.apiBase, session.token, { ...order, uniqueRequestId: requestKey });
     session.pendingRequest = undefined;
-    const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol);
-    return patchState(graph, node.id, { ...state, ...loaded, requestState: "idle", error: "", notice: `下单成功 · ${orderId}` });
+    const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol, state.selectedPeriod);
+    const fused = fuseSnapshot(state, loaded, liveFor(node.id));
+    return patchState(graph, node.id, { ...fused, requestState: "idle", error: "", notice: `下单成功 · ${orderId}` });
   } catch (error) { return failure(graph, node, error); }
 }
 
@@ -52,29 +64,33 @@ export async function cancelOrder(input, graph) {
   const node = terminalNode(input, graph), state = stateOf(node);
   try {
     const session = requireSession(node); await api.cancel(session.apiBase, session.token, String(input.orderId ?? ""));
-    const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol);
-    return patchState(graph, node.id, { ...state, ...loaded, error: "", notice: "撤单请求已提交" });
+    const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol, state.selectedPeriod);
+    const fused = fuseSnapshot(state, loaded, liveFor(node.id));
+    return patchState(graph, node.id, { ...fused, error: "", notice: "撤单请求已提交" });
   } catch (error) { return failure(graph, node, error); }
 }
 
 export async function sync(input, graph) {
   const node = terminalNode(input, graph), state = stateOf(node), session = sessionFor(node.id);
   if (!session) return patchState(graph, node.id, { ...state, authenticated: false, connection: "offline" });
-  const live = liveFor(node.id), next = mergeLive(state, live);
+  const live = liveFor(node.id), next = fuseState(state, live);
   if (live.ordersDirty) {
-    try { next.orders = ordersState(await api.orders(session.apiBase, session.token, state.selectedSymbol)); live.ordersDirty = false; } catch { /* A transient refresh failure must not tear down the live terminal. */ }
+    try {
+      const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol, state.selectedPeriod);
+      Object.assign(next, fuseSnapshot(next, loaded, live)); live.ordersDirty = false;
+    } catch { /* A transient refresh failure must not tear down the live terminal. */ }
   }
   if (state.botEnabled && !session.botBusy && Date.now() >= (session.botNextAt ?? 0)) {
     session.botBusy = true;
     try {
-      const order = validateOrder(randomBotOrder(next));
+      const candidate = randomBotOrder(next), order = validateOrder(candidate, pairFor(next, candidate.symbol));
       const orderId = await api.submit(session.apiBase, session.token, { ...order, uniqueRequestId: id() });
-      const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol);
-      Object.assign(next, loaded, { botEnabled: true, error: "", notice: `机器人下单 · ${order.direction} ${order.type} · ${orderId}` });
+      const loaded = await loadTerminal(session.apiBase, session.token, state.selectedSymbol, state.selectedPeriod);
+      Object.assign(next, fuseSnapshot(next, loaded, live), { botEnabled: true, error: "", notice: `机器人下单 · ${order.direction} ${order.type} · ${orderId}` });
     } catch (error) {
       next.error = error instanceof Error ? error.message : String(error);
     } finally {
-      session.botBusy = false; session.botNextAt = Date.now() + nextBotDelay();
+      session.botBusy = false; session.botNextAt = Date.now() + nextBotDelay(state.botFast);
     }
   }
   return patchState(graph, node.id, { ...next, connection: live.connection ?? state.connection });
@@ -85,6 +101,13 @@ export function toggleBot(input, graph) {
   const enabled = !state.botEnabled;
   session.botNextAt = enabled ? Date.now() : undefined;
   return patchState(graph, node.id, { ...state, botEnabled: enabled, error: "", notice: enabled ? "随机下单机器人已开启" : "随机下单机器人已关闭" });
+}
+
+export function toggleBotFast(input, graph) {
+  const node = terminalNode(input, graph), state = stateOf(node), session = requireSession(node);
+  const botFast = !state.botFast;
+  if (state.botEnabled) session.botNextAt = Date.now();
+  return patchState(graph, node.id, { ...state, botFast, error: "", notice: botFast ? "机器人极速模式已开启" : "机器人极速模式已关闭" });
 }
 
 export function setBotSide(input, graph) {

@@ -4,7 +4,11 @@ export function chart(klines = []) {
   const rows = klines.slice(-80), width = 800, height = 360, pad = 24;
   if (!rows.length) return '<div class="empty">等待 K 线数据</div>';
   const values = rows.flatMap((row) => [Number(row.highestPrice ?? row.high), Number(row.lowestPrice ?? row.low)]).filter(Number.isFinite);
-  const low = Math.min(...values), high = Math.max(...values), span = high - low || 1, step = (width - pad * 2) / rows.length;
+  if (!values.length) return '<div class="empty">K 线价格数据无效</div>';
+  const rawLow = Math.min(...values), rawHigh = Math.max(...values), rawSpan = rawHigh - rawLow;
+  // Flat/empty-volume candles still need vertical breathing room instead of sitting on the top edge.
+  const pricePad = rawSpan > 0 ? rawSpan * .05 : Math.max(Math.abs(rawHigh) * .001, 1);
+  const low = rawLow - pricePad, high = rawHigh + pricePad, span = high - low, step = (width - pad * 2) / rows.length;
   const y = (value) => pad + (high - Number(value)) / span * (height - pad * 2);
   const candles = rows.map((row, index) => {
     const open = Number(row.openPrice ?? row.open), close = Number(row.closePrice ?? row.close);

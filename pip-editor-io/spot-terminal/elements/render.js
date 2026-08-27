@@ -1,31 +1,78 @@
 import { chart } from "./chart.js";
 import { esc, money, number, sideClass, time } from "./format.js";
 
-const rows = (items, render, empty) => items?.length ? items.map(render).join("") : `<div class="empty">${empty}</div>`;
-const metric = (label, value, className = "") => `<div class="metric"><small>${label}</small><strong class="${className}">${esc(value)}</strong></div>`;
+const rows = (items, render, empty) =>
+  items?.length
+    ? items.map(render).join("")
+    : `<div class="empty">${empty}</div>`;
+const metric = (label, value, className = "") =>
+  `<div class="metric"><small>${label}</small><strong class="${className}">${esc(value)}</strong></div>`;
+const stepFor = (scale) => (scale > 0 ? `0.${"0".repeat(scale - 1)}1` : "1");
 
 export function loginView(state) {
   return `<section class="login"><form class="login-card" data-action="login" autocomplete="off"><h1>AEX Spot Terminal</h1><p>使用本地开发会员用户名进入交易终端。此入口由后端配置开关控制。</p><label>用户名<input name="username" autocomplete="off" autocapitalize="none" spellcheck="false" required placeholder="member username"></label>${state.error ? `<div class="error">${esc(state.error)}</div>` : ""}<button class="primary" ${state.loading ? "disabled" : ""}>${state.loading ? "登录中…" : "登录"}</button><small>凭证仅保存在当前插件运行内存中</small></form></section>`;
 }
 
 export function terminalView(state, view = "trade") {
-  const symbol = state.selectedSymbol ?? state.symbols?.[0]?.symbol ?? "—", ticker = state.ticker ?? {};
-  const symbols = rows(state.symbols, (item) => `<button data-symbol="${esc(item.symbol)}" class="${item.symbol === symbol ? "active" : ""}"><span>${esc(item.symbol)}</span><span>${money(item.lastPrice)}</span></button>`, "暂无交易对");
-  const bookSide = (items, side) => rows(items, (item) => `<div class="book-row ${side}"><i style="width:${Math.min(100, Number(item.depthPercent ?? 0))}%"></i><span>${money(item.price)}</span><span>${money(item.amount)}</span></div>`, "暂无盘口");
-  const trades = rows(state.trades, (item) => `<tr><td class="${sideClass(item.direction)}">${money(item.price)}</td><td>${money(item.amount)}</td><td>${time(item.time)}</td></tr>`, "暂无成交");
-  const assets = rows(state.wallets, (item) => `<div class="asset"><span>${esc(item.unit)}</span><span>${money(item.balance)} <small class="muted">/ ${money(item.frozenBalance)}</small></span></div>`, "暂无资产");
-  const orders = rows(state.orders, (item) => `<tr><td>${time(item.time)}</td><td>${esc(item.symbol)}</td><td class="${sideClass(item.direction)}">${esc(item.direction)}</td><td>${esc(item.type)}</td><td>${money(item.price)}</td><td title="${esc(item.amountLabel)}">${money(item.amount)} <small class="muted">${esc(item.amountUnit)}</small></td><td>${money(item.tradedAmount)} <small class="muted">${esc(item.tradedUnit)}</small></td><td>${esc(item.status)}</td><td>${item.status === "TRADING" ? `<button data-cancel="${esc(item.orderId)}">撤单</button>` : ""}</td></tr>`, "暂无订单");
-  const change = Number(ticker.change ?? 0), changeClass = change >= 0 ? "positive" : "negative";
-  const tab = (id, label) => `<button data-view="${id}" class="${view === id ? "active" : ""}">${label}</button>`;
-  return `<section class="terminal" data-view-mode="${esc(view)}"><header class="top"><div class="pair-line"><span class="brand">AEX</span><span class="symbol">${esc(symbol)}</span><div class="status"><i class="dot ${state.connection === "online" ? "online" : ""}"></i>${esc(state.connection ?? "offline")}</div></div><div class="quote"><strong class="last ${changeClass}">${money(ticker.lastPrice)}</strong><span class="${changeClass}">${number(change, 2)}%</span></div><div class="ticker">${metric("24h High", money(ticker.high))}${metric("24h Low", money(ticker.low))}${metric("Account", state.member?.username ?? "—")}</div></header><nav class="symbols" aria-label="交易对">${symbols}</nav><nav class="view-tabs" aria-label="终端页面">${tab("trade", "交易")}${tab("market", "行情")}${tab("orders", "订单")}</nav><main class="main"><section class="panel chart"><h3><span>K 线与成交</span><b>1m</b></h3><div class="chart-area">${chart(state.klines)}</div><div class="trades"><table class="table"><thead><tr><th>价格</th><th>数量</th><th>时间</th></tr></thead><tbody>${trades}</tbody></table></div></section><div class="execution"><section class="panel book"><h3>盘口 <b>价格 / 数量</b></h3><div class="book-side">${bookSide(state.asks, "sell")}</div><div class="book-side">${bookSide(state.bids, "buy")}</div></section>${orderForm(state, symbol)}</div></main><footer class="bottom"><section class="assets"><h3>资产 <small>可用 / 冻结</small></h3>${assets}</section><section class="orders"><h3>当前订单</h3><table class="table"><thead><tr><th>时间</th><th>交易对</th><th>方向</th><th>类型</th><th>价格</th><th>数量</th><th>已成交</th><th>状态</th><th></th></tr></thead><tbody>${orders}</tbody></table></section></footer></section>`;
+  const symbol = state.selectedSymbol ?? state.symbols?.[0]?.symbol ?? "—",
+    ticker = state.ticker ?? {};
+  const symbols = rows(
+    state.symbols,
+    (item) =>
+      `<button data-symbol="${esc(item.symbol)}" class="${item.symbol === symbol ? "active" : ""}" title="${esc(item.marketSource ?? "INTERNAL")}"><span>${esc(item.symbol)}</span><small>${esc(item.marketSource ?? "INTERNAL")}</small><span>${money(item.lastPrice)}</span></button>`,
+    "暂无交易对",
+  );
+  const bookSide = (items, side) =>
+    rows(
+      items,
+      (item) =>
+        `<div class="book-row ${side}"><i style="width:${Math.min(100, Number(item.depthPercent ?? 0))}%"></i><span>${money(item.price)}</span><span>${money(item.amount)}</span></div>`,
+      "暂无盘口",
+    );
+  const trades = rows(
+    state.trades,
+    (item) =>
+      `<tr><td class="${sideClass(item.direction)}">${money(item.price)}</td><td>${money(item.amount)}</td><td>${time(item.time)}</td></tr>`,
+    "暂无成交",
+  );
+  const assets = rows(
+    state.wallets,
+    (item) =>
+      `<div class="asset"><span>${esc(item.unit)}</span><span>${money(item.balance)} <small class="muted">/ ${money(item.frozenBalance)}</small></span></div>`,
+    "暂无资产",
+  );
+  const orders = rows(
+    state.orders,
+    (item) =>
+      `<tr><td>${time(item.time)}</td><td>${esc(item.symbol)}</td><td class="${sideClass(item.direction)}">${esc(item.direction)}</td><td>${esc(item.type)}</td><td>${money(item.price)}</td><td title="${esc(item.amountLabel)}">${money(item.amount)} <small class="muted">${esc(item.amountUnit)}</small></td><td>${money(item.tradedAmount)} <small class="muted">${esc(item.tradedUnit)}</small></td><td>${esc(item.status)}</td><td>${item.status === "TRADING" ? `<button data-cancel="${esc(item.orderId)}">撤单</button>` : ""}</td></tr>`,
+    "暂无订单",
+  );
+  const change = Number(ticker.change ?? 0),
+    changeClass = change >= 0 ? "positive" : "negative";
+  const tab = (id, label) =>
+    `<button data-view="${id}" class="${view === id ? "active" : ""}">${label}</button>`;
+  const periods = (state.periods ?? []).map((item) => `<button data-period="${esc(item.id)}" class="${item.id === state.selectedPeriod ? "active" : ""}">${esc(item.label)}</button>`).join("");
+  return `<section class="terminal" data-view-mode="${esc(view)}"><header class="top"><div class="pair-line"><span class="brand">AEX</span><span class="symbol">${esc(symbol)}</span><div class="status"><i class="dot ${state.connection === "online" ? "online" : ""}"></i>${esc(state.connection ?? "offline")}</div></div><div class="quote"><strong class="last ${changeClass}">${money(ticker.lastPrice)}</strong><span class="${changeClass}">${number(change, 2)}%</span></div><div class="ticker">${metric("24h High", money(ticker.high))}${metric("24h Low", money(ticker.low))}${metric("Account", state.member?.username ?? "—")}</div></header><nav class="symbols" aria-label="交易对">${symbols}</nav><nav class="view-tabs" aria-label="终端页面">${tab("trade", "交易")}${tab("market", "行情")}${tab("orders", "订单")}</nav><main class="main"><section class="panel chart"><div class="chart-head"><strong>K 线</strong><nav class="periods" aria-label="K线周期">${periods}</nav></div><div class="chart-area">${chart(state.klines)}</div><div class="trades"><table class="table"><thead><tr><th>价格</th><th>数量</th><th>时间</th></tr></thead><tbody>${trades}</tbody></table></div></section><div class="execution"><section class="panel book"><h3>盘口 <b>价格 / 数量</b></h3><div class="book-side sell-side">${bookSide(state.asks, "sell")}</div><div class="book-side buy-side">${bookSide(state.bids, "buy")}</div></section>${orderForm(state, symbol)}</div></main><footer class="bottom"><section class="assets"><h3>资产 <small>可用 / 冻结</small></h3>${assets}</section><section class="orders"><h3>当前订单</h3><table class="table"><thead><tr><th>时间</th><th>交易对</th><th>方向</th><th>类型</th><th>价格</th><th>数量</th><th>已成交</th><th>状态</th><th></th></tr></thead><tbody>${orders}</tbody></table></section></footer></section>`;
 }
 
 function orderForm(state, symbol) {
-  const draft = state.draft ?? {}, side = draft.direction ?? "BUY", busy = state.requestState === "submitting";
+  const draft = state.draft ?? {},
+    side = draft.direction ?? "BUY",
+    busy = state.requestState === "submitting";
   const [tradingUnit = "", settlementUnit = ""] = symbol.split("/");
+  const pair = state.symbols?.find((item) => item.symbol === symbol) ?? {};
+  const marketBuy = side === "BUY" && draft.type === "MARKET_PRICE";
+  const scaleOf = (value) =>
+    Number.isInteger(Number(value)) ? Number(value) : 8;
+  const amountScale = scaleOf(marketBuy ? pair.baseCoinScale : pair.coinScale);
+  const amountMin = marketBuy ? pair.minTurnover : pair.minVolume;
+  const priceStep = stepFor(scaleOf(pair.baseCoinScale)),
+    amountStep = stepFor(amountScale);
   const botSide = state.botSide ?? "AUTO";
-  const botChoice = (value, label) => `<button type="button" data-bot-side="${value}" class="${botSide === value ? "active" : ""}">${label}</button>`;
+  const botChoice = (value, label) =>
+    `<button type="button" data-bot-side="${value}" class="${botSide === value ? "active" : ""}">${label}</button>`;
   const botType = state.botType ?? "AUTO";
-  const typeChoice = (value, label) => `<button type="button" data-bot-type="${value}" class="${botType === value ? "active" : ""}">${label}</button>`;
-  return `<aside class="panel order"><div class="tabs"><button data-side="BUY" class="${side === "BUY" ? "active buy" : ""}">Buy</button><button data-side="SELL" class="${side === "SELL" ? "active sell" : ""}">Sell</button></div><form data-action="order" data-trading-unit="${esc(tradingUnit)}" data-settlement-unit="${esc(settlementUnit)}"><input type="hidden" name="direction" value="${side}"><input type="hidden" name="symbol" value="${esc(symbol)}"><label>Order type<select name="type"><option value="LIMIT_PRICE" ${draft.type !== "MARKET_PRICE" ? "selected" : ""}>Limit</option><option value="MARKET_PRICE" ${draft.type === "MARKET_PRICE" ? "selected" : ""}>Market</option></select></label><label>Price<input name="price" inputmode="decimal" value="${esc(draft.price ?? "")}" placeholder="0.00"></label><label><span data-amount-label>Amount · ${esc(tradingUnit)}</span><input name="amount" inputmode="decimal" value="${esc(draft.amount ?? "")}" required placeholder="0.00"></label>${state.error ? `<div class="error">${esc(state.error)}</div>` : ""}${state.notice ? `<div class="notice">${esc(state.notice)}</div>` : ""}<button class="primary ${sideClass(side)}" ${busy ? "disabled" : ""}>${busy ? "Submitting…" : `${side === "BUY" ? "Buy" : "Sell"} ${esc(tradingUnit)}`}</button></form><div class="bot-sides" aria-label="机器人交易方向">${botChoice("AUTO", "自动")}${botChoice("BUY", "只买")}${botChoice("SELL", "只卖")}</div><div class="bot-sides" aria-label="机器人订单类型">${typeChoice("AUTO", "自动")}${typeChoice("LIMIT_PRICE", "只限价")}${typeChoice("MARKET_PRICE", "只市价")}</div><button class="bot-toggle ${state.botEnabled ? "active" : ""}" data-action="bot-toggle" role="switch" aria-checked="${state.botEnabled ? "true" : "false"}"><span><b>随机下单机器人</b><small>当前交易对 · 2–5 秒</small></span><i></i></button><button class="logout" data-action="logout">Log out</button></aside>`;
+  const typeChoice = (value, label) =>
+    `<button type="button" data-bot-type="${value}" class="${botType === value ? "active" : ""}">${label}</button>`;
+  return `<aside class="panel order"><div class="tabs"><button data-side="BUY" class="${side === "BUY" ? "active buy" : ""}">Buy</button><button data-side="SELL" class="${side === "SELL" ? "active sell" : ""}">Sell</button></div><form data-action="order" data-trading-unit="${esc(tradingUnit)}" data-settlement-unit="${esc(settlementUnit)}" data-coin-step="${stepFor(scaleOf(pair.coinScale))}" data-base-step="${stepFor(scaleOf(pair.baseCoinScale))}" data-min-volume="${esc(pair.minVolume ?? "")}" data-min-turnover="${esc(pair.minTurnover ?? "")}"><input type="hidden" name="direction" value="${side}"><input type="hidden" name="symbol" value="${esc(symbol)}"><label>Order type<select name="type"><option value="LIMIT_PRICE" ${draft.type !== "MARKET_PRICE" ? "selected" : ""}>Limit</option><option value="MARKET_PRICE" ${draft.type === "MARKET_PRICE" ? "selected" : ""}>Market</option></select></label><label>Price<input type="number" min="${priceStep}" step="${priceStep}" name="price" inputmode="decimal" value="${esc(draft.price ?? "")}" placeholder="0.00"></label><label><span data-amount-label>Amount · ${esc(tradingUnit)}</span><input type="number" min="${esc(amountMin ?? amountStep)}" step="${amountStep}" name="amount" inputmode="decimal" value="${esc(draft.amount ?? "")}" required placeholder="0.00"></label>${state.error ? `<div class="error">${esc(state.error)}</div>` : ""}${state.notice ? `<div class="notice">${esc(state.notice)}</div>` : ""}<button class="primary ${sideClass(side)}" ${busy ? "disabled" : ""}>${busy ? "Submitting…" : `${side === "BUY" ? "Buy" : "Sell"} ${esc(tradingUnit)}`}</button></form><div class="bot-sides" aria-label="机器人交易方向">${botChoice("AUTO", "自动")}${botChoice("BUY", "只买")}${botChoice("SELL", "只卖")}</div><div class="bot-sides" aria-label="机器人订单类型">${typeChoice("AUTO", "自动")}${typeChoice("LIMIT_PRICE", "只限价")}${typeChoice("MARKET_PRICE", "只市价")}</div><button class="bot-toggle ${state.botFast ? "active fast" : ""}" data-action="bot-fast" role="switch" aria-checked="${state.botFast ? "true" : "false"}"><span><b>极速下单模式</b><small>${state.botFast ? "0.2–0.5 秒" : "普通 · 2–5 秒"}</small></span><i></i></button><button class="bot-toggle ${state.botEnabled ? "active" : ""}" data-action="bot-toggle" role="switch" aria-checked="${state.botEnabled ? "true" : "false"}"><span><b>随机下单机器人</b><small>当前交易对 · ${state.botFast ? "极速" : "普通"}</small></span><i></i></button><button class="logout" data-action="logout">Log out</button></aside>`;
 }

@@ -4,8 +4,9 @@ export const STATE = "spot.terminal.predicate.state";
 export const CONFIG = "spot.terminal.predicate.config";
 export const initialState = () => ({
   authenticated: false, loading: false, connection: "offline", symbols: [], wallets: [],
-  botEnabled: false, botSide: "AUTO", botType: "AUTO",
+  botEnabled: false, botFast: false, botSide: "AUTO", botType: "AUTO",
   orders: [], trades: [], asks: [], bids: [], klines: [], ticker: {},
+  selectedPeriod: "1min", periods: [],
   draft: { direction: "BUY", type: "LIMIT_PRICE", price: "", amount: "" },
 });
 export const stateOf = (node) => ({ ...initialState(), ...scalar(node, STATE, {}) });

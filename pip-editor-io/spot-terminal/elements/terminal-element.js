@@ -1,10 +1,12 @@
 import { loginView, terminalView } from "./render.js";
 import { styles } from "./styles.js";
+import { captureSellScroll, restoreSellScroll } from "./book-scroll.js";
 
 export class SpotTerminalElement extends HTMLElement {
   #context;
   #renderKey;
   #syncTimer;
+  #lastSync = 0;
   #view = "trade";
   #scrollRelease;
   set context(value) {
@@ -19,8 +21,11 @@ export class SpotTerminalElement extends HTMLElement {
   connectedCallback() {
     if (!this.firstChild) this.render();
     this.#syncTimer = setInterval(() => {
-      if (this.#context?.projection?.data?.authenticated) this.request("spot.terminal.sync");
-    }, 1500);
+      const state = this.#context?.projection?.data, interval = state?.botFast && state?.botEnabled ? 200 : 1500;
+      if (state?.authenticated && Date.now() - this.#lastSync >= interval) {
+        this.#lastSync = Date.now(); this.request("spot.terminal.sync");
+      }
+    }, 200);
   }
   disconnectedCallback() { clearInterval(this.#syncTimer); this.#scrollRelease?.abort(); }
   request(commandId, input = {}) {
@@ -77,12 +82,15 @@ export class SpotTerminalElement extends HTMLElement {
       const marketBuy = form.elements.type.value === "MARKET_PRICE" && form.elements.direction.value === "BUY";
       const unit = marketBuy ? form.dataset.settlementUnit : form.dataset.tradingUnit;
       form.querySelector("[data-amount-label]").textContent = `${marketBuy ? "结算金额" : "数量"} · ${unit}`;
+      form.elements.amount.step = marketBuy ? form.dataset.baseStep : form.dataset.coinStep;
+      form.elements.amount.min = (marketBuy ? form.dataset.minTurnover : form.dataset.minVolume) || form.elements.amount.step;
       form.elements.price.disabled = form.elements.type.value === "MARKET_PRICE";
     };
     form.elements.type.addEventListener("change", sync); sync();
   }
   render() {
     this.#scrollRelease?.abort(); this.#scrollRelease = undefined;
+    const sellScroll = captureSellScroll(this.querySelector(".sell-side"));
     const state = this.#context?.projection?.data ?? { authenticated: false };
     const active = this.contains(document.activeElement) ? document.activeElement : null;
     const focus = active?.name ? { name: active.name, start: active.selectionStart, end: active.selectionEnd } : null;
@@ -93,6 +101,7 @@ export class SpotTerminalElement extends HTMLElement {
     const pending = form && !String(state.notice ?? "").startsWith("下单成功")
       ? Object.fromEntries(new FormData(form)) : null;
     this.innerHTML = `<style>${styles}</style>${state.authenticated ? terminalView(state, this.#view) : loginView(state)}`;
+    restoreSellScroll(this.querySelector(".sell-side"), sellScroll);
     const usernameInput = this.querySelector('[data-action="login"] [name="username"]');
     if (usernameInput && username !== null) usernameInput.value = String(username);
     if (pending) for (const [name, value] of Object.entries(pending)) {
@@ -112,6 +121,7 @@ export class SpotTerminalElement extends HTMLElement {
     });
     this.querySelector('[data-action="logout"]')?.addEventListener("click", () => this.request("spot.terminal.logout"));
     this.querySelector('[data-action="bot-toggle"]')?.addEventListener("click", () => this.request("spot.terminal.bot-toggle"));
+    this.querySelector('[data-action="bot-fast"]')?.addEventListener("click", () => this.request("spot.terminal.bot-fast"));
     this.querySelectorAll("[data-bot-side]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.bot-side", { botSide: button.dataset.botSide })));
     this.querySelectorAll("[data-bot-type]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.bot-type", { botType: button.dataset.botType })));
     this.#bindSymbolScroller();
@@ -120,6 +130,7 @@ export class SpotTerminalElement extends HTMLElement {
       this.#view = button.dataset.view; this.render();
     }));
     this.querySelectorAll("[data-symbol]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.select-symbol", { symbol: button.dataset.symbol })));
+    this.querySelectorAll("[data-period]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.select-period", { period: button.dataset.period })));
     this.querySelectorAll("[data-side]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.draft", { direction: button.dataset.side })));
     this.querySelectorAll("[data-cancel]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.cancel", { orderId: button.dataset.cancel })));
   }

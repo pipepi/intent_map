@@ -29,7 +29,7 @@ export function randomBotOrder(state, random = Math.random) {
     const opposite = prices.length ? (direction === "BUY" ? Math.min(...prices) : Math.max(...prices)) : undefined;
     const reference = Number(opposite ?? state.ticker?.lastPrice ?? state.ticker?.close);
     if (!(reference > 0)) throw new Error("机器人等待有效盘口价格");
-    price = opposite ? reference : reference * between(random, 0.998, 1.002);
+    price = opposite ? reference : reference * between(random, 0.99, 1.01);
   }
   return {
     symbol: state.selectedSymbol, direction, type,
@@ -37,4 +37,6 @@ export function randomBotOrder(state, random = Math.random) {
   };
 }
 
-export const nextBotDelay = (random = Math.random) => Math.round(between(random, 2000, 5000));
+export const nextBotDelay = (fast = false, random = Math.random) => Math.round(
+  between(random, fast ? 200 : 2000, fast ? 500 : 5000)
+);
