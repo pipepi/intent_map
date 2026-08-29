@@ -1,6 +1,6 @@
 /** A4 adapter: ontology and executable Node Type capability encoded as one PIP. */
 import { assertPipManifest, pipFilename, pipSha256, type PipAsset, type PipIoOptions } from "../../pip/index.ts";
-import { assertRelationGraph, createRelationDocument, loadRelationDocument, serializeRelationDocument } from "../../relation/index.ts";
+import { assertRelationGraph, createRelationDocument, loadRelationDocument, relationDocumentValues, serializeRelationDocument } from "../../relation/index.ts";
 import { sha256, sourceDigest } from "./hash.ts";
 import { assertSelfContainedEsm } from "./esm-validation.ts";
 import { decodeElementPackage } from "./element-package.ts";
@@ -11,7 +11,7 @@ export async function decodeNodeTypePackage(pipBytes: Uint8Array, options?: PipI
   const pip = await decodeRelationPip(pipBytes, options);
   if (pip.manifest.layer !== "a4") throw new Error(`Expected a4 Node Type PIP, received ${pip.manifest.layer}`);
   const manifest = assertPipManifest(pip.manifest) as NodeTypePluginManifest;
-  const ontology = loadRelationDocument(JSON.parse(pip.rootTreeText)).graph;
+  const ontology = relationDocumentValues(loadRelationDocument(JSON.parse(pip.rootTreeText))).graph;
   const files = assetsByPath(pip.assets), allowed = new Set([manifest.entry, ...manifest.sourcePaths]);
   const unexpected = Object.keys(files).find((path) => !allowed.has(path) && !(path.startsWith("packages/") && path.endsWith(".pip")));
   if (unexpected) throw new Error(`Unexpected a4 asset: ${unexpected}`);

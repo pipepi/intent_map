@@ -11,7 +11,7 @@ import {
   readReleaseConfig,
   systemPipFilePath,
 } from "./pip-release.mjs";
-import { createRelationDocument, loadRelationDocument, serializeRelationDocument } from "../pip-editor/relation/document.ts";
+import { createRelationDocument, loadRelationDocument, relationDocumentValues, serializeRelationDocument } from "../pip-editor/relation/document.ts";
 import { collectSourceAssets, softwareProjectGraph } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
@@ -127,12 +127,12 @@ const bytes = await encodePip({
     name: release.name,
     packageVersion: release.version,
     releaseDate: release.releaseDate,
-    rootNodeId: tree.rootNodeIds[0],
+    rootNodeId: relationDocumentValues(tree).rootNodeIds[0],
     loaderAbi: "pip-loader/1",
     artifactRole: "source-and-runtime",
     editorAbi: "pip-editor/1",
     providedEditorKinds: ["relation-graph/1"],
-    supportedDocumentKinds: ["relation-workspace/1"],
+    supportedDocumentKinds: ["relation-workspace/1", "relation-workspace/2"],
     preferredEditorKinds: [],
     requiredEditorCapabilities: [],
     providedCapabilities: [],

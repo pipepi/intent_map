@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { serializeRelationDocument } from "../pip-editor/relation/document.ts";
+import { relationDocumentValues, serializeRelationDocument } from "../pip-editor/relation/document.ts";
 import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 import {
   DEFAULT_PIP_LOADER_SOURCE,
@@ -28,13 +28,13 @@ const packageWithResources = () => {
       name: "Workspace Test",
       packageVersion: "1.0.0",
       releaseDate: "20260807",
-      rootNodeId: document.rootNodeIds[0],
+      rootNodeId: relationDocumentValues(document).rootNodeIds[0],
       loaderAbi: "pip-loader/1",
       artifactRole: "authoring-source",
       providedEditorKinds: [],
       supportedDocumentKinds: [],
       preferredEditorKinds: ["relation-graph/1"],
-      requiredEditorCapabilities: ["relation-workspace/1"],
+      requiredEditorCapabilities: ["relation-workspace/2"],
       providedCapabilities: [],
       requiredCapabilities: [],
       requiredAuthoringCapabilities: [],

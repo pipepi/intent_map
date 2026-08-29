@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { serializeRelationDocument } from "../pip-editor/relation/document.ts";
+import { relationDocumentValues, serializeRelationDocument } from "../pip-editor/relation/document.ts";
 import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 import { DEFAULT_PIP_LOADER_SOURCE, decodePip } from "../pip-editor/pip/index.ts";
 import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/io-policy.ts";
@@ -47,13 +47,13 @@ test("node streaming Bundle is byte-identical without aggregating resources thro
       name: "Stream Bundle Test",
       packageVersion: "1.0.0",
       releaseDate: "20260807",
-      rootNodeId: document.rootNodeIds[0],
+      rootNodeId: relationDocumentValues(document).rootNodeIds[0],
       loaderAbi: "pip-loader/1",
       artifactRole: "authoring-source",
       providedEditorKinds: [],
       supportedDocumentKinds: [],
       preferredEditorKinds: ["relation-graph/1"],
-      requiredEditorCapabilities: ["relation-workspace/1"],
+      requiredEditorCapabilities: ["relation-workspace/2"],
       providedCapabilities: [],
       requiredCapabilities: [],
       requiredAuthoringCapabilities: [],

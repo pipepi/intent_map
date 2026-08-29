@@ -12,7 +12,7 @@ import {
   UNLIMITED_PIP_IO_POLICY,
   pipLimit,
 } from "../pip-editor/pip/io-policy.ts";
-import { loadRelationDocument, serializeRelationDocument } from "../pip-editor/relation/document.ts";
+import { loadRelationDocument, relationDocumentValues, serializeRelationDocument } from "../pip-editor/relation/document.ts";
 import { sampleRelationDocument } from "./relation-document-fixture.mjs";
 
 const manifest = {
@@ -164,9 +164,25 @@ test("PIP preserves a RelationDocument workspace", async () => {
   });
   const decoded = await decodePip(bytes);
   const loaded = loadRelationDocument(JSON.parse(decoded.rootTreeText));
-  assert.equal(loaded.schemaVersion, 1);
-  assert.ok(loaded.graph.nodes["sample.depth-4"]);
-  assert.deepEqual(loaded.workspace.views, ["relation-graph"]);
+  const values = relationDocumentValues(loaded);
+  assert.equal(loaded.id, "relation-workspace@2");
+  assert.ok(values.graph.nodes["sample.depth-4"]);
+  assert.deepEqual(values.workspace.views, ["relation-graph"]);
+});
+
+test("RelationDocument uses value-only relations and normalizes the legacy envelope", () => {
+  const document = sampleRelationDocument();
+  assert.equal(document.id, "relation-workspace@2");
+  assert.deepEqual(document.relations.map(({ id }) => id), ["graph", "rootNodeIds", "workspace"]);
+  assert.ok(document.relations.every((relation) => "value" in relation && !("predicate" in relation)));
+  const values = relationDocumentValues(document);
+  const legacy = loadRelationDocument({
+    format: "relation-workspace", schemaVersion: 1, ...values,
+  });
+  assert.deepEqual(legacy, document);
+  assert.throws(() => loadRelationDocument({
+    ...document, relations: [...document.relations, document.relations[0]],
+  }), /Unsupported relation workspace document/);
 });
 
 test("PIP round-trips an eight-level relation composition without a depth cap", async () => {
@@ -180,5 +196,5 @@ test("PIP round-trips an eight-level relation composition without a depth cap", 
   const loaded = loadRelationDocument(
     JSON.parse((await decodePip(bytes)).rootTreeText),
   );
-  assert.ok(loaded.graph.nodes["sample.depth-8"]);
+  assert.ok(relationDocumentValues(loaded).graph.nodes["sample.depth-8"]);
 });

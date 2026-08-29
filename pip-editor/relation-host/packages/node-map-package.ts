@@ -1,5 +1,5 @@
 /** A5 adapter: Node Map data plus a flat, fully validated A3/A4 dependency closure. */
-import { assertRelationGraph, createRelationDocument, loadRelationDocument, relationObjectRefs, serializeRelationDocument, type Relation, type RelationGraph, type RelationObject, type RelationRef } from "../../relation/index.ts";
+import { assertRelationGraph, createRelationDocument, loadRelationDocument, relationDocumentValues, relationObjectRefs, serializeRelationDocument, type Relation, type RelationGraph, type RelationObject, type RelationRef } from "../../relation/index.ts";
 import { assertPipManifest, pipFilename, pipSha256, type PipAsset, type PipIoOptions, type PipPackage, type PipPackageRef } from "../../pip/index.ts";
 import { decodeElementPackage } from "./element-package.ts";
 import { decodeNodeTypePackage } from "./node-type-package.ts";
@@ -94,7 +94,7 @@ export async function decodeNodeMapPackage(pipBytes: Uint8Array, options?: NodeM
   if (pip.manifest.layer !== "a5") throw new Error(`Expected a5 Node Map PIP, received ${pip.manifest.layer}`);
   const manifest = assertPipManifest(pip.manifest);
   if (manifest.layer !== "a5") throw new Error("Invalid Node Map manifest");
-  const document = loadRelationDocument(JSON.parse(pip.rootTreeText)), graph = document.graph;
+  const document = loadRelationDocument(JSON.parse(pip.rootTreeText)), { graph } = relationDocumentValues(document);
   const workspaceAsset = pip.assets.find(({ path }) => path === "workspace.json");
   if (!workspaceAsset) throw new Error("Node Map workspace is missing");
   const workspace = JSON.parse(new TextDecoder().decode(workspaceAsset.bytes)); assertNodeMapWorkspace(workspace);

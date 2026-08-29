@@ -21,7 +21,7 @@ export const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
 
 export const prepareDocumentExport = async (
   serializedDocument: string,
-  filename = "relation-workspace-v1.json",
+  filename = "relation-workspace-v2.json",
 ): Promise<ExportResult> => {
   try {
     const bytes = new TextEncoder().encode(serializedDocument);
