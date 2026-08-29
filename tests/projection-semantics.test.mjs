@@ -29,6 +29,8 @@ test("projection contexts are a closed three-state union", () => {
   assert.doesNotThrow(() => assertProjectionRegistration({ ...base, contexts: ["children-workspace"] }));
   assert.throws(() => assertProjectionRegistration({ ...base, contexts: ["self-embedded"] }), /self-workspace/);
   assert.throws(() => assertProjectionRegistration({ ...base, contexts: ["children-workspace", "self-embedded"] }), /cannot combine/);
+  assert.doesNotThrow(() => assertProjectionRegistration({ ...base, zoomViewport: { top: 36, right: 0, bottom: 0, left: 0 } }));
+  assert.throws(() => assertProjectionRegistration({ ...base, zoomViewport: { top: -1, right: 0, bottom: 0, left: 0 } }), /zoom viewport/);
 });
 
 test("Scene A5 contains a persistent complete projection bundle", async () => {
@@ -65,7 +67,7 @@ test("semantic routes recurse self → children → child self without creating 
   navigation = applySemanticScale(navigation, .6);
   assert.equal(navigation.entries[navigation.index].projectionNodeId, "scene.view.children:scene.today");
   assert.equal(Object.keys(graph.nodes).length, before); assert.equal(graph.revision, 0);
-  assert.equal(semanticProgress(1.5), 0); assert.equal(semanticProgress(1.7), 1); assert.equal(semanticProgress(.6), 1);
+  assert.equal(semanticProgress(1.4), 0); assert.equal(semanticProgress(1.7), 1); assert.equal(semanticProgress(.6), 1);
 });
 
 test("switching sibling observations does not create a semantic zoom level", () => {
@@ -146,12 +148,22 @@ test("semantic transition preserves the pre-rendered target across route promoti
   const semantic = await readFile("pip-editor/relation-host/projection/semantic-projection.tsx", "utf8");
   assert.match(semantic, /key=\{entry\.projectionNodeId\}/);
   assert.match(semantic, /transitionActive \? 1 - progress : 1/);
+  assert.match(semantic, /transitionActive = Boolean\(transition\)/);
   assert.match(semantic, /data-embedded-projection/);
   assert.match(semantic, /mix\(geometry\.scaleX, 1, progress\)/);
-  assert.match(semantic, /mix\(1, geometry!\.scaleX, progress\)/);
+  assert.match(semantic, /const sourceTransform = "scale\(1\)"/);
   assert.match(semantic, /transformOrigin: geometry/);
   assert.match(semantic, /semanticOrigin\.x.*semanticOrigin\.y/);
   assert.match(semantic, /semanticTargetProjectionId/);
   assert.match(semantic, /semanticScale > 1\.4/);
   assert.match(semantic, /transitionActive \? progress : 0/);
+});
+
+test("semantic crossfade progress starts continuously at its render thresholds", () => {
+  assert.equal(semanticProgress(1.4), 0);
+  assert.ok(semanticProgress(1.4001) > 0);
+  assert.ok(Math.abs(semanticProgress(1.55) - .5) < 1e-9);
+  assert.equal(semanticProgress(.75), 0);
+  assert.ok(semanticProgress(.7499) > 0);
+  assert.ok(Math.abs(semanticProgress(.675) - .5) < 1e-9);
 });

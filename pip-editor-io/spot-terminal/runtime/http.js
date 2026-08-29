@@ -15,8 +15,8 @@ async function publicRequest(base, path) {
   return payload;
 }
 
-export const login = (base, username) => request(base, "/terminal/login", {
-  method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: body({ username }),
+export const login = (base, username, password) => request(base, base.includes("47.129.119.217") ? "/uc/login" : "/terminal/login", {
+  method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: body({ username, password }),
 });
 const authenticated = (token, options = {}) => ({ ...options, headers: { ...options.headers, "access-auth-token": token } });
 export const bootstrap = (base, token) => request(base, "/terminal/bootstrap", authenticated(token));

@@ -12,10 +12,10 @@ const labelFor = (nodeId: string, graph: RelationGraph, nodeTypes: NodeTypePlugi
   return name?.object.kind === "const" ? String(name.object.value) : nodeId;
 };
 
-export function ProjectionNavbar({ navigation, resizeMode, execution, executionView, graph, nodeTypes, onChange, onReset, onClose }: {
+export function ProjectionNavbar({ navigation, execution, executionView, graph, nodeTypes, onChange, onReset }: {
   navigation: ProjectionNavigationState; graph: RelationGraph; nodeTypes: NodeTypePluginRegistry;
   execution?: ExecutionContextSnapshot; executionView: ProjectionExecutionViewState;
-  resizeMode: "simple" | "full"; onChange: (navigation: ProjectionNavigationState) => void; onReset: () => void; onClose: () => void;
+  onChange: (navigation: ProjectionNavigationState) => void; onReset: () => void;
 }) {
   const route = currentRoute(navigation), options = projectionOptions(route.observedNodeId, graph, nodeTypes);
   const session = execution?.sessions.find((item) => item.id === executionView.sessionId) ?? execution?.sessions.at(-1);
@@ -24,7 +24,7 @@ export function ProjectionNavbar({ navigation, resizeMode, execution, executionV
     const next = routeForProjection(projectionNodeId, graph, nodeTypes, route.enteredFrom);
     if (next) onChange(replaceCurrentProjection(navigation, next));
   };
-  return <nav className={styles.projectionNav} data-window-drag>
+  return <nav className={styles.projectionNav}>
     <button disabled={!navigation.index} onClick={() => onChange(moveProjectionHistory(navigation, -1))} title="后退">‹</button>
     <button disabled={navigation.index >= navigation.entries.length - 1} onClick={() => onChange(moveProjectionHistory(navigation, 1))} title="前进">›</button>
     <div className={styles.projectionCrumbs}>{crumbs.map((entry) => <button key={`${entry.projectionNodeId}:${entry.context}`} onClick={() => {
@@ -36,9 +36,5 @@ export function ProjectionNavbar({ navigation, resizeMode, execution, executionV
     </select>
     <button onClick={onReset} title="重置投影缩放与位置">{Math.round(navigation.semanticScale * 100)}%</button>
     {session && <span title={session.id}>{session.status}</span>}
-    <div className={styles.projectionWindowActions}>
-      <button data-resize-toggle title={resizeMode === "full" ? "切换为三向缩放" : "切换为八向缩放"}>{resizeMode === "full" ? "⤢" : "┘"}</button>
-      <button onClick={onClose} title="关闭投影窗口">×</button>
-    </div>
   </nav>;
 }

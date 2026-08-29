@@ -3,7 +3,8 @@ import { loadTerminal } from "./load.js";
 import { fuseSnapshot, fuseState } from "./fusion.js";
 import { clearSession, sessionFor, setSession } from "./session.js";
 import { connect, disconnect, liveFor } from "./stomp.js";
-import { configOf, patchState, stateOf, terminalNode } from "./state.js";
+import { requireEnvironment } from "./environment.js";
+import { configOf, initialState, patchEnvironment, patchState, stateOf, terminalNode } from "./state.js";
 import { validateOrder } from "./validation.js";
 import { nextBotDelay, randomBotOrder } from "./bot.js";
 
@@ -18,7 +19,10 @@ export async function login(input, graph) {
   const node = terminalNode(input, graph), state = stateOf(node), { apiBase } = configOf(node);
   try {
     const username = String(input.username ?? "").trim(); if (!username) throw new Error("请输入用户名");
-    const auth = await api.login(apiBase, username), token = auth?.accessToken; if (!token) throw new Error("登录响应缺少 accessToken");
+    const password = String(input.password ?? "");
+    if (configOf(node).environment === "server" && !password) throw new Error("请输入服务器账户密码");
+    const auth = await api.login(apiBase, username, password), token = auth?.accessToken ?? auth?.token;
+    if (!token) throw new Error("登录响应缺少 accessToken");
     const loaded = await loadTerminal(apiBase, token);
     setSession(node.id, { token, apiBase }); connect(node.id, apiBase, loaded.selectedSymbol, loaded.member?.memberId, loaded.selectedMarketSource, loaded.selectedPeriod);
     return patchState(graph, node.id, { ...state, ...loaded, authenticated: true, loading: false, connection: "connecting", error: "", notice: "登录成功" });
@@ -110,6 +114,13 @@ export function toggleBotFast(input, graph) {
   return patchState(graph, node.id, { ...state, botFast, error: "", notice: botFast ? "机器人极速模式已开启" : "机器人极速模式已关闭" });
 }
 
+export function toggleBotGuard(input, graph) {
+  const node = terminalNode(input, graph), state = stateOf(node), session = requireSession(node);
+  const botGuard = !state.botGuard;
+  if (state.botEnabled) session.botNextAt = Date.now();
+  return patchState(graph, node.id, { ...state, botGuard, error: "", notice: botGuard ? "护盘模式已开启 · 仅被动限价" : "护盘模式已关闭" });
+}
+
 export function setBotSide(input, graph) {
   const node = terminalNode(input, graph), state = stateOf(node);
   const botSide = ["AUTO", "BUY", "SELL"].includes(input.botSide) ? input.botSide : "AUTO";
@@ -129,4 +140,16 @@ export function draft(input, graph) {
 export function logout(input, graph) {
   const node = terminalNode(input, graph); disconnect(node.id); clearSession(node.id);
   return patchState(graph, node.id, { ...stateOf(node), authenticated: false, botEnabled: false, member: null, connection: "offline", error: "", notice: "" });
+}
+
+export function switchEnvironment(input, graph) {
+  const node = terminalNode(input, graph), current = configOf(node);
+  const target = requireEnvironment(input.environment);
+  if (target.environment === current.environment) return patchState(graph, node.id, stateOf(node));
+  // Runtime credentials, pending idempotency keys, timers and subscriptions never cross environments.
+  disconnect(node.id); clearSession(node.id);
+  return patchEnvironment(graph, node.id, target.environment, {
+    ...initialState(),
+    notice: `已切换到${target.label} · 旧环境挂单仍可能存在，请重新登录`,
+  });
 }

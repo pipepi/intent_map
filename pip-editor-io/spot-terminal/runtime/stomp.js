@@ -7,7 +7,7 @@ export function liveFor(id) { return stores.get(id) ?? {}; }
 // The backend multiplexes every K-line period on one symbol topic. A missing
 // period is treated as 1min only for compatibility with older servers.
 export function acceptsKlinePeriod(value, period = "1min") {
-  return String(value?.period ?? "1min") === period;
+  return canonicalPeriod(value?.period) === canonicalPeriod(period);
 }
 // Keep versioned corrections until HTTP has acknowledged the same minute and
 // version. This prevents an older in-flight snapshot from erasing fresh bars.
@@ -24,7 +24,10 @@ export function acknowledgeKlines(live, snapshot) {
 export function disconnect(id) { clients.get(id)?.close(); clients.delete(id); stores.delete(id); }
 export function connect(id, apiBase, symbol, memberId, marketSource = "INTERNAL", period = "1min") {
   disconnect(id);
-  const url = apiBase.replace(/^http/, "ws") + "/market-native-ws", socket = new WebSocket(url), live = { symbol, marketSource, period, connection: "connecting", trades: [], klines: [] };
+  const url = apiBase.replace(/^http/, "ws") + "/market-native-ws", socket = new WebSocket(url), live = {
+    symbol, marketSource, period: canonicalPeriod(period), durationMs: durationOf(period),
+    connection: "connecting", trades: [], klines: [],
+  };
   stores.set(id, live); clients.set(id, socket);
   socket.onopen = () => socket.send(frame("CONNECT", { "accept-version": "1.2", "heart-beat": "10000,10000" }));
   socket.onmessage = (event) => {
@@ -60,8 +63,12 @@ export function mergeMessage(live, head, payload) {
     if (Number(value?.time) === Number(live.provisionalKline?.time) &&
       Number(value?.count ?? 0) >= Number(live.provisionalKline?.count ?? 0)) live.provisionalKline = undefined;
   }
-  else if (destination.endsWith("/thumb")) live.thumb = Array.isArray(value)
-    ? value.find((item) => item?.symbol === live.symbol) ?? live.thumb : value;
+  else if (destination.endsWith("/thumb")) {
+    const thumb = Array.isArray(value) ? value.find((item) => item?.symbol === live.symbol) : value;
+    // The shared topic emits both snapshots and single-symbol increments.
+    // Never let another pair's scalar increment overwrite this terminal.
+    if (thumb?.symbol === live.symbol) live.thumb = thumb;
+  }
   else if (destination.includes("/order-")) live.ordersDirty = true;
 }
 
@@ -77,3 +84,4 @@ export function mergeDepth(live, value) {
   }
   return live;
 }
+import { canonicalPeriod, durationOf } from "./periods.js";

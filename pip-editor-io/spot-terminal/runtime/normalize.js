@@ -45,24 +45,27 @@ export const mergeTicker = (current = {}, thumb = {}) => ({
   // `chg` as an already-calculated percentage in both REST and STOMP.
   change: thumb.changePercent ?? thumb.chg ?? thumb.change ?? current.change,
 });
-export function mergeKlines(current, updates) {
+const currentBucket = (time, durationMs, now = Date.now()) => {
+  const open = Math.floor(now / durationMs) * durationMs;
+  // INTERNAL uses bucket close while Binance uses bucket open.
+  return Number(time) === open || Number(time) === open + durationMs;
+};
+export function mergeKlines(current, updates, durationMs = 60000, now = Date.now()) {
   const rows = new Map(array(current).map((row) => [Number(row.time), row]));
-  const currentClose = (Math.floor(Date.now() / 60000) + 1) * 60000;
   for (const update of array(updates)) {
     const key = Number(update?.time); if (!Number.isFinite(key)) continue;
     const existing = rows.get(key), oldCount = Number(existing?.count ?? 0), newCount = Number(update?.count ?? 0);
-    if (!existing || newCount >= oldCount) rows.set(key, key === currentClose && existing
+    if (!existing || newCount >= oldCount) rows.set(key, currentBucket(key, durationMs, now) && existing
       ? monotonicOpenKline(existing, update) : { ...existing, ...update });
   }
   return [...rows.values()].sort((left, right) => Number(left.time) - Number(right.time)).slice(-200);
 }
-export function mergeSnapshotKlines(previous, incoming, now = Date.now()) {
-  const currentClose = (Math.floor(now / 60000) + 1) * 60000;
+export function mergeSnapshotKlines(previous, incoming, now = Date.now(), durationMs = 60000) {
   const rows = new Map(array(incoming).map((row) => [Number(row.time), { ...row }]));
-  const oldCurrent = array(previous).find((row) => Number(row.time) === currentClose);
+  const oldCurrent = array(previous).find((row) => currentBucket(row.time, durationMs, now));
   if (oldCurrent) {
-    const fresh = rows.get(currentClose);
-    rows.set(currentClose, fresh ? monotonicOpenKline(oldCurrent, fresh) : { ...oldCurrent });
+    const key = Number(oldCurrent.time), fresh = rows.get(key);
+    rows.set(key, fresh ? monotonicOpenKline(oldCurrent, fresh) : { ...oldCurrent });
   }
   return [...rows.values()].sort((left, right) => Number(left.time) - Number(right.time)).slice(-200);
 }
@@ -100,7 +103,7 @@ export const mergeLive = (state, live) => ({
   bids: live.bids ? normalizeBook(live.bids, "bids") : state.bids,
   asks: live.asks ? normalizeBook(live.asks, "asks") : state.asks,
   klines: mergeProvisionalKline(
-    live.klines?.length ? mergeKlines(state.klines, live.klines) : state.klines,
+    live.klines?.length ? mergeKlines(state.klines, live.klines, live.durationMs) : state.klines,
     live.provisionalKline
   ),
 });

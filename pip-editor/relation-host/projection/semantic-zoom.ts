@@ -3,7 +3,7 @@ import type { ProjectionNavigationState, ProjectionRouteEntry } from "../contrac
 import { moveProjectionHistory, navigateProjection, replaceSemanticScale } from "./projection-navigation.ts";
 
 export const semanticProgress = (scale: number) => scale >= 1.7 || scale <= .6 ? 1
-  : scale > 1.5 ? (scale - 1.5) / .2 : scale < .7 ? (.7 - scale) / .1 : 0;
+  : scale > 1.4 ? (scale - 1.4) / .3 : scale < .75 ? (.75 - scale) / .15 : 0;
 
 export function applySemanticScale(state: ProjectionNavigationState, scale: number, forward?: ProjectionRouteEntry) {
   if (scale >= 1.7 && forward) return navigateProjection(state, forward);

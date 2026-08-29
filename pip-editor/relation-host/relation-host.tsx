@@ -47,6 +47,7 @@ export function RelationHost() {
   const [workspaces, setWorkspaces] = useState(initialRef.current), workspaceStoreRef = useRef<WorkspaceSessionStore | null>(null);
   if (!workspaceStoreRef.current) workspaceStoreRef.current = new WorkspaceSessionStore(initialRef.current, setWorkspaces);
   const workspaceStore = workspaceStoreRef.current, [activeWorkspaceId, setActiveWorkspaceId] = useState(initialRef.current[0].id);
+  const commandQueuesRef = useRef(new Map<string, Promise<void>>());
   const [message, setMessage] = useState("核心为空白宿主；Alt/Option + 左键拖拽，或按一下空格，可打开节点创建器。"), [pendingClose, setPendingClose] = useState<string>();
   const triggerRef = useRef<TriggerRuntime | null>(null);
   if (!triggerRef.current) triggerRef.current = new TriggerRuntime({
@@ -102,6 +103,20 @@ export function RelationHost() {
     addEventListener("wheel", preventPageZoom, { passive: false });
     return () => removeEventListener("wheel", preventPageZoom);
   }, []);
+  async function runCommand(workspaceId: string, request: Extract<RelationElementRequest, { kind: "command" }>) {
+    const previous = commandQueuesRef.current.get(workspaceId) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(async () => {
+      const snapshot = workspaceStore.list().find((item) => item.id === workspaceId);
+      if (!snapshot) throw new Error(`Unknown workspace ${workspaceId}`);
+      const command = nodeTypes.commands().get(request.commandId);
+      if (!command) throw new Error(`Unknown relation command ${request.commandId}`);
+      const patch = await command(request.input, snapshot.graph);
+      workspaceStore.commitPatch(workspaceId, patch, nodeTypes.validators());
+    });
+    commandQueuesRef.current.set(workspaceId, queued);
+    try { await queued; }
+    finally { if (commandQueuesRef.current.get(workspaceId) === queued) commandQueuesRef.current.delete(workspaceId); }
+  }
   async function request(request: RelationElementRequest) {
     if (!active) return; const workspaceId = active.id;
     try {
@@ -125,7 +140,7 @@ export function RelationHost() {
         workspaceStore.setWindow(workspaceId, windowId, { ...frame, navigation: navigateProjection(navigation, target) });
       }
       if (request.kind === "invoke-creator") await invokeCreator(request.creatorId, request.worldPosition, request.input, request.origin);
-      if (request.kind === "command") { const command = nodeTypes.commands().get(request.commandId); if (!command) throw new Error(`Unknown relation command ${request.commandId}`); workspaceStore.commitPatch(workspaceId, await command(request.input, active.graph), nodeTypes.validators()); }
+      if (request.kind === "command") await runCommand(workspaceId, request);
       if (request.kind === "start-execution") {
         const sessionId = await executionManager.start({ workspaceId, graph: active.graph, targetNodeId: request.targetNodeId, triggerNodeId: request.triggerNodeId, value: request.input, continuous: request.continuous });
         const views = normalizeFreeLayout(active.views, active.rootNodeIds), windowId = views.activeWindowId;

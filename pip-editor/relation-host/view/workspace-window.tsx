@@ -42,7 +42,8 @@ export function WorkspaceWindow({ id, frame, views, children, system = false, ac
     const dragTarget = path.find((item) => item?.dataset?.windowDrag !== undefined);
     if (!resizeTarget && !dragTarget) return;
     const interactive = path.find((item) => ["BUTTON", "INPUT", "SELECT", "TEXTAREA"].includes(item?.tagName));
-    if (interactive && !resizeTarget) return;
+    const dragButton = path.find((item) => item?.dataset?.windowDragButton !== undefined);
+    if (interactive && !resizeTarget && !dragButton) return;
     event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
     gesture.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, start: preview, direction: resizeTarget?.dataset.resizeDirection as Direction | undefined, moved: false };
     outsideRelease.current?.abort(); const controller = new AbortController(); outsideRelease.current = controller;
@@ -63,9 +64,23 @@ export function WorkspaceWindow({ id, frame, views, children, system = false, ac
   };
   const end = (event: ReactPointerEvent<HTMLElement>) => { if (gesture.current?.pointerId === event.pointerId) finish(event.clientX, event.clientY); };
   const handles = preview.resizeMode === "simple" ? ["e", "s", "se"] : directions;
+  const systemControls = (edge: "top" | "bottom") => <div
+    className={`${styles.windowSystemControls} ${edge === "top" ? styles.windowSystemControlsTop : styles.windowSystemControlsBottom}`}
+    data-window-drag aria-label={`${edge === "top" ? "顶部" : "底部"}窗口控制与拖动区域`}>
+    <button data-resize-toggle aria-label="切换尺寸缩放模式" title={preview.resizeMode === "full" ? "切换为三向缩放" : "切换为八向缩放"}>{preview.resizeMode === "full" ? "⤢" : "┘"}</button>
+    <button data-window-close aria-label="关闭节点" title="关闭节点">×</button>
+  </div>;
   return <article className={`${styles.freeWindow} ${system ? styles.systemWindow : ""}`} data-node-id={id}
     style={{ left: preview.x, top: preview.y, width: preview.width, height: preview.height, zIndex: front ? 12 : system ? 8 : 2 }}
-    onPointerDownCapture={() => { if (!active) onActivate?.(); }}
+    onPointerDownCapture={(event) => {
+      if (active) return;
+      const path = event.nativeEvent.composedPath() as HTMLElement[];
+      // Activating a window synchronously rerenders its projection. Doing that
+      // before pointerdown reaches an interactive control can invalidate focus
+      // or swallow the button's ensuing click.
+      const interactive = path.some((item) => ["BUTTON", "INPUT", "TEXTAREA", "SELECT", "A"].includes(item?.tagName) || item?.isContentEditable);
+      if (!interactive) onActivate?.();
+    }}
     onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
     onLostPointerCapture={() => finish()}
     onClickCapture={(event) => {
@@ -73,7 +88,12 @@ export function WorkspaceWindow({ id, frame, views, children, system = false, ac
       if (path.some((item) => item?.dataset?.resizeToggle !== undefined)) onFrame({ ...preview, resizeMode: preview.resizeMode === "simple" ? "full" : "simple" });
       if (path.some((item) => item?.dataset?.windowClose !== undefined)) onClose?.();
     }}>
+    {!system && <div className={styles.windowGlassUnderlay} aria-hidden="true" />}
+    {!system && systemControls("top")}
+    {!system && <><i className={`${styles.windowDragRail} ${styles.windowDragRailLeft}`} data-window-drag aria-label="左侧拖动区域" />
+      <i className={`${styles.windowDragRail} ${styles.windowDragRailRight}`} data-window-drag aria-label="右侧拖动区域" /></>}
     <div className={styles.windowViewport} data-window-viewport><div className={styles.windowContent} style={{ zoom: preview.contentScale ?? 1 }}>{children}</div></div>
+    {!system && systemControls("bottom")}
     {handles.map((direction) => <i key={direction} className={styles.resizeHandle} data-resize-direction={direction} data-direction={direction} />)}
   </article>;
 }

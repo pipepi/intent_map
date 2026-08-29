@@ -4,6 +4,9 @@ const validKinds = new Set<ProjectionContextKind>(["self-workspace", "children-w
 
 /** Rejects the missing fourth Cartesian combination by validating a closed context vocabulary. */
 export function assertProjectionRegistration(projection: RelationProjection) {
+  if (projection.zoomViewport && Object.values(projection.zoomViewport).some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new Error(`Projection ${projection.id} has an invalid zoom viewport`);
+  }
   if (!projection.definition || !projection.contexts?.length) return;
   if (projection.contexts.some((kind) => !validKinds.has(kind))) throw new Error(`Projection ${projection.id} has an invalid context`);
   if (projection.contexts.includes("children-workspace") && projection.contexts.includes("self-embedded")) {

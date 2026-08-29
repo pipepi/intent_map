@@ -197,17 +197,18 @@ export function NodeCanvas({ workspace, elements, nodeTypes, execution, pluginMa
       <div className={styles.freeWorld} style={{ width: views.world.width, height: views.world.height, transform: `translate(${views.camera.x}px,${views.camera.y}px) scale(${views.camera.scale})` }}>
         {roots.map((node) => {
           const frame = views.projections[node.id], navigation = navigationForRoot(node.id, workspace.graph, nodeTypes, frame.navigation);
+          const routeNode = navigation && workspace.graph.nodes[navigation.entries[navigation.index]?.projectionNodeId ?? ""];
+          const pluginChrome = Boolean(routeNode && projectionForInstance(routeNode, nodeTypes.projections())?.windowChrome === "plugin");
           const executionView = frame.execution ?? { flowLayerVisible: true, followActiveEvent: false };
           const setNavigation = (next: NonNullable<typeof navigation>) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame: { ...frame, navigation: next } });
           const resetProjection = () => navigation && onViewsChange({
             ...normalized,
             projections: { ...normalized.projections, [node.id]: { ...frame, contentOffset: { x: 0, y: 0 }, navigation: { ...navigation, semanticScale: 1 } } },
           });
-          return <WorkspaceWindow key={node.id} id={node.id} frame={frame} views={views} active={views.activeWindowId === node.id} front={views.frontWindowId === node.id} onActivate={() => onActivateWindow(node.id)} onFrame={(next) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame: next })}>
-            {navigation ? <div className={styles.projectionShell}><ProjectionNavbar navigation={navigation} resizeMode={frame.resizeMode} execution={execution} executionView={executionView} graph={workspace.graph} nodeTypes={nodeTypes} onChange={setNavigation}
-              onReset={resetProjection}
-              onClose={() => onRequest({ kind: "close-workspace-root", nodeId: node.id })} />
-              <SemanticProjection workspace={workspace} rootWindowId={node.id} navigation={navigation} contentOffset={frame.contentOffset ?? { x: 0, y: 0 }} execution={execution} elements={elements} nodeTypes={nodeTypes} selection={scopedSelections[node.id] ?? workspace.selection} onRequest={onRequest} /></div>
+          return <WorkspaceWindow key={node.id} id={node.id} frame={frame} views={views} active={views.activeWindowId === node.id} front={views.frontWindowId === node.id} onActivate={() => onActivateWindow(node.id)} onFrame={(next) => onRequest({ kind: "set-workspace-window", windowId: node.id, frame: next })} onClose={() => onRequest({ kind: "close-workspace-root", nodeId: node.id })}>
+            {navigation ? <div className={`${styles.projectionShell} ${pluginChrome ? styles.pluginChrome : ""}`}>{!pluginChrome && <ProjectionNavbar navigation={navigation} execution={execution} executionView={executionView} graph={workspace.graph} nodeTypes={nodeTypes} onChange={setNavigation}
+              onReset={resetProjection} />}
+              <SemanticProjection workspace={workspace} workspaceView={{ ...normalized, projections: { ...normalized.projections, [node.id]: { ...frame, navigation } } }} rootWindowId={node.id} navigation={navigation} contentOffset={frame.contentOffset ?? { x: 0, y: 0 }} execution={execution} elements={elements} nodeTypes={nodeTypes} selection={scopedSelections[node.id] ?? workspace.selection} onRequest={onRequest} /></div>
               : <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={views} graph={workspace.graph} node={node} selection={scopedSelections[node.id] ?? workspace.selection} purpose="workspace" execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />}
           </WorkspaceWindow>;
         })}

@@ -24,6 +24,14 @@ test("the generic host records verified hashes without a trust prompt", async ()
   assert.doesNotMatch(host, /window\.confirm|confirmHostPackageTrust/);
 });
 
+test("plugin commands are serialized per workspace against the latest graph snapshot", async () => {
+  const host = await readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8");
+  assert.match(host, /commandQueuesRef = useRef\(new Map<string, Promise<void>>\(\)\)/);
+  assert.match(host, /workspaceStore\.list\(\)\.find\(\(item\) => item\.id === workspaceId\)/);
+  assert.match(host, /previous\.catch\(\(\) => undefined\)\.then/);
+  assert.doesNotMatch(host, /command\(request\.input, active\.graph\)/);
+});
+
 test("the workspace remains a bounded two-axis trackpad scroll region", async () => {
   const css = await readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8");
   assert.match(css, /\.canvasWrap \{[^}]*min-height: 0;[^}]*overflow: hidden;/);
@@ -61,10 +69,45 @@ test("free-layout canvas exposes creator wire, camera controls, and system manag
   assert.doesNotMatch(host, /panelCollapsed|layoutPanelCollapsed/);
 });
 
+test("projection windows float system controls above the top-right content edge", async () => {
+  const [window, navbar, css] = await Promise.all([
+    readFile(new URL("../pip-editor/relation-host/view/workspace-window.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/view/projection-navbar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(window, /systemControls\("top"\)[\s\S]*systemControls\("bottom"\)/);
+  assert.match(window, /windowGlassUnderlay[^>]*aria-hidden="true"/);
+  assert.match(window, /data-window-drag aria-label=[\s\S]*data-resize-toggle[\s\S]*data-window-close/);
+  assert.doesNotMatch(window, /data-window-drag-button/);
+  assert.match(window, /windowDragRailLeft[\s\S]*data-window-drag aria-label="左侧拖动区域"/);
+  assert.match(window, /windowDragRailRight[\s\S]*data-window-drag aria-label="右侧拖动区域"/);
+  assert.doesNotMatch(navbar, /data-window-drag|projectionWindowActions|projectionDragHandle/);
+  assert.match(css, /\.windowSystemControls \{[^}]*position:absolute;[^}]*left:-18px;[^}]*right:-18px;[^}]*height:37px;/);
+  assert.match(css, /\.windowSystemControls \{[^}]*border:0;/);
+  assert.match(css, /\.windowGlassUnderlay \{[^}]*inset:-37px -18px;[^}]*radial-gradient\(ellipse at center,#10193678 42%,#17234208 100%\);[^}]*backdrop-filter:blur\(10px\)/);
+  assert.match(css, /\.windowViewport \{[^}]*position:relative;[^}]*z-index:16;/);
+  assert.match(css, /\.windowGlassUnderlay \{[^}]*z-index:14;/);
+  assert.match(css, /\.windowSystemControlsTop \{[^}]*top:-37px;/);
+  assert.match(css, /\.windowSystemControlsBottom \{[^}]*bottom:-37px;/);
+  assert.match(css, /\.windowDragRail \{[^}]*z-index:15;[^}]*width:18px;/);
+  assert.match(css, /\.windowDragRailLeft \{[^}]*left:-18px;/);
+  assert.match(css, /\.windowDragRailRight \{[^}]*right:-18px;/);
+  assert.match(css, /\.windowDragRail \{[^}]*background:transparent;/);
+  assert.match(css, /\.freeWindow:hover \.windowGlassUnderlay,[^}]*visibility:visible;\s*opacity:1/);
+  assert.match(css, /\.freeWindow:hover \.windowDragRail,[^}]*visibility:visible;\s*opacity:1/);
+  assert.match(css, /@container \(max-width:500px\)[\s\S]*\.projectionNav > select \{[^}]*flex:0 1 120px;/);
+  assert.match(css, /\.windowSystemControls \{[^}]*visibility:hidden;[^}]*opacity:0;[^}]*pointer-events:none;/);
+  assert.match(css, /\.freeWindow:hover \.windowSystemControls,[^}]*\.freeWindow:focus-within \.windowSystemControls \{[^}]*visibility:visible;[^}]*pointer-events:auto;/);
+  assert.match(css, /@media \(hover:none\)[^{]*\{[^}]*windowGlassUnderlay[^}]*visibility:visible;/);
+  assert.match(css, /@media \(hover:none\)[\s\S]*\.windowSystemControls \{[^}]*visibility:visible;/);
+});
+
 test("trackpad movement and pinch route between workspace and active projection", async () => {
   const canvas = await readFile("pip-editor/relation-host/view/workspace-canvas.tsx", "utf8");
   const host = await readFile("pip-editor/relation-host/relation-host.tsx", "utf8");
   const window = await readFile("pip-editor/relation-host/view/workspace-window.tsx", "utf8");
+  const semantic = await readFile("pip-editor/relation-host/projection/semantic-projection.tsx", "utf8");
+  const hostStyles = await readFile("pip-editor/relation-host/view/relation-host.module.css", "utf8");
   const scene = await readFile("pip-editor-io/scene/elements/view-element.js", "utf8");
   assert.match(canvas, /addEventListener\("wheel", handle, \{ passive: false \}\)/);
   assert.match(host, /preventPageZoom/);
@@ -75,6 +118,11 @@ test("trackpad movement and pinch route between workspace and active projection"
   assert.match(canvas, /semanticScale/); assert.match(canvas, /applySemanticScale/);
   assert.match(canvas, /semanticGestures = useRef\(new Map/); assert.match(canvas, /gesture\.scale \* Math\.exp/); assert.match(canvas, /gesture\.switched = next\.index !== navigation\.index/);
   assert.match(window, /preview\.contentScale \?\? 1/); // Legacy non-semantic projections retain their old scale.
+  assert.match(semantic, /--projection-origin-x/); assert.match(semantic, /--projection-origin-y/);
+  assert.match(semantic, /forwardFlip \? 1\.4 : \.75/);
+  assert.match(semantic, /projectionForInstance\(node, nodeTypes\.projections\(\)\)\?\.zoomViewport/);
+  assert.match(semantic, /clipPath: target && transition/);
+  assert.match(hostStyles, /\.semanticViewport[^}]*overflow:clip[^}]*contain:paint/);
   assert.doesNotMatch(canvas, /scene\.update-camera|xZoom/);
   assert.doesNotMatch(scene, /addEventListener\("wheel"|pendingZoom/);
 });
@@ -106,10 +154,36 @@ test("workspace camera controls dock to the bottom-right outside the scaled worl
 });
 
 test("projection resize mode sits immediately before the projection close action", async () => {
-  const navbar = await readFile(new URL("../pip-editor/relation-host/view/projection-navbar.tsx", import.meta.url), "utf8");
+  const [window, css] = await Promise.all([
+    readFile(new URL("../pip-editor/relation-host/view/workspace-window.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8"),
+  ]);
   const scene = await readFile(new URL("../pip-editor-io/scene/elements/render.js", import.meta.url), "utf8");
-  assert.ok(navbar.indexOf("data-resize-toggle") < navbar.indexOf("关闭投影窗口"));
+  assert.ok(window.indexOf("data-resize-toggle") < window.indexOf("data-window-close"));
+  assert.match(window, /resizeMode === "simple" \? \["e", "s", "se"\] : directions/);
+  assert.match(css, /width:6px;height:6px;border:1px solid #c5b7ff;border-radius:2px;background:#2d2460/);
+  assert.match(css, /box-shadow:0 0 7px rgba\(139,92,246,\.48\)/);
+  assert.match(css, /data-direction="nw"[^}]*top:3px;left:3px/);
+  assert.match(css, /data-direction="ne"[^}]*top:3px;right:3px/);
+  assert.match(css, /data-direction="se"[^}]*right:3px;bottom:3px/);
+  assert.match(css, /data-direction="sw"[^}]*bottom:3px;left:3px/);
+  assert.match(css, /\.freeWindow:hover \.resizeHandle::after,[^}]*visibility:visible;opacity:1/);
   assert.doesNotMatch(scene, /data-resize-toggle/);
+});
+
+test("A3 may own projection chrome while A2 retains a fallback navbar", async () => {
+  const [contracts, canvas, semantic, css] = await Promise.all([
+    readFile(new URL("../pip-editor/relation-host/contracts/package-types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/view/workspace-canvas.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/projection/semantic-projection.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(contracts, /windowChrome\?:\s*"host"\s*\|\s*"plugin"/);
+  assert.match(canvas, /windowChrome === "plugin"/);
+  assert.match(canvas, /!pluginChrome && <ProjectionNavbar/);
+  assert.match(canvas, /workspaceView=\{\{ \.\.\.normalized, projections: \{ \.\.\.normalized\.projections, \[node\.id\]: \{ \.\.\.frame, navigation \} \} \}\}/);
+  assert.match(semantic, /RelationNodeRenderer[^>]*workspaceView=\{workspaceView\}/);
+  assert.match(css, /\.projectionShell\.pluginChrome\s*\{[^}]*grid-template-rows:minmax\(0,1fr\)/);
 });
 
 test("workspace projection status names each selection scope instead of aggregating a misleading count", async () => {

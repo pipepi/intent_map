@@ -10,5 +10,5 @@ export function fuseState(state, live) {
 export function fuseSnapshot(previous, snapshot, live) {
   acknowledgeKlines(live, snapshot.klines);
   return fuseState({ ...previous, ...snapshot,
-    klines: mergeSnapshotKlines(previous.klines, snapshot.klines) }, live);
+    klines: mergeSnapshotKlines(previous.klines, snapshot.klines, Date.now(), live.durationMs) }, live);
 }

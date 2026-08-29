@@ -131,6 +131,9 @@ export type RelationCreator = {
 };
 export type RelationProjection = {
   id: string; name?: string; icon?: string; purpose?: "node" | "workspace"; definition?: RelationRef; contexts?: ProjectionContextKind[];
+  windowChrome?: "host" | "plugin";
+  /** A3 visual boundary, relayed by A4 so A2 clips semantic transitions to scalable content. */
+  zoomViewport?: { top: number; right: number; bottom: number; left: number };
   matches(node: RelationNode, graph: RelationGraph): boolean;
   project?(input: {
     workspaceId: string; rootNodeIds: string[]; workspaceView: JsonValue; graph: RelationGraph;

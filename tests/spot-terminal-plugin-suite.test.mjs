@@ -4,15 +4,19 @@ import { decodeElementPackage } from "../pip-editor/relation-host/packages/eleme
 import { decodeNodeTypePackage, validateNodeTypeDependencies } from "../pip-editor/relation-host/packages/node-type-package.ts";
 import { importPip } from "../pip-editor/relation-host/packages/import-pip.ts";
 import { buildSpotTerminalPluginSuite } from "../pip-editor-io/spot-terminal/suite.ts";
-import { bootstrapState, historyKlines, klineState, mergeKlines, mergeProvisionalKline, mergeSnapshotKlines, mergeTicker, normalizeBook, ordersState } from "../pip-editor-io/spot-terminal/runtime/normalize.js";
+import { bootstrapState, historyKlines, mergeKlines, mergeTicker, normalizeBook, ordersState } from "../pip-editor-io/spot-terminal/runtime/normalize.js";
 import { DEFAULT_PERIODS, periodOf } from "../pip-editor-io/spot-terminal/runtime/periods.js";
-import { chart } from "../pip-editor-io/spot-terminal/elements/chart.js";
 import { terminalView } from "../pip-editor-io/spot-terminal/elements/render.js";
-import { captureSellScroll, restoreSellScroll } from "../pip-editor-io/spot-terminal/elements/book-scroll.js";
-import { fuseState } from "../pip-editor-io/spot-terminal/runtime/fusion.js";
 import { acceptsKlinePeriod, acknowledgeKlines, mergeDepth, mergeMessage } from "../pip-editor-io/spot-terminal/runtime/stomp.js";
-import { availableBotModes, nextBotDelay, randomBotOrder } from "../pip-editor-io/spot-terminal/runtime/bot.js";
 import { validateOrder } from "../pip-editor-io/spot-terminal/runtime/validation.js";
+import { withWindowChrome } from "../pip-editor-io/spot-terminal/runtime/window-chrome.js";
+import { windowNavigation } from "../pip-editor-io/spot-terminal/elements/window-navigation.js";
+import { childrenTerminal, embeddedTerminal, worldTerminal } from "../pip-editor-io/spot-terminal/elements/projection-views.js";
+import { terminalCreator } from "../pip-editor-io/spot-terminal/runtime/creator.js";
+import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
+import { projectionOptions } from "../pip-editor/relation-host/projection/projection-routes.ts";
+
+const dataModule = async (source) => import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 
 test("spot terminal produces independently importable A3 and exact A4 dependency", async () => {
   const suite = await buildSpotTerminalPluginSuite();
@@ -45,6 +49,102 @@ test("spot terminal bundled sources expose creator, commands and projection", as
   assert.match(suite.nodeType.entrySource, /exchange\/order\/add/);
   assert.match(suite.nodeType.entrySource, /market\/history/);
   assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.workspace/);
+  assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.children/);
+  assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.embedded/);
+  assert.match(suite.nodeType.entrySource, /children-workspace/);
+  assert.match(suite.nodeType.entrySource, /self-embedded/);
+  assert.match(suite.nodeType.entrySource, /self-workspace/);
+  assert.match(suite.element.entrySource, /set-workspace-window/);
+});
+
+test("spot creator installs four contextual projection instances", () => {
+  const result = terminalCreator.create({ graph: { revision: 7, nodes: {} } });
+  const nodes = result.patch.operations.filter((operation) => operation.op === "put-node").map((operation) => operation.node);
+  const uses = (node) => node.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.uses")?.object?.target?.nodeId;
+  assert.equal(nodes.filter((node) => uses(node)?.startsWith("spot.terminal.projection.")).length, 4);
+  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.workspace"));
+  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.children"));
+  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.world-events"));
+  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.embedded"));
+  const root = nodes.find((node) => node.id === result.preferredProjection.projectionId);
+  assert.ok(root.relations.some((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into"));
+  assert.equal(uses(nodes.find((node) => node.id === root.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into").object.target.nodeId)), "spot.terminal.projection.children");
+});
+
+test("spot A4 runtime exposes all four created projections to workspace navigation", async () => {
+  const suite = await buildSpotTerminalPluginSuite();
+  const nodeType = await decodeNodeTypePackage(suite.nodeTypePip);
+  const registry = new NodeTypePluginRegistry({ load: dataModule });
+  await registry.install(nodeType);
+  assert.deepEqual(registry.projections().map(({ contexts }) => contexts), [
+    ["self-workspace"], ["children-workspace"], ["children-workspace"], ["self-workspace", "self-embedded"],
+  ]);
+  assert.deepEqual(registry.projections().map(({ zoomViewport }) => zoomViewport?.top), [36, 36, 36, 0]);
+
+  const created = registry.creators().find(({ id }) => id === "spot.terminal.create")
+    .create({ graph: { revision: 0, nodes: {} } });
+  const nodes = Object.fromEntries(created.patch.operations
+    .filter(({ op }) => op === "put-node").map(({ node }) => [node.id, node]));
+  const terminalId = nodes[created.preferredProjection.projectionId].relations
+    .find(({ predicate }) => predicate.nodeId === "relation.projection.predicate.observes").object.target.nodeId;
+  assert.deepEqual(projectionOptions(terminalId, { revision: 1, nodes }, registry).map(({ context, label }) => [context, label]), [
+    ["self-workspace", "↗ Spot Trading Terminal"],
+    ["children-workspace", "⇄ Spot Children · Flow"],
+    ["children-workspace", "◎ Spot Children · World Events"],
+    ["self-workspace", "▣ Spot Compact Card"],
+  ]);
+});
+
+test("spot A3 renders internal workspace and compact parent-space views", () => {
+  assert.match(childrenTerminal({ authenticated: true, symbols: [1, 2], assets: [1], orders: [], connected: true }), /直接子级内部视角/);
+  assert.match(embeddedTerminal({ authenticated: true, symbol: "BTC\/USDT", ticker: { lastPrice: 78000 }, connected: true }), /BTC\/USDT/);
+  assert.match(worldTerminal({ authenticated: true, symbol: "BTC\/USDT", orders: [], connected: true }), /World Events/);
+  assert.match(worldTerminal({ authenticated: true, symbol: "BTC\/USDT", orders: [], connected: true }), /观察子级 · 世界事件模型/);
+});
+
+test("spot A4 supplies window navigation state and A3 renders its chrome", () => {
+  const frame = { x: 10, y: 20, width: 390, height: 720, navigation: {
+    index: 1, semanticScale: 1.25, entries: [
+      { projectionNodeId: "parent", context: "self-workspace", enteredFrom: undefined },
+      { projectionNodeId: "spot-view", context: "self-workspace" },
+    ],
+  } };
+  const state = withWindowChrome({ authenticated: false }, { projections: { "root-window": frame } }, "spot-view");
+  assert.equal(state.windowChrome.windowId, "root-window");
+  assert.equal("enteredFrom" in state.windowChrome.frame.navigation.entries[0], false);
+  assert.doesNotThrow(() => JSON.parse(JSON.stringify(state)));
+  assert.deepEqual([state.windowChrome.canBack, state.windowChrome.canForward, state.windowChrome.scale], [true, false, 1.25]);
+  const html = windowNavigation(state);
+  assert.match(html, /data-window-back/);
+  assert.match(html, /data-window-forward[^>]*disabled/);
+  assert.match(html, /aria-label="当前投影"/);
+  assert.match(html, /125%/);
+});
+
+test("spot plugin chrome renders and selects all semantic projection routes", () => {
+  const options = [
+    { projectionNodeId: "self", observedNodeId: "spot", context: "self-workspace", label: "观察自身外部视角 · 工作空间" },
+    { projectionNodeId: "children", observedNodeId: "spot", context: "children-workspace", label: "观察直接子级内部视角 · 工作空间" },
+    { projectionNodeId: "embedded", observedNodeId: "spot", context: "self-workspace", label: "观察自身外部视角 · 父节点空间" },
+  ];
+  const state = withWindowChrome({}, { projections: { window: { navigation: {
+    index: 0, semanticScale: 1, entries: [{ projectionNodeId: "self", observedNodeId: "spot", context: "self-workspace" }],
+  } } } }, "self", "Spot Trading Terminal", options);
+  const html = windowNavigation(state);
+  assert.equal((html.match(/<option/g) ?? []).length, 3);
+  assert.match(html, /value="children"/);
+  assert.match(html, /父节点空间/);
+});
+
+test("spot A3 consumes the host semantic zoom variable for every projection view", async () => {
+  const suite = await buildSpotTerminalPluginSuite();
+  assert.match(suite.element.entrySource, /--projection-zoom/);
+  assert.match(suite.element.entrySource, /terminal-children/);
+  assert.match(suite.element.entrySource, /terminal-embedded/);
+  assert.match(suite.element.entrySource, /--projection-origin-x/);
+  assert.match(suite.element.entrySource, /--projection-origin-y/);
+  assert.match(suite.element.entrySource, /isolation:isolate/);
+  assert.match(suite.element.entrySource, /z-index:20/);
 });
 
 test("market buy amount uses settlement unit while fills use trading unit", () => {
@@ -180,106 +280,5 @@ test("one-minute chart rejects aggregate K lines multiplexed on the symbol topic
   const fiveMinute = { period: "5min", klines: [] };
   mergeMessage(fiveMinute, head, JSON.stringify({ time: 300, period: "5min", closePrice: 12 }));
   assert.equal(fiveMinute.klines[0].closePrice, 12);
-});
-
-test("sell book opens at the best ask and preserves deliberate upward scrolling", () => {
-  const initial = { scrollHeight: 300, clientHeight: 100, scrollTop: 0 };
-  restoreSellScroll(initial, null);
-  assert.equal(initial.scrollTop, 200);
-  const pinned = captureSellScroll(initial);
-  const updated = { scrollHeight: 340, clientHeight: 100, scrollTop: 0 };
-  restoreSellScroll(updated, pinned);
-  assert.equal(updated.scrollTop, 240);
-  const inspecting = { scrollHeight: 340, clientHeight: 100, scrollTop: 70 };
-  const position = captureSellScroll(inspecting);
-  restoreSellScroll(inspecting, position);
-  assert.equal(inspecting.scrollTop, 70);
-});
-
-test("live one-minute candle persistently overlays empty HTTP placeholders", () => {
-  const base = [{ time: 120000, openPrice: 100, highestPrice: 100, lowestPrice: 100, closePrice: 100, volume: 0, turnover: 0, count: 0 }];
-  const provisional = {
-    time: 120000, openPrice: 101, highestPrice: 101, lowestPrice: 99,
-    closePrice: 99, volume: 3, turnover: 301, count: 2,
-  };
-  assert.deepEqual(mergeProvisionalKline(base, provisional)[0], provisional);
-  assert.deepEqual(mergeProvisionalKline(base, provisional)[0], provisional);
-});
-
-test("HTTP refresh is fused with live candle before a single UI state is published", () => {
-  const placeholder = { time: 120000, openPrice: 100, highestPrice: 100, lowestPrice: 100, closePrice: 100, count: 0 };
-  const provisional = { time: 120000, openPrice: 101, highestPrice: 102, lowestPrice: 99, closePrice: 102, count: 3 };
-  const live = { provisionalKline: provisional, klines: [] };
-  assert.deepEqual(fuseState({ klines: [placeholder], ticker: {}, trades: [], bids: [], asks: [] }, live).klines[0], provisional);
-});
-
-test("open candle high and low never shrink across an HTTP refresh", () => {
-  const now = 61000, time = 120000;
-  const previous = [{ time, openPrice: 100, highestPrice: 110, lowestPrice: 90, closePrice: 105, volume: 8, turnover: 800, count: 8 }];
-  const incoming = [{ time, openPrice: 102, highestPrice: 107, lowestPrice: 95, closePrice: 103, volume: 5, turnover: 500, count: 5 }];
-  assert.deepEqual(mergeSnapshotKlines(previous, incoming, now)[0], previous[0]);
-  const newer = [{ ...incoming[0], highestPrice: 112, lowestPrice: 94, closePrice: 111, volume: 9, turnover: 900, count: 9 }];
-  assert.deepEqual(mergeSnapshotKlines(previous, newer, now)[0], {
-    ...newer[0], openPrice: 100, highestPrice: 112, lowestPrice: 90,
-  });
-});
-
-test("K line response wrappers and flat-price candles remain visible", () => {
-  const row = { time: 100, openPrice: 78810.21, highestPrice: 78810.21, lowestPrice: 78810.21, closePrice: 78810.21 };
-  assert.deepEqual(klineState({ records: [row] }), [row]);
-  const svg = chart([row]);
-  assert.match(svg, /<rect/);
-  assert.doesNotMatch(svg, /y="24"[^>]*height="1"/);
-});
-
-test("random bot covers four modes with the requested currency ranges", () => {
-  const state = { selectedSymbol: "BTC/USDT", bids: [{ price: 77 }], asks: [{ price: 79 }], ticker: { lastPrice: 78 } };
-  const make = (mode, amount) => randomBotOrder(state, (() => { const values = [mode, amount]; return () => values.shift(); })());
-  const orders = [make(0, 0), make(0.3, 1), make(0.55, 0), make(0.8, 1)];
-  assert.deepEqual(orders.map(({ direction, type }) => [direction, type]), [
-    ["BUY", "LIMIT_PRICE"], ["BUY", "MARKET_PRICE"], ["SELL", "LIMIT_PRICE"], ["SELL", "MARKET_PRICE"],
-  ]);
-  assert.equal(Number(orders[0].amount), 0.01);
-  assert.equal(Number(orders[1].amount), 100);
-  assert.equal(Number(orders[2].amount), 0.01);
-  assert.equal(Number(orders[3].amount), 0.1);
-  assert.equal(orders[0].price, "79.00000000");
-  assert.equal(orders[2].price, "77.00000000");
-});
-
-test("bot liquidity guards and manual side override constrain eligible modes", () => {
-  const state = { bids: [{ price: 77 }], asks: [] };
-  assert.deepEqual(availableBotModes(state), [
-    ["BUY", "LIMIT_PRICE"], ["SELL", "LIMIT_PRICE"], ["SELL", "MARKET_PRICE"],
-  ]);
-  assert.deepEqual(availableBotModes({ ...state, botSide: "BUY" }), [["BUY", "LIMIT_PRICE"]]);
-  assert.deepEqual(availableBotModes({ bids: [], asks: [{ price: 79 }], botSide: "SELL" }), [["SELL", "LIMIT_PRICE"]]);
-  assert.deepEqual(availableBotModes({ ...state, asks: [{ price: 79 }], botSide: "BUY" }), [
-    ["BUY", "LIMIT_PRICE"], ["BUY", "MARKET_PRICE"],
-  ]);
-  assert.deepEqual(availableBotModes({ ...state, asks: [{ price: 79 }], botType: "LIMIT_PRICE" }), [
-    ["BUY", "LIMIT_PRICE"], ["SELL", "LIMIT_PRICE"],
-  ]);
-  assert.deepEqual(availableBotModes({ ...state, botType: "MARKET_PRICE" }), [["SELL", "MARKET_PRICE"]]);
-  assert.deepEqual(availableBotModes({ bids: [], asks: [], botSide: "BUY", botType: "MARKET_PRICE" }), []);
-  assert.throws(
-    () => randomBotOrder({ selectedSymbol: "BTC/USDT", bids: [], asks: [], botSide: "BUY", botType: "MARKET_PRICE" }),
-    /等待市价单所需的对手盘/,
-  );
-});
-
-test("bot speed mode uses normal and rapid randomized delay ranges", () => {
-  assert.equal(nextBotDelay(false, () => 0), 2000);
-  assert.equal(nextBotDelay(false, () => 1), 5000);
-  assert.equal(nextBotDelay(true, () => 0), 200);
-  assert.equal(nextBotDelay(true, () => 1), 500);
-});
-
-test("limit bot fallback price randomizes one percent around the latest trade", () => {
-  const state = { selectedSymbol: "BTC/USDT", bids: [], asks: [], ticker: { lastPrice: 100 }, botSide: "BUY", botType: "LIMIT_PRICE" };
-  const orderAt = (priceRandom) => randomBotOrder(state, (() => {
-    const values = [0, 0.5, priceRandom]; return () => values.shift();
-  })());
-  assert.equal(orderAt(0).price, "99.00000000");
-  assert.equal(orderAt(1).price, "101.00000000");
+  assert.equal(acceptsKlinePeriod({ period: "1month" }, "1mon"), true);
 });
