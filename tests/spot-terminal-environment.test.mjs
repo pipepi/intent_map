@@ -28,10 +28,12 @@ test("environment switch resets only its terminal and persists no credentials", 
   const patch = switchEnvironment({ terminalId: "first", environment: "server" }, {
     revision: 9, nodes: { first, second },
   });
-  assert.equal(patch.operations.length, 2);
-  assert.deepEqual(patch.operations[0].relation.object.value, { environment: "server" });
-  assert.equal(patch.operations[1].relation.object.value.authenticated, false);
-  assert.equal(patch.operations[1].relation.object.value.botEnabled, false);
+  const config = patch.operations.find((operation) => operation.op === "put-relation" && operation.nodeId === "first" && operation.relation.id === "config");
+  const state = patch.operations.find((operation) => operation.op === "put-relation" && operation.nodeId === "first" && operation.relation.id === "state");
+  assert.deepEqual(config.relation.object.value, { environment: "server" });
+  assert.equal(state.relation.object.value.authenticated, false);
+  assert.equal(state.relation.object.value.botEnabled, false);
+  assert.ok(patch.operations.some((operation) => operation.op === "put-node" && operation.node.id.includes(":fact:robot:")));
   assert.doesNotMatch(JSON.stringify(patch), /accessToken|password|apiBase/);
   assert.equal(second.relations[0].object.value.environment, "server");
 });

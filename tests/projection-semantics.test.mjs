@@ -134,12 +134,12 @@ test("fixed Flow boundary ports are converted into the panned and zoomed world c
   ), { x: 199.45205479452056, y: 153.97260273972603 });
 });
 
-test("dragging a child updates the shared contains and Flow projection frame in one patch", async () => {
+test("dragging a child updates only the active children projection frame", async () => {
   const { nodeMap: { graph } } = await buildIntentPluginSuite(), frame = { x: -120, y: 360, width: 320, height: 220, resizeMode: "simple" };
   const patch = moveChild({ parentProjectionId: "intent.view.children:intent.application-root", childProjectionId: "intent.view.properties:intent.document-loader", frame }, graph);
-  assert.equal(patch.operations.length, 2);
-  assert.deepEqual(new Set(patch.operations.map((operation) => operation.nodeId)), new Set(["intent.view.children:intent.application-root", "intent.view.flow:intent.application-root"]));
-  for (const operation of patch.operations) assert.deepEqual(operation.relation.relations.find((item) => item.predicate.nodeId === "relation.projection.predicate.frame").object.value, frame);
+  assert.equal(patch.operations.length, 1);
+  assert.equal(patch.operations[0].nodeId, "intent.view.children:intent.application-root");
+  assert.deepEqual(patch.operations[0].relation.relations.find((item) => item.predicate.nodeId === "relation.projection.predicate.frame").object.value, frame);
 });
 
 test("Flow animation follows only the latest event of an active session", () => {

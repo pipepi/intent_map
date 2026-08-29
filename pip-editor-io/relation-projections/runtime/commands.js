@@ -1,4 +1,4 @@
-import { P, definitionId, isProjection, observed, targetBy } from "./selectors.js";
+import { P, observed, targetBy } from "./selectors.js";
 
 const identity = (nodeId) => ({ nodeId, relationId: "identity" });
 const ref = (id, predicate, nodeId, relations = []) => ({ id, predicate: identity(predicate), object: { kind: "ref", target: identity(nodeId) }, relations });
@@ -35,21 +35,14 @@ export function detachChild(input, graph) {
 }
 
 export function moveChild(input, graph) {
-  const parentProjection = graph.nodes[input.parentProjectionId], parent = parentProjection && observed(parentProjection, graph);
+  const parent_projection = graph.nodes[input.parentProjectionId], parent = parent_projection && observed(parent_projection, graph);
   const frame = input.frame;
   if (!parent || !graph.nodes[input.childProjectionId] || !frame || ![frame.x, frame.y, frame.width, frame.height].every(Number.isFinite)) throw new Error("Invalid child projection frame");
-  const operations = Object.values(graph.nodes).filter((node) => isProjection(node)
-    && observed(node, graph)?.id === parent.id
-    && ["relation.projection.definition.contains", "relation.projection.definition.flow"].includes(definitionId(node)))
-    .flatMap((projection) => {
-      const presents = projection.relations.find((relation) => relation.predicate.nodeId === P.presents && relation.object.kind === "ref" && relation.object.target.nodeId === input.childProjectionId);
-      if (!presents) return [];
-      const frameRelation = presents.relations.find((relation) => relation.predicate.nodeId === P.frame);
-      if (!frameRelation) throw new Error(`Projection ${projection.id} presents a child without a frame`);
-      return [{ op: "put-relation", nodeId: projection.id, relation: {
-        ...presents, relations: presents.relations.map((relation) => relation.id === frameRelation.id ? { ...relation, object: { kind: "const", value: frame } } : relation),
-      } }];
-    });
-  if (!operations.length) throw new Error("Unknown child projection frame");
-  return { schemaVersion: 1, baseRevision: graph.revision, operations };
+  const presents = parent_projection.relations.find((relation) => relation.predicate.nodeId === P.presents && relation.object.kind === "ref" && relation.object.target.nodeId === input.childProjectionId);
+  if (!presents) throw new Error("Unknown child projection frame");
+  const frame_relation = presents.relations.find((relation) => relation.predicate.nodeId === P.frame);
+  if (!frame_relation) throw new Error(`Projection ${parent_projection.id} presents a child without a frame`);
+  return { schemaVersion: 1, baseRevision: graph.revision, operations: [{ op: "put-relation", nodeId: parent_projection.id, relation: {
+    ...presents, relations: presents.relations.map((relation) => relation.id === frame_relation.id ? { ...relation, object: { kind: "const", value: frame } } : relation),
+  } }] };
 }

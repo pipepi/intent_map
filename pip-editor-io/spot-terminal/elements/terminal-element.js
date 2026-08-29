@@ -39,7 +39,7 @@ export class SpotTerminalElement extends HTMLElement {
     this.#syncTimer = setInterval(() => {
       const state = this.#context?.projection?.data, interval = state?.botFast && state?.botEnabled ? 200 : 1500;
       // Parent-space cards are passive summaries; only workspace projections drive runtime refresh.
-      if (state?.authenticated && state?.viewKind !== "embedded" && Date.now() - this.#lastSync >= interval) {
+      if (state?.authenticated && state?.runtimeActive !== false && Date.now() - this.#lastSync >= interval) {
         this.#lastSync = Date.now(); this.request("spot.terminal.sync");
       }
     }, 200);

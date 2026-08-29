@@ -5,10 +5,10 @@ import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/rel
 import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/relation-host/packages/node-type-package.ts";
 import { exactPackageRef } from "../../pip-editor/relation-host/packages/pip-package.ts";
 import { baseElementManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
-import { SPOT_ELEMENT_PLUGIN_ID, SPOT_NODE_PLUGIN_ID, SPOT_TERMINAL_TYPE, spotTerminalOntology } from "./domain.ts";
+import { SPOT_ELEMENT_PLUGIN_ID, SPOT_FACT_TYPES, SPOT_NODE_PLUGIN_ID, SPOT_TERMINAL_TYPE, spotTerminalOntology } from "./domain.ts";
 
-const elementFiles = ["elements/format.js", "elements/styles.js", "elements/environment-toggle.js", "elements/chart.js", "elements/book-scroll.js", "elements/bot-controls.js", "elements/window-navigation.js", "elements/projection-views.js", "elements/render.js", "elements/terminal-element.js", "elements/entry.js"];
-const runtimeFiles = ["runtime/selectors.js", "runtime/environment.js", "runtime/state.js", "runtime/session.js", "runtime/http.js", "runtime/periods.js", "runtime/normalize.js", "runtime/validation.js", "runtime/bot.js", "runtime/stomp.js", "runtime/fusion.js", "runtime/load.js", "runtime/commands.js", "runtime/window-chrome.js", "runtime/creator.js", "runtime/entry.js"];
+const elementFiles = ["elements/format.js", "elements/styles.js", "elements/environment-toggle.js", "elements/chart.js", "elements/book-scroll.js", "elements/bot-controls.js", "elements/window-navigation.js", "elements/projection-views.js", "elements/render.js", "elements/terminal-element.js", "elements/simple-element.js", "elements/fact-element.js", "elements/composition-element.js", "elements/entry.js"];
+const runtimeFiles = ["runtime/selectors.js", "runtime/environment.js", "runtime/state.js", "runtime/session.js", "runtime/http.js", "runtime/periods.js", "runtime/normalize.js", "runtime/validation.js", "runtime/bot.js", "runtime/stomp.js", "runtime/fusion.js", "runtime/load.js", "runtime/commands.js", "runtime/window-chrome.js", "runtime/facts/base.js", "runtime/facts/account.js", "runtime/facts/balance.js", "runtime/facts/pair.js", "runtime/facts/order-book.js", "runtime/facts/daily-summary.js", "runtime/facts/kline.js", "runtime/facts/order-event.js", "runtime/facts/trade-event.js", "runtime/facts/robot.js", "runtime/facts/reconcile.js", "runtime/projection-validation.js", "runtime/creator.js", "runtime/entry.js"];
 async function sources(paths: string[]) { return Object.fromEntries(await Promise.all(paths.map(async (path) => [`source/${path}`, await readFile(new URL(path, import.meta.url), "utf8")]))); }
 async function bundle(entry: string) {
   const result = await build({ entryPoints: [fileURLToPath(new URL(entry, import.meta.url))], bundle: true, write: false, format: "esm", platform: "browser", target: "es2022", minify: true });
@@ -16,9 +16,14 @@ async function bundle(entry: string) {
 }
 export async function buildSpotTerminalPluginSuite() {
   const [elementSources, runtimeSources, elementSource, runtimeSource] = await Promise.all([sources(elementFiles), sources(runtimeFiles), bundle("elements/entry.js"), bundle("runtime/entry.js")]);
-  const elementManifest = { ...baseElementManifest(SPOT_ELEMENT_PLUGIN_ID, "AEX Spot Terminal Elements", Object.keys(elementSources)), packageVersion: "1.9.1", elements: [{ id: "terminal", tag: "spot-terminal-view", purpose: "projection" as const }] };
+  const elementManifest = { ...baseElementManifest(SPOT_ELEMENT_PLUGIN_ID, "AEX Spot Terminal Elements", Object.keys(elementSources)), packageVersion: "1.10.0", elements: [
+    { id: "terminal", tag: "spot-terminal-view", purpose: "projection" as const },
+    { id: "terminal-simple", tag: "spot-terminal-simple", purpose: "projection" as const },
+    { id: "composition", tag: "spot-composition-view", purpose: "projection" as const },
+    { id: "fact", tag: "spot-fact-view", purpose: "projection" as const },
+  ] };
   const elementPip = await encodeElementPackage(elementManifest, elementSource, elementSources), element = await decodeElementPackage(elementPip);
-  const nodeManifest = { ...baseNodeTypeManifest(SPOT_NODE_PLUGIN_ID, "AEX Spot Terminal Types", [SPOT_TERMINAL_TYPE], [await exactPackageRef(elementPip, element.manifest)], Object.keys(runtimeSources)), packageVersion: "1.13.2" };
+  const nodeManifest = { ...baseNodeTypeManifest(SPOT_NODE_PLUGIN_ID, "AEX Spot Terminal Types", [SPOT_TERMINAL_TYPE, ...SPOT_FACT_TYPES], [await exactPackageRef(elementPip, element.manifest)], Object.keys(runtimeSources)), packageVersion: "1.14.2" };
   const nodeTypePip = await encodeNodeTypePackage(nodeManifest, spotTerminalOntology, runtimeSource, runtimeSources, [element]), nodeType = await decodeNodeTypePackage(nodeTypePip);
   return { elementPip, nodeTypePip, element, nodeType };
 }

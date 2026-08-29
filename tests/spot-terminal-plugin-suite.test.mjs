@@ -50,38 +50,43 @@ test("spot terminal bundled sources expose creator, commands and projection", as
   assert.match(suite.nodeType.entrySource, /market\/history/);
   assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.workspace/);
   assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.children/);
-  assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.embedded/);
+  assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.simple/);
   assert.match(suite.nodeType.entrySource, /surfaces/);
   assert.match(suite.nodeType.entrySource, /embedded/);
   assert.match(suite.nodeType.entrySource, /scope/);
   assert.match(suite.element.entrySource, /set-workspace-window/);
 });
 
-test("spot creator installs four contextual projection instances", () => {
+test("spot creator installs equivalent terminal projections and real child projections", () => {
   const result = terminalCreator.create({ graph: { revision: 7, nodes: {} } });
   const nodes = result.patch.operations.filter((operation) => operation.op === "put-node").map((operation) => operation.node);
   const uses = (node) => node.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.uses")?.object?.target?.nodeId;
-  assert.equal(nodes.filter((node) => uses(node)?.startsWith("spot.terminal.projection.")).length, 4);
+  assert.equal(nodes.filter((node) => uses(node)?.startsWith("spot.terminal.projection.")).length, 6);
   assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.workspace"));
   assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.children"));
   assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.world-events"));
-  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.embedded"));
+  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.simple"));
+  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.robot-simple"));
+  assert.ok(nodes.some((node) => uses(node) === "spot.terminal.projection.robot-detail"));
   const root = nodes.find((node) => node.id === result.preferredProjection.projectionId);
   assert.ok(root.relations.some((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into"));
   assert.equal(uses(nodes.find((node) => node.id === root.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into").object.target.nodeId)), "spot.terminal.projection.children");
-  const overview = nodes.find((node) => uses(node) === "spot.terminal.projection.embedded");
-  assert.equal(uses(nodes.find((node) => node.id === overview.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into").object.target.nodeId)), "spot.terminal.projection.children");
+  const simple = nodes.find((node) => uses(node) === "spot.terminal.projection.simple");
+  assert.equal(uses(nodes.find((node) => node.id === simple.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into").object.target.nodeId)), "spot.terminal.projection.children");
+  const flow = nodes.find((node) => uses(node) === "spot.terminal.projection.children");
+  assert.equal(flow.relations.filter((relation) => relation.predicate.nodeId === "relation.projection.predicate.presents").length, 1);
 });
 
-test("spot A4 runtime exposes all four created projections to workspace navigation", async () => {
+test("spot A4 runtime exposes equivalent terminal and child projections", async () => {
   const suite = await buildSpotTerminalPluginSuite();
   const nodeType = await decodeNodeTypePackage(suite.nodeTypePip);
   const registry = new NodeTypePluginRegistry({ load: dataModule });
   await registry.install(nodeType);
-  assert.deepEqual(registry.projections().map(({ scope, surfaces }) => [scope, surfaces]), [
-    ["self", ["workspace", "embedded"]], ["children", ["workspace"]], ["children", ["workspace"]], ["self", ["workspace", "embedded"]],
+  assert.equal(registry.projections().length, 22);
+  assert.deepEqual(registry.projections().slice(0, 4).map(({ scope, surfaces }) => [scope, surfaces]), [
+    ["self", ["workspace", "embedded"]], ["self", ["workspace", "embedded"]], ["children", ["workspace"]], ["children", ["workspace"]],
   ]);
-  assert.deepEqual(registry.projections().map(({ zoomViewport }) => zoomViewport?.top), [36, 36, 36, 0]);
+  assert.ok(registry.projections().slice(4).every(({ scope, surfaces, zoomViewport }) => scope === "self" && surfaces.join() === "workspace,embedded" && zoomViewport?.top === 0));
 
   const created = registry.creators().find(({ id }) => id === "spot.terminal.create")
     .create({ graph: { revision: 0, nodes: {} } });
@@ -91,9 +96,9 @@ test("spot A4 runtime exposes all four created projections to workspace navigati
     .find(({ predicate }) => predicate.nodeId === "relation.projection.predicate.observes").object.target.nodeId;
   assert.deepEqual(projectionOptions(terminalId, { revision: 1, nodes }, registry).map(({ scope, label }) => [scope, label]), [
     ["self", "↗ Spot Detail"],
+    ["self", "▣ Spot Simple"],
     ["children", "⇄ Spot Flow"],
     ["children", "◎ Spot World Events"],
-    ["self", "▣ Spot Overview"],
   ]);
 });
 

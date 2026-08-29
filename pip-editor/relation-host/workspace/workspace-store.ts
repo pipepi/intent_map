@@ -1,5 +1,5 @@
 /** Commits validated patches, publishes immutable workspace snapshots, and maintains undo/redo. */
-import { applyRelationPatch, type JsonValue, type RelationPatch } from "../../relation/index.ts";
+import { applyRelationPatch, type JsonValue, type RelationGraph, type RelationPatch } from "../../relation/index.ts";
 import type { RelationWorkspace } from "../packages/node-map-package.ts";
 import type { ExactPackageRef, RelationCreationResult, RelationValidator, WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
 import { assertWorkspaceFrame, normalizeFreeLayout, normalizeProjectionNavigation, withSystemWindows } from "./view-state.ts";
@@ -20,6 +20,22 @@ export type WorkspaceSession = RelationWorkspace & {
 export type WorkspaceHistoryEntry = { patch: RelationPatch; rootNodeIds?: string[]; projectionFrames?: Record<string, WorkspaceWindowFrame> };
 
 export type WorkspaceHistoryDirection = "undo" | "redo";
+
+const graph_safe_views = (value: JsonValue, root_node_ids: string[], graph: RelationGraph): JsonValue => {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.kind !== "free-layout") return value;
+  const views = normalizeFreeLayout(value, root_node_ids);
+  for (const frame of Object.values(views.projections)) {
+    if (!frame.navigation) continue;
+    const navigation = normalizeProjectionNavigation(frame.navigation);
+    const missing_index = navigation.entries.findIndex((entry) => !graph.nodes[entry.projectionNodeId]);
+    if (missing_index < 0) continue;
+    const entries = navigation.entries.slice(0, missing_index);
+    if (!entries.length) delete frame.navigation;
+    else frame.navigation = { entries, index: Math.min(navigation.index, entries.length - 1), semanticScale: 1 };
+  }
+  return views;
+};
+const graph_safe_selections = (values: string[], graph: RelationGraph) => values.filter((id) => Boolean(graph.nodes[id]));
 
 export class WorkspaceSessionStore {
   #value: WorkspaceSession[];
@@ -146,6 +162,9 @@ export class WorkspaceSessionStore {
     const next = {
       ...workspace,
       graph: applied.graph,
+      views: graph_safe_views(workspace.views, workspace.rootNodeIds, applied.graph),
+      selection: graph_safe_selections(workspace.selection, applied.graph),
+      scopedSelections: Object.fromEntries(Object.entries(workspace.scopedSelections ?? {}).map(([id, values]) => [id, graph_safe_selections(values, applied.graph)])),
       undo: recordHistory ? [...workspace.undo, { patch: applied.inverse }] : workspace.undo,
       redo: recordHistory ? [] : workspace.redo,
     };
@@ -192,7 +211,9 @@ export class WorkspaceSessionStore {
       if (patch.projectionFrames) for (const id of rootNodeIds) if (patch.projectionFrames[id]) freeViews.projections[id] = structuredClone(patch.projectionFrames[id]);
       views = freeViews;
     }
-    const restored = { graph: applied.graph, rootNodeIds, views };
+    const restored = { graph: applied.graph, rootNodeIds, views: graph_safe_views(views, rootNodeIds, applied.graph),
+      selection: graph_safe_selections(workspace.selection, applied.graph),
+      scopedSelections: Object.fromEntries(Object.entries(workspace.scopedSelections ?? {}).map(([id, values]) => [id, graph_safe_selections(values, applied.graph)])) };
     const next = direction === "undo"
       ? { ...workspace, ...restored, undo: stack.slice(0, -1), redo: [...workspace.redo, inverse] }
       : { ...workspace, ...restored, redo: stack.slice(0, -1), undo: [...workspace.undo, inverse] };

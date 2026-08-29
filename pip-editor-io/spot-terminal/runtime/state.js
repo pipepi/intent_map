@@ -1,5 +1,6 @@
 import { scalar } from "./selectors.js";
 import { environmentConfig } from "./environment.js";
+import { reconcile_facts } from "./facts/reconcile.js";
 
 export const STATE = "spot.terminal.predicate.state";
 export const CONFIG = "spot.terminal.predicate.config";
@@ -19,17 +20,21 @@ export const configRelation = (environment) => ({
 export const stateRelation = (value) => ({
   id: "state", predicate: { nodeId: STATE, relationId: "identity" }, object: { kind: "const", value }, relations: [],
 });
-export const patchState = (graph, terminalId, value) => ({
-  schemaVersion: 1, baseRevision: graph.revision,
-  operations: [{ op: "put-relation", nodeId: terminalId, relation: stateRelation(value) }],
-});
-export const patchEnvironment = (graph, terminalId, environment, value) => ({
-  schemaVersion: 1, baseRevision: graph.revision,
-  operations: [
-    { op: "put-relation", nodeId: terminalId, relation: configRelation(environment) },
-    { op: "put-relation", nodeId: terminalId, relation: stateRelation(value) },
-  ],
-});
+export const patchState = (graph, terminal_id, value) => {
+  const fact_patch = reconcile_facts(graph, terminal_id, value);
+  return { schemaVersion: 1, baseRevision: graph.revision, operations: [
+    ...fact_patch.operations,
+    { op: "put-relation", nodeId: terminal_id, relation: stateRelation(value) },
+  ] };
+};
+export const patchEnvironment = (graph, terminal_id, environment, value) => {
+  const fact_patch = reconcile_facts(graph, terminal_id, value);
+  return { schemaVersion: 1, baseRevision: graph.revision, operations: [
+    ...fact_patch.operations,
+    { op: "put-relation", nodeId: terminal_id, relation: configRelation(environment) },
+    { op: "put-relation", nodeId: terminal_id, relation: stateRelation(value) },
+  ] };
+};
 export const terminalNode = (input, graph) => {
   if (!input || typeof input.terminalId !== "string" || !graph.nodes[input.terminalId]) throw new Error("交易终端上下文已失效");
   return graph.nodes[input.terminalId];
