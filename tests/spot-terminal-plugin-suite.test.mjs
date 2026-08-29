@@ -51,9 +51,9 @@ test("spot terminal bundled sources expose creator, commands and projection", as
   assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.workspace/);
   assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.children/);
   assert.match(suite.nodeType.entrySource, /spot\.terminal\.projection\.embedded/);
-  assert.match(suite.nodeType.entrySource, /children-workspace/);
-  assert.match(suite.nodeType.entrySource, /self-embedded/);
-  assert.match(suite.nodeType.entrySource, /self-workspace/);
+  assert.match(suite.nodeType.entrySource, /surfaces/);
+  assert.match(suite.nodeType.entrySource, /embedded/);
+  assert.match(suite.nodeType.entrySource, /scope/);
   assert.match(suite.element.entrySource, /set-workspace-window/);
 });
 
@@ -69,6 +69,8 @@ test("spot creator installs four contextual projection instances", () => {
   const root = nodes.find((node) => node.id === result.preferredProjection.projectionId);
   assert.ok(root.relations.some((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into"));
   assert.equal(uses(nodes.find((node) => node.id === root.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into").object.target.nodeId)), "spot.terminal.projection.children");
+  const overview = nodes.find((node) => uses(node) === "spot.terminal.projection.embedded");
+  assert.equal(uses(nodes.find((node) => node.id === overview.relations.find((relation) => relation.predicate.nodeId === "relation.projection.predicate.dives-into").object.target.nodeId)), "spot.terminal.projection.children");
 });
 
 test("spot A4 runtime exposes all four created projections to workspace navigation", async () => {
@@ -76,8 +78,8 @@ test("spot A4 runtime exposes all four created projections to workspace navigati
   const nodeType = await decodeNodeTypePackage(suite.nodeTypePip);
   const registry = new NodeTypePluginRegistry({ load: dataModule });
   await registry.install(nodeType);
-  assert.deepEqual(registry.projections().map(({ contexts }) => contexts), [
-    ["self-workspace"], ["children-workspace"], ["children-workspace"], ["self-workspace", "self-embedded"],
+  assert.deepEqual(registry.projections().map(({ scope, surfaces }) => [scope, surfaces]), [
+    ["self", ["workspace", "embedded"]], ["children", ["workspace"]], ["children", ["workspace"]], ["self", ["workspace", "embedded"]],
   ]);
   assert.deepEqual(registry.projections().map(({ zoomViewport }) => zoomViewport?.top), [36, 36, 36, 0]);
 
@@ -87,11 +89,11 @@ test("spot A4 runtime exposes all four created projections to workspace navigati
     .filter(({ op }) => op === "put-node").map(({ node }) => [node.id, node]));
   const terminalId = nodes[created.preferredProjection.projectionId].relations
     .find(({ predicate }) => predicate.nodeId === "relation.projection.predicate.observes").object.target.nodeId;
-  assert.deepEqual(projectionOptions(terminalId, { revision: 1, nodes }, registry).map(({ context, label }) => [context, label]), [
-    ["self-workspace", "↗ Spot Trading Terminal"],
-    ["children-workspace", "⇄ Spot Children · Flow"],
-    ["children-workspace", "◎ Spot Children · World Events"],
-    ["self-workspace", "▣ Spot Compact Card"],
+  assert.deepEqual(projectionOptions(terminalId, { revision: 1, nodes }, registry).map(({ scope, label }) => [scope, label]), [
+    ["self", "↗ Spot Detail"],
+    ["children", "⇄ Spot Flow"],
+    ["children", "◎ Spot World Events"],
+    ["self", "▣ Spot Overview"],
   ]);
 });
 
@@ -105,8 +107,8 @@ test("spot A3 renders internal workspace and compact parent-space views", () => 
 test("spot A4 supplies window navigation state and A3 renders its chrome", () => {
   const frame = { x: 10, y: 20, width: 390, height: 720, navigation: {
     index: 1, semanticScale: 1.25, entries: [
-      { projectionNodeId: "parent", context: "self-workspace", enteredFrom: undefined },
-      { projectionNodeId: "spot-view", context: "self-workspace" },
+      { projectionNodeId: "parent", scope: "self", enteredFrom: undefined },
+      { projectionNodeId: "spot-view", scope: "self" },
     ],
   } };
   const state = withWindowChrome({ authenticated: false }, { projections: { "root-window": frame } }, "spot-view");
@@ -123,17 +125,17 @@ test("spot A4 supplies window navigation state and A3 renders its chrome", () =>
 
 test("spot plugin chrome renders and selects all semantic projection routes", () => {
   const options = [
-    { projectionNodeId: "self", observedNodeId: "spot", context: "self-workspace", label: "观察自身外部视角 · 工作空间" },
-    { projectionNodeId: "children", observedNodeId: "spot", context: "children-workspace", label: "观察直接子级内部视角 · 工作空间" },
-    { projectionNodeId: "embedded", observedNodeId: "spot", context: "self-workspace", label: "观察自身外部视角 · 父节点空间" },
+    { projectionNodeId: "self", observedNodeId: "spot", scope: "self", label: "Detail · 观察自身" },
+    { projectionNodeId: "children", observedNodeId: "spot", scope: "children", label: "Flow · 观察子级" },
+    { projectionNodeId: "embedded", observedNodeId: "spot", scope: "self", label: "Overview · 观察自身" },
   ];
   const state = withWindowChrome({}, { projections: { window: { navigation: {
-    index: 0, semanticScale: 1, entries: [{ projectionNodeId: "self", observedNodeId: "spot", context: "self-workspace" }],
+    index: 0, semanticScale: 1, entries: [{ projectionNodeId: "self", observedNodeId: "spot", scope: "self" }],
   } } } }, "self", "Spot Trading Terminal", options);
   const html = windowNavigation(state);
   assert.equal((html.match(/<option/g) ?? []).length, 3);
   assert.match(html, /value="children"/);
-  assert.match(html, /父节点空间/);
+  assert.match(html, /Overview · 观察自身/);
 });
 
 test("spot A3 consumes the host semantic zoom variable for every projection view", async () => {

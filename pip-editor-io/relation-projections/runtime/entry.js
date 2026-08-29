@@ -18,17 +18,17 @@ export default function register(host) {
     label(node, graph) { const target = observed(node, graph); return `${target ? nameOf(target) : node.id} · ${definitionId(node)?.split(".").at(-1) ?? "projection"}`; },
   }));
   releases.push(host.registerProjection({
-    id: "relation.properties", name: "属性", icon: "▤", definition: ref("relation.projection.definition.properties"), contexts: ["self-workspace", "self-embedded"],
+    id: "relation.properties", name: "属性", icon: "▤", definition: ref("relation.projection.definition.properties"), scope: "self", surfaces: ["workspace", "embedded"],
     matches(node) { return definitionId(node) === "relation.projection.definition.properties"; }, project: projectProperties,
     element: { pluginId: "official.relation-projection-elements", elementId: "properties" },
   }));
   releases.push(host.registerProjection({
-    id: "relation.contains", name: "直接子级", icon: "⌘", definition: ref("relation.projection.definition.contains"), contexts: ["children-workspace"],
+    id: "relation.contains", name: "直接子级", icon: "⌘", definition: ref("relation.projection.definition.contains"), scope: "children", surfaces: ["workspace"],
     matches(node) { return definitionId(node) === "relation.projection.definition.contains"; }, project: projectChildren,
     element: { pluginId: "official.relation-projection-elements", elementId: "contains" },
   }));
   releases.push(host.registerProjection({
-    id: "relation.flow", name: "执行流", icon: "⇄", definition: ref("relation.projection.definition.flow"), contexts: ["children-workspace"],
+    id: "relation.flow", name: "执行流", icon: "⇄", definition: ref("relation.projection.definition.flow"), scope: "children", surfaces: ["workspace"],
     matches(node) { return definitionId(node) === "relation.projection.definition.flow"; }, project: projectFlowChildren,
     element: { pluginId: "official.relation-projection-elements", elementId: "contains" },
   }));

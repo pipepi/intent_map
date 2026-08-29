@@ -87,7 +87,7 @@ export function NodeCanvas({ workspace, elements, nodeTypes, execution, pluginMa
           if (navigation) {
             const focused = path.find((item) => item?.dataset?.embeddedProjection)?.dataset.embeddedProjection;
             const selection = scopedSelections[windowId] ?? workspace.selection, route = navigation.entries[navigation.index];
-            const gestureKey = `${workspace.id}:${windowId}`, routeKey = `${navigation.index}:${route.projectionNodeId}:${route.context}`;
+            const gestureKey = `${workspace.id}:${windowId}`, routeKey = `${navigation.index}:${route.projectionNodeId}:${route.scope}`;
             const previous = semanticGestures.current.get(gestureKey);
             const finishGesture = () => {
               const old = settleTimers.current.get(gestureKey); if (old) clearTimeout(old);

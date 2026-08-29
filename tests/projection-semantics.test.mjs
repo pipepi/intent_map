@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
-import { assertProjectionRegistration } from "../pip-editor/relation-host/projection/projection-context.ts";
+import { assertProjectionRegistration, normalizeProjectionRegistration } from "../pip-editor/relation-host/projection/projection-context.ts";
 import { resolveNodePresentation } from "../pip-editor/relation-host/projection/resolve-presentation.ts";
 import { initialNavigation, navigateProjection, replaceCurrentProjection } from "../pip-editor/relation-host/projection/projection-navigation.ts";
 import { forwardRoute, navigationForRoot } from "../pip-editor/relation-host/projection/projection-routes.ts";
@@ -23,14 +23,21 @@ async function fixture() {
   return { suite, registry, graph: suite.nodeMap.graph };
 }
 
-test("projection contexts are a closed three-state union", () => {
+test("projection capabilities normalize legacy contexts into scope and surfaces", () => {
   const base = { id: "test", definition: { nodeId: "test.definition", relationId: "identity" }, matches: () => true, element: { pluginId: "p", elementId: "e" } };
-  assert.doesNotThrow(() => assertProjectionRegistration({ ...base, contexts: ["self-workspace", "self-embedded"] }));
-  assert.doesNotThrow(() => assertProjectionRegistration({ ...base, contexts: ["children-workspace"] }));
+  assert.deepEqual(normalizeProjectionRegistration({ ...base, contexts: ["self-workspace", "self-embedded"] }), {
+    ...base, scope: "self", surfaces: ["workspace", "embedded"], contexts: ["self-workspace", "self-embedded"],
+  });
+  assert.deepEqual(normalizeProjectionRegistration({ ...base, contexts: ["children-workspace"] }).scope, "children");
+  assert.doesNotThrow(() => assertProjectionRegistration({ ...base, scope: "self", surfaces: ["workspace", "embedded"] }));
+  assert.doesNotThrow(() => assertProjectionRegistration({ ...base, scope: "children", surfaces: ["workspace"] }));
   assert.throws(() => assertProjectionRegistration({ ...base, contexts: ["self-embedded"] }), /self-workspace/);
   assert.throws(() => assertProjectionRegistration({ ...base, contexts: ["children-workspace", "self-embedded"] }), /cannot combine/);
-  assert.doesNotThrow(() => assertProjectionRegistration({ ...base, zoomViewport: { top: 36, right: 0, bottom: 0, left: 0 } }));
-  assert.throws(() => assertProjectionRegistration({ ...base, zoomViewport: { top: -1, right: 0, bottom: 0, left: 0 } }), /zoom viewport/);
+  assert.throws(() => assertProjectionRegistration({ ...base, scope: "children", surfaces: ["workspace", "embedded"] }), /children scope/);
+  assert.throws(() => assertProjectionRegistration({ ...base, scope: "self", surfaces: ["embedded"] }), /workspace before embedded/);
+  assert.throws(() => assertProjectionRegistration({ ...base, scope: "self", surfaces: ["workspace"], contexts: ["children-workspace"] }), /conflicting/);
+  assert.doesNotThrow(() => assertProjectionRegistration({ ...base, scope: "self", surfaces: ["workspace"], zoomViewport: { top: 36, right: 0, bottom: 0, left: 0 } }));
+  assert.throws(() => assertProjectionRegistration({ ...base, scope: "self", surfaces: ["workspace"], zoomViewport: { top: -1, right: 0, bottom: 0, left: 0 } }), /zoom viewport/);
 });
 
 test("Scene A5 contains a persistent complete projection bundle", async () => {
@@ -49,6 +56,7 @@ test("explicit projection instances resolve by uses and enforce their context", 
   const elements = { resolve: (_pluginId, elementId) => ({ id: elementId, tag: `test-${elementId}`, purpose: "projection" }) };
   const embedded = resolveNodePresentation(node, graph, elements, registry, "workspace", { workspaceId: "w", rootNodeIds: [], workspaceView: {}, selection: [], projectionContext: { kind: "self-embedded", parentProjectionNodeId: "scene.view.children:scene.today", frame: { x: 0, y: 0, width: 320, height: 220, resizeMode: "simple" } } });
   assert.equal(embedded.projection.id, "relation.properties"); assert.equal(embedded.projectionData.compact, true);
+  assert.deepEqual([embedded.context.scope, embedded.context.surface, embedded.context.kind], ["self", "embedded", "self-embedded"]);
   const invalid = resolveNodePresentation(graph.nodes["scene.view.children:scene.today"], graph, elements, registry, "workspace", { workspaceId: "w", rootNodeIds: [], workspaceView: {}, selection: [], projectionContext: { kind: "self-embedded", parentProjectionNodeId: "x", frame: { x: 0, y: 0, width: 320, height: 220, resizeMode: "simple" } } });
   assert.match(invalid.error, /does not support self-embedded/);
 });
@@ -70,10 +78,17 @@ test("semantic routes recurse self → children → child self without creating 
   assert.equal(semanticProgress(1.4), 0); assert.equal(semanticProgress(1.7), 1); assert.equal(semanticProgress(.6), 1);
 });
 
+test("self projections without an explicit dives-into relation do not infer a child level", async () => {
+  const { graph, registry } = await fixture(), isolated = structuredClone(graph);
+  isolated.nodes["scene.view.quadrant"].relations = isolated.nodes["scene.view.quadrant"].relations
+    .filter((item) => item.predicate.nodeId !== "relation.projection.predicate.dives-into");
+  assert.equal(forwardRoute(navigationForRoot("scene.view.quadrant", isolated, registry), isolated, registry), undefined);
+});
+
 test("switching sibling observations does not create a semantic zoom level", () => {
-  const self = { projectionNodeId: "self", observedNodeId: "node", context: "self-workspace" };
-  const children = { projectionNodeId: "children", observedNodeId: "node", context: "children-workspace" };
-  const flow = { projectionNodeId: "flow", observedNodeId: "node", context: "children-workspace" };
+  const self = { projectionNodeId: "self", observedNodeId: "node", scope: "self" };
+  const children = { projectionNodeId: "children", observedNodeId: "node", scope: "children" };
+  const flow = { projectionNodeId: "flow", observedNodeId: "node", scope: "children" };
   const entered = navigateProjection(initialNavigation(self), children);
   const switched = replaceCurrentProjection(entered, flow);
   assert.deepEqual(switched.entries, [self, flow]);
@@ -141,7 +156,7 @@ test("ending a partial semantic pinch preserves its chosen scale", async () => {
   assert.match(settle, /semanticGestures\.current\.delete/);
   assert.doesNotMatch(settle, /semanticScale:\s*1/);
   assert.match(settle, /if \(previous\?\.switched\) \{ finishGesture\(\); return; \}/);
-  assert.equal(applySemanticScale({ entries: [{ projectionNodeId: "p", observedNodeId: "n", context: "self-workspace" }], index: 0, semanticScale: 1 }, 1.3).semanticScale, 1.3);
+  assert.equal(applySemanticScale({ entries: [{ projectionNodeId: "p", observedNodeId: "n", scope: "self" }], index: 0, semanticScale: 1 }, 1.3).semanticScale, 1.3);
 });
 
 test("semantic transition preserves the pre-rendered target across route promotion", async () => {

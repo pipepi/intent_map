@@ -2,7 +2,7 @@
 import { applyRelationPatch, type JsonValue, type RelationPatch } from "../../relation/index.ts";
 import type { RelationWorkspace } from "../packages/node-map-package.ts";
 import type { ExactPackageRef, RelationCreationResult, RelationValidator, WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
-import { assertWorkspaceFrame, normalizeFreeLayout, withSystemWindows } from "./view-state.ts";
+import { assertWorkspaceFrame, normalizeFreeLayout, normalizeProjectionNavigation, withSystemWindows } from "./view-state.ts";
 
 export type CapabilityDiagnostic = {
   dependencyKind: "element" | "node-type";
@@ -70,9 +70,11 @@ export class WorkspaceSessionStore {
   setWindow(workspaceId: string, windowId: string, frame: WorkspaceWindowFrame) {
     const workspace = this.#workspace(workspaceId), views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
     assertWorkspaceFrame(frame, views.world);
-    if (views.projections[windowId]) views.projections[windowId] = structuredClone(frame);
+    const normalized = structuredClone(frame);
+    if (normalized.navigation) normalized.navigation = normalizeProjectionNavigation(normalized.navigation);
+    if (views.projections[windowId]) views.projections[windowId] = normalized;
     else if (views.systemWindows[windowId]) {
-      views.systemWindows[windowId].frame = structuredClone(frame);
+      views.systemWindows[windowId].frame = normalized;
       if ((workspace.views as { kind?: unknown })?.kind !== "free-layout") return void this.updateViews(workspaceId, withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId, views.frontWindowId));
     }
     else throw new Error(`Unknown workspace window ${windowId}`);

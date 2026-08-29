@@ -1,5 +1,5 @@
 import type { JsonValue } from "../../relation/index.ts";
-import type { ProjectionExecutionViewState, WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
+import type { ObservationScope, ProjectionExecutionViewState, ProjectionNavigationState, ProjectionRouteEntry, WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
 import { exportedNavigation } from "../projection/projection-navigation.ts";
 
 export type SystemWorkspaceWindow = { id: string; type: "plugin-manager"; frame: WorkspaceWindowFrame };
@@ -17,6 +17,31 @@ const DEFAULT_WORLD = { width: 2600, height: 1600 };
 const DEFAULT_CAMERA = { scale: 1, x: 0, y: 0 };
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+const routeScope = (value: Record<string, unknown>): ObservationScope | undefined => {
+  if (value.scope === "self" || value.scope === "children") return value.scope;
+  if (value.context === "self-workspace") return "self";
+  if (value.context === "children-workspace") return "children";
+};
+
+export const normalizeProjectionNavigation = (value: unknown): ProjectionNavigationState => {
+  const navigation = record(value), rawEntries = navigation?.entries;
+  if (!navigation || !Array.isArray(rawEntries) || !rawEntries.length || !Number.isInteger(navigation.index) || Number(navigation.index) < 0 || Number(navigation.index) >= rawEntries.length || !finite(navigation.semanticScale)) {
+    throw new Error("Workspace projection navigation is invalid");
+  }
+  const entries: ProjectionRouteEntry[] = rawEntries.map((raw) => {
+    const entry = record(raw), scope = entry && routeScope(entry), entered = entry && record(entry.enteredFrom);
+    if (!entry || typeof entry.projectionNodeId !== "string" || typeof entry.observedNodeId !== "string" || !scope) throw new Error("Workspace projection route is invalid");
+    if (entry.enteredFrom !== undefined && (!entered || typeof entered.parentInternalProjectionId !== "string" || typeof entered.childProjectionId !== "string")) throw new Error("Workspace projection route origin is invalid");
+    return { projectionNodeId: entry.projectionNodeId, observedNodeId: entry.observedNodeId, scope,
+      ...(entered ? { enteredFrom: { parentInternalProjectionId: String(entered.parentInternalProjectionId), childProjectionId: String(entered.childProjectionId) } } : {}) };
+  });
+  const origin = navigation.semanticOrigin === undefined ? undefined : record(navigation.semanticOrigin);
+  if (navigation.semanticOrigin !== undefined && (!origin || !finite(origin.x) || !finite(origin.y))) throw new Error("Workspace projection semantic origin is invalid");
+  if (navigation.semanticTargetProjectionId !== undefined && typeof navigation.semanticTargetProjectionId !== "string") throw new Error("Workspace projection semantic target is invalid");
+  return { entries, index: Number(navigation.index), semanticScale: Number(navigation.semanticScale),
+    ...(origin ? { semanticOrigin: { x: Number(origin.x), y: Number(origin.y) } } : {}),
+    ...(typeof navigation.semanticTargetProjectionId === "string" ? { semanticTargetProjectionId: navigation.semanticTargetProjectionId } : {}) };
+};
 export const defaultFrame = (index = 0): WorkspaceWindowFrame => ({
   x: 80 + index % 2 * 1240, y: 80 + Math.floor(index / 2) * 800, width: 1120, height: 720, resizeMode: "simple", contentScale: 1,
   execution: { flowLayerVisible: true, followActiveEvent: false },
@@ -60,12 +85,7 @@ export function assertWorkspaceFrame(value: unknown, world = DEFAULT_WORLD): ass
   const offset = item.contentOffset === undefined ? undefined : record(item.contentOffset);
   if (item.contentOffset !== undefined && (!offset || !finite(offset.x) || !finite(offset.y))) throw new Error("Workspace content offset is invalid");
   if (item.navigation !== undefined) {
-    const navigation = record(item.navigation), entries = navigation?.entries, origin = navigation?.semanticOrigin === undefined ? undefined : record(navigation.semanticOrigin);
-    if (!navigation || !Array.isArray(entries) || !entries.length || !Number.isInteger(navigation.index) || Number(navigation.index) < 0 || Number(navigation.index) >= entries.length || !finite(navigation.semanticScale)) {
-      throw new Error("Workspace projection navigation is invalid");
-    }
-    if (navigation.semanticOrigin !== undefined && (!origin || !finite(origin.x) || !finite(origin.y))) throw new Error("Workspace projection semantic origin is invalid");
-    if (navigation.semanticTargetProjectionId !== undefined && typeof navigation.semanticTargetProjectionId !== "string") throw new Error("Workspace projection semantic target is invalid");
+    normalizeProjectionNavigation(item.navigation);
   }
   if (item.execution !== undefined) {
     const execution = record(item.execution);
@@ -88,7 +108,9 @@ export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): Fr
     const candidate = projectionValue?.[id];
     try {
       assertWorkspaceFrame(candidate, world);
-      const frame = structuredClone(candidate as WorkspaceWindowFrame); frame.execution = normalizeExecutionView(frame.execution); projections[id] = frame;
+      const frame = structuredClone(candidate as WorkspaceWindowFrame);
+      if (frame.navigation) frame.navigation = normalizeProjectionNavigation(frame.navigation);
+      frame.execution = normalizeExecutionView(frame.execution); projections[id] = frame;
     }
     catch { projections[id] = defaultFrame(index); }
   });

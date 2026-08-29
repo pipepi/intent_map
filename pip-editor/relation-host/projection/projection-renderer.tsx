@@ -1,7 +1,7 @@
 /** Bridges pure projection data into a plugin Web Component and routes its requests back to the host. */
 import { createElement, useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { Relation, RelationGraph, RelationNode } from "../../relation/index.ts";
-import type { ElementContext, ExecutionContextSnapshot, ProjectionContext, RelationElementRequest, WorkspaceWindowFrame } from "../contracts/package-types.ts";
+import type { ElementContext, ExecutionContextSnapshot, ProjectionContextInput, RelationElementRequest, WorkspaceWindowFrame } from "../contracts/package-types.ts";
 import type { ElementPluginRegistry } from "../activation/element-registry.ts";
 import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts";
 import { resolveNodePresentation } from "./resolve-presentation.ts";
@@ -63,7 +63,7 @@ function PluginProjection({ tag, context, onRequest, children }: { tag: string; 
 export function RelationNodeRenderer({ workspaceId, rootNodeIds, workspaceView, graph, node, selection, purpose = "node", projectionContext, execution, elements, nodeTypes, onRequest }: {
   workspaceId: string; rootNodeIds: string[]; workspaceView: import("../../relation/index.ts").JsonValue;
   graph: RelationGraph; node: RelationNode; selection: string[]; purpose?: "node" | "workspace";
-  projectionContext?: ProjectionContext;
+  projectionContext?: ProjectionContextInput;
   elements: ElementPluginRegistry; nodeTypes: NodeTypePluginRegistry;
   execution?: ExecutionContextSnapshot;
   onRequest: (request: RelationElementRequest) => void;
@@ -77,7 +77,7 @@ export function RelationNodeRenderer({ workspaceId, rootNodeIds, workspaceView, 
   }), [workspaceId, rootNodeIds, workspaceView, graph, node, observed, contextKind, type, selection, projection, projectionData, execution]);
   if (error) return <div className={styles.orphan}><div className={styles.nodeHeading}><strong>{node.id}</strong><span>projection error</span></div><p>{error}</p><RawRelations relations={node.relations} /></div>;
   if (declaration) return <PluginProjection tag={declaration.tag} context={context} onRequest={onRequest}>
-    {contextKind?.kind === "children-workspace" && <EmbeddedItems data={projectionData} workspaceId={workspaceId} rootNodeIds={rootNodeIds} workspaceView={workspaceView} graph={graph} selection={selection} execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />}
+    {contextKind?.scope === "children" && contextKind.surface === "workspace" && <EmbeddedItems data={projectionData} workspaceId={workspaceId} rootNodeIds={rootNodeIds} workspaceView={workspaceView} graph={graph} selection={selection} execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />}
   </PluginProjection>;
   return <div className={styles.orphan}>
     <div className={styles.nodeHeading}><strong>{node.id}</strong><span>{type?.name ?? "orphan RelationNode"}</span></div>
@@ -98,7 +98,7 @@ function EmbeddedItems({ data, workspaceId, rootNodeIds, workspaceView, graph, s
     const node = graph.nodes[projectionNodeId]; if (!node || !frame) return [];
     return [<article key={projectionNodeId} data-embedded-projection={projectionNodeId} style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height }}>
       <RelationNodeRenderer workspaceId={workspaceId} rootNodeIds={rootNodeIds} workspaceView={workspaceView} graph={graph} node={node} selection={selection}
-        purpose="workspace" projectionContext={{ kind: "self-embedded", parentProjectionNodeId: String(raw.parentProjectionNodeId ?? ""), frame }} execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
+        purpose="workspace" projectionContext={{ scope: "self", surface: "embedded", kind: "self-embedded", parentProjectionNodeId: String(raw.parentProjectionNodeId ?? ""), frame }} execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
     </article>];
   })}</>;
 }

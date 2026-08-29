@@ -2,14 +2,12 @@ import type { RelationGraph } from "../../relation/index.ts";
 import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts";
 import type { ProjectionNavigationState, ProjectionRouteEntry } from "../contracts/package-types.ts";
 import { currentRoute, initialNavigation } from "./projection-navigation.ts";
-import { PROJECTION, inferWorkspaceContext, observedNode, presentedProjections, projectionForInstance, targetByPredicate } from "./projection-instance.ts";
+import { PROJECTION, observationScope, observedNode, presentedProjections, projectionForInstance, targetByPredicate } from "./projection-instance.ts";
 
 export function routeForProjection(projectionNodeId: string, graph: RelationGraph, nodeTypes: NodeTypePluginRegistry, enteredFrom?: ProjectionRouteEntry["enteredFrom"]): ProjectionRouteEntry | undefined {
   const node = graph.nodes[projectionNodeId], observed = node && observedNode(node, graph), definition = node && projectionForInstance(node, nodeTypes.projections());
   if (!node || !observed || !definition) return;
-  const context = inferWorkspaceContext(definition);
-  if (context === "self-embedded") return;
-  return { projectionNodeId, observedNodeId: observed.id, context, enteredFrom };
+  return { projectionNodeId, observedNodeId: observed.id, scope: observationScope(definition), enteredFrom };
 }
 
 export function navigationForRoot(rootNodeId: string, graph: RelationGraph, nodeTypes: NodeTypePluginRegistry, current?: ProjectionNavigationState) {
@@ -20,7 +18,7 @@ export function navigationForRoot(rootNodeId: string, graph: RelationGraph, node
 
 export function forwardRoute(state: ProjectionNavigationState, graph: RelationGraph, nodeTypes: NodeTypePluginRegistry, focusedProjectionId?: string, selectedNodeId?: string) {
   const route = currentRoute(state), node = graph.nodes[route.projectionNodeId]; if (!node) return;
-  if (route.context === "self-workspace") {
+  if (route.scope === "self") {
     const target = targetByPredicate(node, PROJECTION.divesInto)?.nodeId;
     return target ? routeForProjection(target, graph, nodeTypes) : undefined;
   }
@@ -36,7 +34,8 @@ export function projectionOptions(observedNodeId: string, graph: RelationGraph, 
   return Object.values(graph.nodes).flatMap((node) => {
     const observed = observedNode(node, graph), projection = projectionForInstance(node, nodeTypes.projections());
     if (observed?.id !== observedNodeId || !projection) return [];
-    const context = inferWorkspaceContext(projection);
-    return context === "self-embedded" ? [] : [{ projectionNodeId: node.id, context, label: `${projection.icon ? `${projection.icon} ` : ""}${projection.name ?? projection.id}` }];
+    return projection.surfaces?.includes("workspace")
+      ? [{ projectionNodeId: node.id, scope: observationScope(projection), label: `${projection.icon ? `${projection.icon} ` : ""}${projection.name ?? projection.id}` }]
+      : [];
   });
 }

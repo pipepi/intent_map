@@ -18,7 +18,7 @@ import type {
   PluginInstallStatus,
 } from "../contracts/package-types.ts";
 import { assertSameImmutablePlugin } from "../packages/package-identity.ts";
-import { assertProjectionRegistration } from "../projection/projection-context.ts";
+import { normalizeProjectionRegistration } from "../projection/projection-context.ts";
 
 type LoadedNodeTypeModule = { default?: (host: NodeTypePluginHost) => void | Disposable };
 export type NodeTypeRuntimeAdapter = { load(source: string): Promise<LoadedNodeTypeModule> };
@@ -108,8 +108,8 @@ export class NodeTypePluginRegistry {
       registerCommand: (id, command) => own(this.#commands, id, command, "Command"),
       registerExecutor: (id, executor) => own(this.#executors, id, executor, "Executor"),
       registerProjection: (projection) => {
-        assertProjectionRegistration(projection);
-        return own(this.#projections, projection.id, projection, "Projection");
+        const normalized = normalizeProjectionRegistration(projection);
+        return own(this.#projections, projection.id, normalized, "Projection");
       },
       registerCreator: (creator) => own(this.#creators, creator.id, creator, "Creator"),
       registerLanguageProvider: (provider) => own(this.#languages, provider.id, provider, "Language provider"),

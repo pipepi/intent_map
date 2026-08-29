@@ -14,14 +14,21 @@ export type ResolvedNodeType = {
   label?: (node: RelationNode, graph: RelationGraph) => string;
   projectionDefaults?: { selfWorkspace?: string; selfEmbedded: string; childrenWorkspace: string };
 };
-/** Projection contexts are a closed union: a children projection is never embedded. */
+export type ObservationScope = "self" | "children";
+export type ProjectionSurface = "workspace" | "embedded";
+/** Legacy combined capability retained while A3/A4 packages migrate to scope + surface. */
+export type ProjectionContextKind = "self-workspace" | "children-workspace" | "self-embedded";
+/** Runtime contexts expose the orthogonal model and a derived legacy kind for old plugins. */
 export type ProjectionContext =
+  | { scope: "self"; surface: "workspace"; kind: "self-workspace" }
+  | { scope: "children"; surface: "workspace"; kind: "children-workspace" }
+  | { scope: "self"; surface: "embedded"; kind: "self-embedded"; parentProjectionNodeId: string; frame: WorkspaceWindowFrame };
+export type ProjectionContextInput = ProjectionContext
   | { kind: "self-workspace" }
   | { kind: "children-workspace" }
   | { kind: "self-embedded"; parentProjectionNodeId: string; frame: WorkspaceWindowFrame };
-export type ProjectionContextKind = ProjectionContext["kind"];
 export type ProjectionRouteEntry = {
-  projectionNodeId: string; observedNodeId: string; context: "self-workspace" | "children-workspace";
+  projectionNodeId: string; observedNodeId: string; scope: ObservationScope;
   enteredFrom?: { parentInternalProjectionId: string; childProjectionId: string };
 };
 export type ProjectionNavigationState = {
@@ -130,7 +137,10 @@ export type RelationCreator = {
   create(context: RelationCreationContext, input?: JsonValue): RelationCreationResult | Promise<RelationCreationResult>;
 };
 export type RelationProjection = {
-  id: string; name?: string; icon?: string; purpose?: "node" | "workspace"; definition?: RelationRef; contexts?: ProjectionContextKind[];
+  id: string; name?: string; icon?: string; purpose?: "node" | "workspace"; definition?: RelationRef;
+  scope?: ObservationScope; surfaces?: ProjectionSurface[];
+  /** @deprecated Use scope and surfaces. */
+  contexts?: ProjectionContextKind[];
   windowChrome?: "host" | "plugin";
   /** A3 visual boundary, relayed by A4 so A2 clips semantic transitions to scalable content. */
   zoomViewport?: { top: number; right: number; bottom: number; left: number };

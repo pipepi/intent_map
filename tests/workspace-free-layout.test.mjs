@@ -32,6 +32,8 @@ test("workspace frame accepts a finite pointer origin for semantic transitions",
     navigation: { entries: [{ projectionNodeId: "p", observedNodeId: "n", context: "self-workspace" }], index: 0, semanticScale: 1.55, semanticOrigin: { x: 260, y: 180 } },
   } }, systemWindows: {} }, ["p"]);
   assert.deepEqual(views.projections.p.navigation.semanticOrigin, { x: 260, y: 180 });
+  assert.deepEqual(views.projections.p.navigation.entries[0], { projectionNodeId: "p", observedNodeId: "n", scope: "self" });
+  assert.equal("context" in exportedWorkspaceViews(views).projections.p.navigation.entries[0], false);
 });
 
 test("view-only changes preserve graph revision and history while system windows stay local", async () => {
@@ -53,6 +55,11 @@ test("view-only changes preserve graph revision and history while system windows
   store.setWindow(workspace.id, "scene.view.quadrant", { ...views.projections["scene.view.quadrant"], contentScale: 1.4 });
   current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.equal(views.projections["scene.view.quadrant"].contentScale, 1.4);
+  store.setWindow(workspace.id, "scene.view.quadrant", { ...views.projections["scene.view.quadrant"], navigation: {
+    entries: [{ projectionNodeId: "scene.view.quadrant", observedNodeId: "scene.today", context: "self-workspace" }], index: 0, semanticScale: 1,
+  } });
+  current = store.list()[0];
+  assert.deepEqual(current.views.projections["scene.view.quadrant"].navigation.entries[0], { projectionNodeId: "scene.view.quadrant", observedNodeId: "scene.today", scope: "self" });
   assert.deepEqual(exportedWorkspaceViews(current.views).systemWindows, {});
   assert.equal(exportedWorkspaceViews(current.views).activeWindowId, undefined);
   assert.equal(exportedWorkspaceViews(current.views).frontWindowId, "scene.view.quadrant");

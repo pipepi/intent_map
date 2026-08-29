@@ -10,6 +10,7 @@ import { projectionForInstance } from "./projection-instance.ts";
 import { forwardRoute } from "./projection-routes.ts";
 import { semanticProgress } from "./semantic-zoom.ts";
 import { RelationNodeRenderer } from "./projection-renderer.tsx";
+import { workspaceProjectionContext } from "./projection-context.ts";
 import styles from "../view/relation-host.module.css";
 
 type FlipFrame = { key: string; x: number; y: number; scaleX: number; scaleY: number; viewportWidth: number; viewportHeight: number };
@@ -67,7 +68,7 @@ export function SemanticProjection({ workspace, workspaceView, rootWindowId, nav
       "--projection-zoom": target ? "1" : transition ? String(forwardFlip ? 1.4 : .75) : String(navigation.semanticScale),
     } as CSSProperties}>
       <RelationNodeRenderer workspaceId={workspace.id} rootNodeIds={workspace.rootNodeIds} workspaceView={workspaceView} graph={workspace.graph} node={node} selection={selection}
-        purpose="workspace" projectionContext={{ kind: entry.context }} execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
+        purpose="workspace" projectionContext={workspaceProjectionContext(entry.scope)} execution={execution} elements={elements} nodeTypes={nodeTypes} onRequest={onRequest} />
     </div></div>;
   };
   return <div ref={viewport} className={styles.semanticViewport} data-root-window={rootWindowId}>

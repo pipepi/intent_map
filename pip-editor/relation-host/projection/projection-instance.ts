@@ -1,6 +1,7 @@
 /** Generic projection ontology helpers shared by resolution, navigation, and composition. */
 import type { Relation, RelationGraph, RelationNode, RelationRef } from "../../relation/index.ts";
-import type { ProjectionContextKind, RelationProjection, WorkspaceWindowFrame } from "../contracts/package-types.ts";
+import type { ObservationScope, RelationProjection, WorkspaceWindowFrame } from "../contracts/package-types.ts";
+import { normalizeProjectionRegistration } from "./projection-context.ts";
 
 export const PROJECTION = {
   instanceType: "relation.projection.type.instance",
@@ -31,8 +32,8 @@ export const projectionForInstance = (projection: RelationNode, registrations: R
     candidate.definition.relationId === definition.relationId);
 };
 
-export const inferWorkspaceContext = (projection: RelationProjection): ProjectionContextKind =>
-  projection.contexts?.includes("children-workspace") ? "children-workspace" : "self-workspace";
+export const observationScope = (projection: RelationProjection): ObservationScope =>
+  normalizeProjectionRegistration(projection).scope ?? "self";
 
 export type PresentedProjection = { projectionNodeId: string; observedNodeId: string; frame: WorkspaceWindowFrame };
 export function presentedProjections(parent: RelationNode, graph: RelationGraph): PresentedProjection[] {

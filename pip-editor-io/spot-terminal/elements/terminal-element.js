@@ -70,11 +70,19 @@ export class SpotTerminalElement extends HTMLElement {
     const option = chrome?.options?.find((item) => item.projectionNodeId === projectionNodeId);
     if (!chrome?.frame?.navigation || !option) return;
     const frame = structuredClone(chrome.frame), navigation = frame.navigation;
-    navigation.entries[navigation.index] = {
+    const current = navigation.entries[navigation.index], next = {
       projectionNodeId: option.projectionNodeId,
       observedNodeId: option.observedNodeId,
-      context: option.context,
+      scope: option.scope,
     };
+    if (current.scope === option.scope) navigation.entries[navigation.index] = next;
+    else if (current.scope === "self" && option.scope === "children" && option.semanticTarget) {
+      navigation.entries = [...navigation.entries.slice(0, navigation.index + 1), next];
+      navigation.index += 1;
+    } else if (current.scope === "children" && option.scope === "self" && navigation.index > 0) {
+      navigation.index -= 1;
+      navigation.entries = [...navigation.entries.slice(0, navigation.index), next];
+    } else return;
     navigation.semanticScale = 1;
     frame.contentOffset = { x: 0, y: 0 };
     this.hostRequest({ kind: "set-workspace-window", windowId: chrome.windowId, frame });

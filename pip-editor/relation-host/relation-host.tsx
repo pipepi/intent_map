@@ -134,7 +134,7 @@ export function RelationHost() {
         if (!windowId || !frame) throw new Error("Projection navigation requires an active workspace window");
         const navigation = navigationForRoot(windowId, active.graph, nodeTypes, frame.navigation), route = navigation && currentRoute(navigation);
         const parent = route && active.graph.nodes[route.projectionNodeId];
-        if (!navigation || route?.context !== "children-workspace" || !parent || !presentedProjections(parent, active.graph).some(({ projectionNodeId }) => projectionNodeId === request.projectionNodeId)) throw new Error("Projection is not a direct child of the active internal view");
+        if (!navigation || route?.scope !== "children" || !parent || !presentedProjections(parent, active.graph).some(({ projectionNodeId }) => projectionNodeId === request.projectionNodeId)) throw new Error("Projection is not a direct child of the active internal view");
         const target = routeForProjection(request.projectionNodeId, active.graph, nodeTypes, { parentInternalProjectionId: parent.id, childProjectionId: request.projectionNodeId });
         if (!target) throw new Error("Projection cannot be promoted to self-workspace");
         workspaceStore.setWindow(workspaceId, windowId, { ...frame, navigation: navigateProjection(navigation, target) });

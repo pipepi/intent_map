@@ -33,13 +33,13 @@ export default function register(host) {
     },
   }));
   releases.push(host.registerProjection({
-    id: "scene.quadrant", name: "单象限", icon: "⌗", definition: { nodeId: "scene.projection.quadrant", relationId: "identity" }, contexts: ["self-workspace"],
+    id: "scene.quadrant", name: "单象限", icon: "⌗", definition: { nodeId: "scene.projection.quadrant", relationId: "identity" }, scope: "self", surfaces: ["workspace"],
     matches(node) { return projectionId(node) === "scene.projection.quadrant"; },
     project({ node, graph, selection }) { return projectScene("quadrant", node, graph, selection); },
     element: { pluginId: "official.scene-elements", elementId: "quadrant" },
   }));
   releases.push(host.registerProjection({
-    id: "scene.tube", name: "管道", icon: "⌁", definition: { nodeId: "scene.projection.tube", relationId: "identity" }, contexts: ["self-workspace"],
+    id: "scene.tube", name: "管道", icon: "⌁", definition: { nodeId: "scene.projection.tube", relationId: "identity" }, scope: "self", surfaces: ["workspace"],
     matches(node) { return projectionId(node) === "scene.projection.tube"; },
     project({ node, graph, selection }) { return projectScene("tube", node, graph, selection); },
     element: { pluginId: "official.scene-elements", elementId: "tube" },
