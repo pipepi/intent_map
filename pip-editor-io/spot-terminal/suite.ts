@@ -16,14 +16,14 @@ async function bundle(entry: string) {
 }
 export async function buildSpotTerminalPluginSuite() {
   const [elementSources, runtimeSources, elementSource, runtimeSource] = await Promise.all([sources(elementFiles), sources(runtimeFiles), bundle("elements/entry.js"), bundle("runtime/entry.js")]);
-  const elementManifest = { ...baseElementManifest(SPOT_ELEMENT_PLUGIN_ID, "AEX Spot Terminal Elements", Object.keys(elementSources)), packageVersion: "1.10.0", elements: [
+  const elementManifest = { ...baseElementManifest(SPOT_ELEMENT_PLUGIN_ID, "AEX Spot Terminal Elements", Object.keys(elementSources)), packageVersion: "1.10.1", elements: [
     { id: "terminal", tag: "spot-terminal-view", purpose: "projection" as const },
     { id: "terminal-simple", tag: "spot-terminal-simple", purpose: "projection" as const },
     { id: "composition", tag: "spot-composition-view", purpose: "projection" as const },
     { id: "fact", tag: "spot-fact-view", purpose: "projection" as const },
   ] };
   const elementPip = await encodeElementPackage(elementManifest, elementSource, elementSources), element = await decodeElementPackage(elementPip);
-  const nodeManifest = { ...baseNodeTypeManifest(SPOT_NODE_PLUGIN_ID, "AEX Spot Terminal Types", [SPOT_TERMINAL_TYPE, ...SPOT_FACT_TYPES], [await exactPackageRef(elementPip, element.manifest)], Object.keys(runtimeSources)), packageVersion: "1.14.2" };
+  const nodeManifest = { ...baseNodeTypeManifest(SPOT_NODE_PLUGIN_ID, "AEX Spot Terminal Types", [SPOT_TERMINAL_TYPE, ...SPOT_FACT_TYPES], [await exactPackageRef(elementPip, element.manifest)], Object.keys(runtimeSources)), packageVersion: "1.14.3" };
   const nodeTypePip = await encodeNodeTypePackage(nodeManifest, spotTerminalOntology, runtimeSource, runtimeSources, [element]), nodeType = await decodeNodeTypePackage(nodeTypePip);
   return { elementPip, nodeTypePip, element, nodeType };
 }

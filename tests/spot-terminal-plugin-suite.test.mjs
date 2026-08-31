@@ -10,7 +10,7 @@ import { terminalView } from "../pip-editor-io/spot-terminal/elements/render.js"
 import { acceptsKlinePeriod, acknowledgeKlines, mergeDepth, mergeMessage } from "../pip-editor-io/spot-terminal/runtime/stomp.js";
 import { validateOrder } from "../pip-editor-io/spot-terminal/runtime/validation.js";
 import { withWindowChrome } from "../pip-editor-io/spot-terminal/runtime/window-chrome.js";
-import { windowNavigation } from "../pip-editor-io/spot-terminal/elements/window-navigation.js";
+import { windowChromeKey, windowNavigation } from "../pip-editor-io/spot-terminal/elements/window-navigation.js";
 import { childrenTerminal, embeddedTerminal, worldTerminal } from "../pip-editor-io/spot-terminal/elements/projection-views.js";
 import { terminalCreator } from "../pip-editor-io/spot-terminal/runtime/creator.js";
 import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
@@ -126,6 +126,11 @@ test("spot A4 supplies window navigation state and A3 renders its chrome", () =>
   assert.match(html, /data-window-forward[^>]*disabled/);
   assert.match(html, /aria-label="当前投影"/);
   assert.match(html, /125%/);
+  assert.notEqual(windowChromeKey(state), windowChromeKey({ ...state, windowChrome: {
+    ...state.windowChrome, scale: 1.3, frame: { ...state.windowChrome.frame,
+      navigation: { ...state.windowChrome.frame.navigation, semanticScale: 1.3 } },
+  } }));
+  assert.notEqual(windowChromeKey({}), windowChromeKey(state));
 });
 
 test("spot plugin chrome renders and selects all semantic projection routes", () => {

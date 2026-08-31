@@ -2,7 +2,7 @@ import { loginView, terminalView } from "./render.js";
 import { styles } from "./styles.js";
 import { captureSellScroll, restoreSellScroll } from "./book-scroll.js";
 import { mountGuardToggle } from "./bot-controls.js";
-import { windowNavigation } from "./window-navigation.js";
+import { windowChromeKey, windowNavigation } from "./window-navigation.js";
 import { childrenTerminal, embeddedTerminal, worldTerminal } from "./projection-views.js";
 
 // A2 may recreate the custom element while a native input event is still in flight.
@@ -22,15 +22,16 @@ export class SpotTerminalElement extends HTMLElement {
     const previous = this.#context?.projection?.data;
     this.#context = value;
     const next = value?.projection?.data;
+    const chromeChanged = windowChromeKey(previous) !== windowChromeKey(next);
     const stableLogin = previous && next && !next.authenticated && this.querySelector('[data-action="login"]') &&
-      ["environment", "authenticated", "loading", "error", "notice"].every((key) => previous[key] === next[key]);
+      !chromeChanged && ["environment", "authenticated", "loading", "error", "notice"].every((key) => previous[key] === next[key]);
     // Host focus and keyboard updates may republish window state. An unchanged
     // login state must leave the native editor, autocomplete and caret intact.
     if (stableLogin) return;
     // Host keyboard/focus updates may publish an equivalent context before the character lands.
     // Never replace the focused native editor; command results render after focus moves to a button.
     const active = document.activeElement;
-    if (active && this.contains(active) && active.matches("input,textarea,select")) return;
+    if (!chromeChanged && active && this.contains(active) && active.matches("input,textarea,select")) return;
     const key = `${value?.observedNode?.id ?? ""}:${JSON.stringify(value?.projection?.data ?? null)}`;
     if (key !== this.#renderKey) { this.#renderKey = key; this.render(); }
   }

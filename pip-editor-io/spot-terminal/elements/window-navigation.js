@@ -1,5 +1,15 @@
 import { esc } from "./format.js";
 
+export function windowChromeKey(state) {
+  const chrome = state?.windowChrome, navigation = chrome?.frame?.navigation;
+  if (!chrome || !navigation) return "";
+  const current = navigation.entries?.[navigation.index]?.projectionNodeId ?? "";
+  return JSON.stringify([
+    chrome.windowId, chrome.canBack, chrome.canForward, chrome.scale,
+    navigation.index, navigation.semanticScale, current, chrome.options ?? [],
+  ]);
+}
+
 export function windowNavigation(state) {
   const chrome = state.windowChrome;
   if (!chrome) return "";
