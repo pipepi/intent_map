@@ -86,6 +86,15 @@ export class SystemPluginRegistry {
     if (!["host", "workspace"].includes(definition.scope)) {
       throw new Error(`System plugin ${definition.id} scope is invalid`);
     }
+    if (
+      !definition.surfaces.length ||
+      definition.surfaces.some((surface) =>
+        surface !== "host" && surface !== "workspace"
+      ) ||
+      definition.scope === "workspace" && definition.surfaces.includes("host")
+    ) {
+      throw new Error(`System plugin ${definition.id} surfaces are invalid`);
+    }
     if (!["singleton", "multiple"].includes(definition.instancePolicy)) {
       throw new Error(`System plugin ${definition.id} instance policy is invalid`);
     }

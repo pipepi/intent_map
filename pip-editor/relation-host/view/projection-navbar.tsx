@@ -12,10 +12,10 @@ const labelFor = (nodeId: string, graph: RelationGraph, nodeTypes: NodeTypePlugi
   return name?.object.kind === "const" ? String(name.object.value) : nodeId;
 };
 
-export function ProjectionNavbar({ navigation, execution, executionView, graph, nodeTypes, onChange, onReset }: {
+export function ProjectionNavbar({ navigation, execution, executionView, graph, nodeTypes, onChange }: {
   navigation: ProjectionNavigationState; graph: RelationGraph; nodeTypes: NodeTypePluginRegistry;
   execution?: ExecutionContextSnapshot; executionView: ProjectionExecutionViewState;
-  onChange: (navigation: ProjectionNavigationState) => void; onReset: () => void;
+  onChange: (navigation: ProjectionNavigationState) => void;
 }) {
   const route = currentRoute(navigation), options = projectionOptions(route.observedNodeId, graph, nodeTypes);
   const session = execution?.sessions.find((item) => item.id === executionView.sessionId) ?? execution?.sessions.at(-1);
@@ -44,7 +44,6 @@ export function ProjectionNavbar({ navigation, execution, executionView, graph, 
       <optgroup label="观察自身">{options.filter(({ scope }) => scope === "self").map((item) => <option key={item.projectionNodeId} value={item.projectionNodeId}>{item.label}</option>)}</optgroup>
       <optgroup label="观察子级">{options.filter(({ scope }) => scope === "children").map((item) => <option key={item.projectionNodeId} value={item.projectionNodeId}>{item.label}</option>)}</optgroup>
     </select>
-    <button onClick={onReset} title="重置投影缩放与位置">{Math.round(navigation.semanticScale * 100)}%</button>
     {session && <span title={session.id}>{session.status}</span>}
   </nav>;
 }

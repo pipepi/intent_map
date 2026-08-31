@@ -6,6 +6,7 @@ import { assertProjectionRegistration, normalizeProjectionRegistration } from ".
 import { resolveNodePresentation } from "../pip-editor/relation-host/projection/resolve-presentation.ts";
 import { initialNavigation, navigateProjection, replaceCurrentProjection } from "../pip-editor/relation-host/projection/projection-navigation.ts";
 import { forwardRoute, navigationForRoot } from "../pip-editor/relation-host/projection/projection-routes.ts";
+import { projectionFrameAtScale } from "../pip-editor/relation-host/projection/projection-scale.ts";
 import { applySemanticScale, semanticProgress } from "../pip-editor/relation-host/projection/semantic-zoom.ts";
 import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
 import { buildIntentPluginSuite } from "../pip-editor-io/intent/suite.ts";
@@ -76,6 +77,47 @@ test("semantic routes recurse self → children → child self without creating 
   assert.equal(navigation.entries[navigation.index].projectionNodeId, "scene.view.children:scene.today");
   assert.equal(Object.keys(graph.nodes).length, before); assert.equal(graph.revision, 0);
   assert.equal(semanticProgress(1.4), 0); assert.equal(semanticProgress(1.7), 1); assert.equal(semanticProgress(.6), 1);
+});
+
+test("projection window buttons zoom around the center and preserve semantic routing", async () => {
+  const { graph, registry } = await fixture();
+  const navigation = navigationForRoot(
+    "scene.view.quadrant",
+    graph,
+    registry,
+  );
+  const frame = {
+    x: 80,
+    y: 80,
+    width: 1000,
+    height: 600,
+    resizeMode: "full",
+    contentOffset: { x: 0, y: 0 },
+    navigation,
+  };
+
+  const zoomed = projectionFrameAtScale(
+    frame,
+    navigation,
+    1.2,
+    graph,
+    registry,
+    [],
+  );
+  assert.equal(zoomed.navigation.semanticScale, 1.2);
+  assert.deepEqual(zoomed.contentOffset, { x: -100, y: -60 });
+
+  const advanced = projectionFrameAtScale(
+    frame,
+    navigation,
+    1.7,
+    graph,
+    registry,
+    [],
+  );
+  assert.equal(advanced.navigation.index, navigation.index + 1);
+  assert.equal(advanced.navigation.semanticScale, 1);
+  assert.deepEqual(advanced.contentOffset, frame.contentOffset);
 });
 
 test("self projections without an explicit dives-into relation do not infer a child level", async () => {

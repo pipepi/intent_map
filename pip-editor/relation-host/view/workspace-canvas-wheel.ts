@@ -64,12 +64,13 @@ export function useWorkspaceCanvasWheel({
     if (!free || !element) return;
 
     const handle = (event: globalThis.WheelEvent) => {
-      event.preventDefault();
-
       const path = event.composedPath() as HTMLElement[];
       const projectionWindow = path.find((item) => item?.dataset?.nodeId);
       const windowId = projectionWindow?.dataset.nodeId;
       const frame = windowId ? views.projections[windowId] : undefined;
+      // Creator 与系统插件不是业务投影，内部滚动不应被画布相机接管。
+      if (windowId && !frame) return;
+      event.preventDefault();
       const activeProjection = Boolean(
         windowId && frame && views.activeWindowId === windowId,
       );

@@ -98,11 +98,14 @@ export class SystemPluginRuntime {
     return this.#instances.get(instanceId);
   }
 
-  ensure(pluginId: string, workspaceId: string) {
+  ensure(pluginId: string, workspaceId?: string) {
     const definition = this.#registry.require(pluginId);
+    if (definition.scope === "workspace" && !workspaceId) {
+      throw new Error(`System plugin ${pluginId} requires a workspace`);
+    }
     const singletonKey = definition.scope === "host"
       ? `host:${pluginId}`
-      : `workspace:${workspaceId}:${pluginId}`;
+      : `workspace:${workspaceId!}:${pluginId}`;
 
     if (definition.instancePolicy === "singleton") {
       const existingId = this.#singletonIds.get(singletonKey);
@@ -118,7 +121,7 @@ export class SystemPluginRuntime {
       pluginId,
       node: createInstanceNode(instanceId, definition),
       scope: definition.scope,
-      ...(definition.scope === "workspace" ? { workspaceId } : {}),
+      ...(definition.scope === "workspace" ? { workspaceId: workspaceId! } : {}),
       state: structuredClone(definition.createState?.() ?? null),
     };
 

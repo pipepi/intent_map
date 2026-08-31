@@ -120,14 +120,17 @@ test("spot A4 supplies window navigation state and A3 renders its chrome", () =>
   assert.equal(state.windowChrome.windowId, "root-window");
   assert.equal("enteredFrom" in state.windowChrome.frame.navigation.entries[0], false);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(state)));
-  assert.deepEqual([state.windowChrome.canBack, state.windowChrome.canForward, state.windowChrome.scale], [true, false, 1.25]);
+  assert.deepEqual(
+    [state.windowChrome.canBack, state.windowChrome.canForward],
+    [true, false],
+  );
   const html = windowNavigation(state);
   assert.match(html, /data-window-back/);
   assert.match(html, /data-window-forward[^>]*disabled/);
   assert.match(html, /aria-label="当前投影"/);
-  assert.match(html, /125%/);
+  assert.doesNotMatch(html, /data-window-reset|125%/);
   assert.notEqual(windowChromeKey(state), windowChromeKey({ ...state, windowChrome: {
-    ...state.windowChrome, scale: 1.3, frame: { ...state.windowChrome.frame,
+    ...state.windowChrome, frame: { ...state.windowChrome.frame,
       navigation: { ...state.windowChrome.frame.navigation, semanticScale: 1.3 } },
   } }));
   assert.notEqual(windowChromeKey({}), windowChromeKey(state));

@@ -60,7 +60,10 @@ export function workspaceCreatorChoices(
   systemPlugins: SystemPluginCanvasBridge,
   creator?: CreatorPosition,
 ): CreatorChoice[] {
-  const systemChoices: CreatorChoice[] = systemPlugins.creatorChoices(workspace);
+  const systemChoices: CreatorChoice[] = systemPlugins.creatorChoices(
+    "workspace",
+    workspace,
+  );
   const nodeChoices = nodeTypes.creators().filter((item) => {
     try {
       return item.accepts({

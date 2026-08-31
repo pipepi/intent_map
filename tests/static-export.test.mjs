@@ -11,7 +11,7 @@ test("the browser adapter mounts the generic RelationHost", async () => {
   assert.match(entry, /createRoot\(root\)\.render/);
   assert.match(entry, /<RelationHost/);
   assert.match(shell, /<div id="root"><\/div>/);
-  assert.match(host, /核心为空白宿主/);
+  assert.match(host, /new WorkspaceSessionStore\(\[\], setWorkspaces\)/);
   assert.doesNotMatch(host, /IntentNode|SceneNode|CanvasNode/);
 });
 

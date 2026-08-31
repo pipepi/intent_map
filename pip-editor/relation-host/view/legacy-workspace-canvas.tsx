@@ -16,8 +16,9 @@ import {
   normalizeFreeLayout,
 } from "../workspace/view-state.ts";
 import { RelationNodeRenderer } from "../projection/projection-renderer.tsx";
-import { NodeCreator, type CreatorChoice } from "./node-creator.tsx";
-import { WorkspaceWindow } from "./workspace-window.tsx";
+import type { CreatorChoice } from "./node-creator.tsx";
+import { CreatorWindow, creatorFrameAt } from "./creator-window.tsx";
+import { SystemPluginWindowView } from "./system-plugin-window.tsx";
 import styles from "./relation-host.module.css";
 
 type LegacyCanvasProps = {
@@ -61,25 +62,48 @@ export function LegacyWorkspaceCanvas({
   workspace,
 }: LegacyCanvasProps) {
   const views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
-  const SystemPluginRenderer = systemPlugins.Renderer;
+  const canvas = useRef<HTMLDivElement>(null);
   const drag = useRef<WorkspacePoint | undefined>(undefined);
-  const [creatorPoint, setCreatorPoint] = useState<WorkspacePoint>();
+  const [creator, setCreator] = useState<{
+    point: WorkspacePoint;
+    frame?: import("../contracts/package-types.ts").WorkspaceWindowFrame;
+  }>();
 
   return <section
     className={styles.canvasWrap}
     data-testid="relation-workspace"
   >
     <div
+      ref={canvas}
+      tabIndex={-1}
+      data-canvas-shortcuts
       className={`${styles.canvas} ${
         hasWorkspaceProjection
           ? styles.workspaceProjectionGrid
           : styles.relationGrid
       }`}
+      onKeyDown={(event) => {
+        const target = event.target as HTMLElement;
+        const interactive = target.matches(
+          "input,textarea,select,button,a,[contenteditable=true]",
+        );
+        if (event.code !== "Space" || interactive || event.repeat) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setCreator({
+          point: {
+            x: event.currentTarget.clientWidth / 2,
+            y: event.currentTarget.clientHeight / 2,
+          },
+        });
+      }}
       onPointerDown={(event) => {
         const path = event.nativeEvent.composedPath() as HTMLElement[];
+        const overNode = path.some((item) => item?.dataset?.nodeId);
+        if (!overNode) event.currentTarget.focus({ preventScroll: true });
         if (
           !event.altKey ||
-          path.some((item) => item?.dataset?.nodeId)
+          overNode
         ) return;
 
         drag.current = pointIn(
@@ -101,7 +125,7 @@ export function LegacyWorkspaceCanvas({
           point.y - drag.current.y,
         );
         drag.current = undefined;
-        if (moved >= 4) setCreatorPoint(point);
+        if (moved >= 4) setCreator({ point });
       }}
     >
       {hasWorkspaceProjection
@@ -148,33 +172,32 @@ export function LegacyWorkspaceCanvas({
         这个独立工作区没有 RelationNode。
       </div>}
 
-      {Object.values(views.systemWindows).map((item) => <WorkspaceWindow
+      {Object.values(views.systemWindows).map((item) => <SystemPluginWindowView
         key={item.id}
-        id={item.id}
-        frame={item.frame}
+        window={item}
         views={{ ...views, camera: { scale: 1, x: 0, y: 0 } }}
+        plugins={systemPlugins}
+        services={systemPluginServices}
+        surface="workspace"
+        workspace={workspace}
         onFrame={(frame) => onRequest({
           kind: "set-workspace-window",
           windowId: item.id,
           frame,
         })}
         onClose={() => onCloseSystemPlugin(item)}
-      >
-        <SystemPluginRenderer
-          window={item}
-          workspace={workspace}
-          services={systemPluginServices}
-        />
-      </WorkspaceWindow>)}
+      />)}
 
-      {creatorPoint && <NodeCreator
-        point={creatorPoint}
+      {creator && <CreatorWindow
         candidates={creatorChoices}
-        onCancel={() => setCreatorPoint(undefined)}
+        frame={creator.frame ?? creatorFrameAt(creator.point, views)}
+        views={{ ...views, camera: { scale: 1, x: 0, y: 0 } }}
+        onCancel={() => setCreator(undefined)}
         onChoose={(choice) => {
-          onChooseCreator(choice, creatorPoint);
-          setCreatorPoint(undefined);
+          onChooseCreator(choice, creator.point);
+          setCreator(undefined);
         }}
+        onFrame={(frame) => setCreator({ ...creator, frame })}
       />}
     </div>
   </section>;

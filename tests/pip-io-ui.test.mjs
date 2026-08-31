@@ -9,13 +9,32 @@ const readWorkspaceCanvasSources = async () => (await Promise.all([
   "legacy-workspace-canvas.tsx",
   "workspace-canvas-pointer.ts",
   "workspace-canvas-wheel.ts",
+  "creator-window.tsx",
+  "projection-scale-controls.tsx",
+  "workspace-window-chrome.tsx",
+].map((file) => readFile(
+  new URL(`../pip-editor/relation-host/view/${file}`, import.meta.url),
+  "utf8",
+)))).join("\n");
+
+const readHostSources = async () => (await Promise.all([
+  "relation-host.tsx",
+  "use-host-effects.ts",
+].map((file) => readFile(
+  new URL(`../pip-editor/relation-host/${file}`, import.meta.url),
+  "utf8",
+)))).join("\n");
+
+const readWindowStyles = async () => (await Promise.all([
+  "relation-host.module.css",
+  "workspace-window.module.css",
 ].map((file) => readFile(
   new URL(`../pip-editor/relation-host/view/${file}`, import.meta.url),
   "utf8",
 )))).join("\n");
 
 test("blank host imports only explicit PIP files and never auto-loads domain packages", async () => {
-  const host = await readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8");
+  const host = await readHostSources();
   const panel = await readFile(new URL("../pip-editor/relation-host-io/plugin-manager/panel.tsx", import.meta.url), "utf8");
   assert.match(host, /importPip\(bytes/);
   assert.match(panel, /accept="\.pip,application\/vnd\.intent-map\.pip"/);
@@ -31,17 +50,17 @@ test("desktop development loads authoritative A1 and A2 packages instead of stal
 });
 
 test("the generic host records verified hashes without a trust prompt", async () => {
-  const host = await readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8");
+  const host = await readHostSources();
   assert.match(host, /confirmTrust: \(\) => true/);
   assert.doesNotMatch(host, /window\.confirm|confirmHostPackageTrust/);
 });
 
 test("plugin commands are serialized per workspace against the latest graph snapshot", async () => {
   const [host, actions] = await Promise.all([
-    readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8"),
+    readHostSources(),
     readFile(new URL("../pip-editor/relation-host/relation-host-actions.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(host, /commandQueuesRef = useRef\(new Map<string, Promise<void>>\(\)\)/);
+  assert.match(host, /commandQueues[^\n]*useState[\s\S]*new Map<string, Promise<void>>/);
   assert.match(actions, /workspaceStore\s*\.list\(\)\s*\.find\(\(workspace\) => workspace\.id === workspaceId\)/);
   assert.match(actions, /previous\.catch\(\(\) => undefined\)\.then/);
   assert.doesNotMatch(actions, /command\(request\.input, active\.graph\)/);
@@ -55,29 +74,108 @@ test("the workspace remains a bounded two-axis trackpad scroll region", async ()
 });
 
 test("independent workspaces switch through a Chrome-like tab strip", async () => {
-  const tabs = await readFile(new URL("../pip-editor/relation-host/view/workspace-tabs.tsx", import.meta.url), "utf8");
-  const panel = await readFile(new URL("../pip-editor/relation-host-io/plugin-manager/panel.tsx", import.meta.url), "utf8");
+  const [tabs, panel, host] = await Promise.all([
+    readFile(
+      new URL(
+        "../pip-editor/relation-host/view/workspace-tabs.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../pip-editor/relation-host-io/plugin-manager/panel.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readHostSources(),
+  ]);
   assert.match(tabs, /role="tablist"/);
-  assert.match(tabs, /role="tab" aria-selected=\{active\}/);
+  assert.match(tabs, /role="tab"[\s\S]*aria-selected=\{active\}/);
   assert.match(tabs, /onActivate\(workspace\.id\)/);
   assert.match(tabs, /workspaceTabAdd/);
   assert.match(tabs, /onClose\(workspace\.id\)/);
   assert.match(tabs, /draggable/);
-  assert.match(tabs, /event\.currentTarget\.blur\(\); onActivate/); assert.match(tabs, /event\.currentTarget\.blur\(\); onNew/);
+  assert.match(tabs, /event\.currentTarget\.blur\(\);[\s\S]*onActivate/);
+  assert.match(tabs, /event\.currentTarget\.blur\(\);[\s\S]*onNew/);
+  assert.match(
+    host,
+    /presentWorkspace\(id, point, "top-left", viewport\)/,
+  );
   assert.doesNotMatch(panel, /独立工作区|onActivateWorkspace/);
+});
+
+test("blank host canvas does not reserve an empty tab strip", async () => {
+  const [surface, css] = await Promise.all([
+    readFile(
+      new URL(
+        "../pip-editor/relation-host/view/relation-host-surface.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../pip-editor/relation-host/view/relation-host.module.css",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(
+    surface,
+    /tabWorkspaces\.length > 0 && <WorkspaceTabs/,
+  );
+  assert.match(
+    surface,
+    /tabWorkspaces\.length \? "" : styles\.workspaceAreaBare/,
+  );
+  assert.match(
+    css,
+    /\.workspaceAreaBare \{[^}]*grid-template-rows:\s*minmax\(0, 1fr\);/,
+  );
+});
+
+test("a workspace window owns its creator keyboard shortcut", async () => {
+  const [workspaceCanvas, hostCanvas] = await Promise.all([
+    readWorkspaceCanvasSources(),
+    readFile(
+      new URL(
+        "../pip-editor/relation-host/view/host-canvas.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(workspaceCanvas, /data-canvas-shortcuts/);
+  assert.match(workspaceCanvas, /event\.stopPropagation\(\)/);
+  assert.match(hostCanvas, /target\.closest\("\[data-canvas-shortcuts\]"\)/);
+  assert.match(hostCanvas, /owner !== event\.currentTarget/);
+  assert.match(
+    hostCanvas,
+    /canvasOwner !== event\.currentTarget[\s\S]*dataset\?\.nodeId/,
+  );
+  assert.match(
+    workspaceCanvas,
+    /if \(windowId && !frame\) return;[\s\S]*event\.preventDefault\(\)/,
+  );
 });
 
 test("free-layout canvas exposes creator wire, camera controls, and system manager window", async () => {
   const [canvas, manager, host] = await Promise.all([
     readWorkspaceCanvasSources(),
     readFile(new URL("../pip-editor/relation-host-io/plugin-manager/panel.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8"),
+    readHostSources(),
   ]);
   assert.match(canvas, /event\.altKey/); assert.match(canvas, /event\.code === "Space"/); assert.match(canvas, /clientWidth \/ 2/); assert.match(canvas, /creationWire/); assert.match(canvas, /screenToWorld/);
   assert.match(canvas, /element\.scrollLeft = 0;\s*element\.scrollTop = 0/);
   assert.match(canvas, /event\.currentTarget\.scrollLeft = 0;\s*event\.currentTarget\.scrollTop = 0/);
   assert.match(canvas, /matches\("input,textarea,select,\[contenteditable=true\]"\)/); assert.match(canvas, /element\.focus\(\{ preventScroll: true \}\)/); assert.match(canvas, /tabIndex=\{-1\}/);
-  assert.match(canvas, /addEventListener\("pageshow", focusCanvas\)/); assert.match(canvas, /addEventListener\("focus", focusCanvas\)/); assert.match(canvas, /setTimeout\(focusCanvas, 160\)/);
+  assert.match(canvas, /element\?\.addEventListener\("keydown", handleKeyDown\)/);
+  assert.doesNotMatch(canvas, /addEventListener\("pageshow", focusCanvas\)/);
   assert.match(canvas, /element\.focus\(\{ preventScroll: true \}\);/);
   assert.match(canvas, />适应</); assert.match(manager, /data-window-drag/); assert.doesNotMatch(manager, /data-resize-toggle|data-window-close/);
   assert.match(canvas, /\["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"\]\.includes/);
@@ -88,7 +186,7 @@ test("projection windows float system controls above the top-right content edge"
   const [window, navbar, css] = await Promise.all([
     readFile(new URL("../pip-editor/relation-host/view/workspace-window.tsx", import.meta.url), "utf8"),
     readFile(new URL("../pip-editor/relation-host/view/projection-navbar.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8"),
+    readWindowStyles(),
   ]);
   assert.match(window, /windowControls\("top"\)[\s\S]*windowControls\("bottom"\)/);
   assert.match(window, /windowGlassUnderlay[^>]*aria-hidden="true"/);
@@ -97,32 +195,32 @@ test("projection windows float system controls above the top-right content edge"
   assert.match(window, /windowDragRailLeft[\s\S]*data-window-drag[\s\S]*aria-label="左侧拖动区域"/);
   assert.match(window, /windowDragRailRight[\s\S]*data-window-drag[\s\S]*aria-label="右侧拖动区域"/);
   assert.doesNotMatch(navbar, /data-window-drag|projectionWindowActions|projectionDragHandle/);
-  assert.match(css, /\.windowSystemControls \{[^}]*position:absolute;[^}]*left:-18px;[^}]*right:-18px;[^}]*height:37px;/);
-  assert.match(css, /\.windowSystemControls \{[^}]*border:0;/);
-  assert.match(css, /\.windowGlassUnderlay \{[^}]*inset:-37px -18px;[^}]*radial-gradient\(ellipse at center,#10193678 42%,#17234208 100%\);[^}]*backdrop-filter:blur\(10px\)/);
-  assert.match(css, /\.windowViewport \{[^}]*position:relative;[^}]*z-index:16;/);
-  assert.match(css, /\.windowGlassUnderlay \{[^}]*z-index:14;/);
-  assert.match(css, /\.windowSystemControlsTop \{[^}]*top:-37px;/);
-  assert.match(css, /\.windowSystemControlsBottom \{[^}]*bottom:-37px;/);
-  assert.match(css, /\.windowDragRail \{[^}]*z-index:15;[^}]*width:18px;/);
-  assert.match(css, /\.windowDragRailLeft \{[^}]*left:-18px;/);
-  assert.match(css, /\.windowDragRailRight \{[^}]*right:-18px;/);
-  assert.match(css, /\.windowDragRail \{[^}]*background:transparent;/);
-  assert.match(css, /\.freeWindow:hover \.windowGlassUnderlay,[^}]*visibility:visible;\s*opacity:1/);
-  assert.match(css, /\.freeWindow:hover \.windowDragRail,[^}]*visibility:visible;\s*opacity:1/);
+  assert.match(css, /\.windowSystemControls \{[^}]*position:\s*absolute;[^}]*left:\s*-18px;[^}]*right:\s*-18px;[^}]*height:\s*37px;/);
+  assert.match(css, /\.windowSystemControls \{[^}]*border:\s*0;/);
+  assert.match(css, /\.windowGlassUnderlay \{[^}]*inset:\s*-37px -18px;[^}]*radial-gradient\([\s\S]*#10193678 42%,[\s\S]*#17234208 100%[\s\S]*backdrop-filter:\s*blur\(10px\)/);
+  assert.match(css, /\.windowViewport \{[^}]*position:\s*relative;[^}]*z-index:\s*16;/);
+  assert.match(css, /\.windowGlassUnderlay \{[^}]*z-index:\s*14;/);
+  assert.match(css, /\.windowSystemControlsTop \{[^}]*top:\s*-37px;/);
+  assert.match(css, /\.windowSystemControlsBottom \{[^}]*bottom:\s*-37px;/);
+  assert.match(css, /\.windowDragRail \{[^}]*z-index:\s*15;[^}]*width:\s*18px;/);
+  assert.match(css, /\.windowDragRailLeft \{[^}]*left:\s*-18px;/);
+  assert.match(css, /\.windowDragRailRight \{[^}]*right:\s*-18px;/);
+  assert.match(css, /\.windowDragRail \{[^}]*background:\s*transparent;/);
+  assert.match(css, /\.freeWindow:hover \.windowGlassUnderlay,[\s\S]*visibility:\s*visible;\s*opacity:\s*1/);
+  assert.match(css, /\.freeWindow:hover \.windowDragRail,[\s\S]*visibility:\s*visible;\s*opacity:\s*1/);
   assert.match(css, /@container \(max-width:500px\)[\s\S]*\.projectionNav > select \{[^}]*flex:0 1 120px;/);
-  assert.match(css, /\.windowSystemControls \{[^}]*visibility:hidden;[^}]*opacity:0;[^}]*pointer-events:none;/);
-  assert.match(css, /\.freeWindow:hover \.windowSystemControls,[^}]*\.freeWindow:focus-within \.windowSystemControls \{[^}]*visibility:visible;[^}]*pointer-events:auto;/);
-  assert.match(css, /@media \(hover:none\)[^{]*\{[^}]*windowGlassUnderlay[^}]*visibility:visible;/);
-  assert.match(css, /@media \(hover:none\)[\s\S]*\.windowSystemControls \{[^}]*visibility:visible;/);
+  assert.match(css, /\.windowSystemControls \{[^}]*visibility:\s*hidden;[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/);
+  assert.match(css, /\.freeWindow:hover \.windowSystemControls,[\s\S]*\.freeWindow:focus-within \.windowSystemControls \{[^}]*visibility:\s*visible;[^}]*pointer-events:\s*auto;/);
+  assert.match(css, /@media \(hover:\s*none\)[\s\S]*windowGlassUnderlay[\s\S]*visibility:\s*visible;/);
+  assert.match(css, /@media \(hover:\s*none\)[\s\S]*\.windowSystemControls \{[^}]*visibility:\s*visible;/);
 });
 
 test("trackpad movement and pinch route between workspace and active projection", async () => {
   const canvas = await readWorkspaceCanvasSources();
-  const host = await readFile("pip-editor/relation-host/relation-host.tsx", "utf8");
+  const host = await readHostSources();
   const window = await readFile("pip-editor/relation-host/view/workspace-window.tsx", "utf8");
   const semantic = await readFile("pip-editor/relation-host/projection/semantic-projection.tsx", "utf8");
-  const hostStyles = await readFile("pip-editor/relation-host/view/relation-host.module.css", "utf8");
+  const hostStyles = await readWindowStyles();
   const scene = await readFile("pip-editor-io/scene/elements/view-element.js", "utf8");
   assert.match(canvas, /addEventListener\("wheel", handle, \{ passive: false \}\)/);
   assert.match(host, /preventPageZoom/);
@@ -159,30 +257,21 @@ test("the graph status floats at the workspace bottom-left without shrinking the
   assert.doesNotMatch(css, /\.canvas \{[^}]*calc\(100% - 36px\)/);
 });
 
-test("workspace camera controls dock to the bottom-right outside the scaled world", async () => {
-  const [css, canvas] = await Promise.all([
-    readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8"),
-    readWorkspaceCanvasSources(),
-  ]);
-  assert.match(css, /\.cameraControls \{[^}]*position:absolute;[^}]*right:0;[^}]*bottom:0;/);
-  assert.ok(canvas.indexOf("styles.freeWorld") < canvas.indexOf("styles.cameraControls"));
-});
-
 test("projection resize mode sits immediately before the projection close action", async () => {
   const [window, css] = await Promise.all([
     readFile(new URL("../pip-editor/relation-host/view/workspace-window.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../pip-editor/relation-host/view/relation-host.module.css", import.meta.url), "utf8"),
+    readWindowStyles(),
   ]);
   const scene = await readFile(new URL("../pip-editor-io/scene/elements/render.js", import.meta.url), "utf8");
   assert.ok(window.indexOf("data-resize-toggle") < window.indexOf("data-window-close"));
   assert.match(window, /resizeMode === "simple"[\s\S]*\?[\s\S]*\["e", "s", "se"\] as const[\s\S]*:[\s\S]*directions/);
-  assert.match(css, /width:6px;height:6px;border:1px solid #c5b7ff;border-radius:2px;background:#2d2460/);
-  assert.match(css, /box-shadow:0 0 7px rgba\(139,92,246,\.48\)/);
-  assert.match(css, /data-direction="nw"[^}]*top:3px;left:3px/);
-  assert.match(css, /data-direction="ne"[^}]*top:3px;right:3px/);
-  assert.match(css, /data-direction="se"[^}]*right:3px;bottom:3px/);
-  assert.match(css, /data-direction="sw"[^}]*bottom:3px;left:3px/);
-  assert.match(css, /\.freeWindow:hover \.resizeHandle::after,[^}]*visibility:visible;opacity:1/);
+  assert.match(css, /width:\s*6px;[\s\S]*height:\s*6px;[\s\S]*border:\s*1px solid #c5b7ff;[\s\S]*border-radius:\s*2px;[\s\S]*background:\s*#2d2460/);
+  assert.match(css, /box-shadow:\s*0 0 7px rgba\(139, 92, 246, \.48\)/);
+  assert.match(css, /data-direction="nw"[^}]*top:\s*3px;\s*left:\s*3px/);
+  assert.match(css, /data-direction="ne"[^}]*top:\s*3px;\s*right:\s*3px/);
+  assert.match(css, /data-direction="se"[^}]*right:\s*3px;\s*bottom:\s*3px/);
+  assert.match(css, /data-direction="sw"[^}]*bottom:\s*3px;\s*left:\s*3px/);
+  assert.match(css, /\.freeWindow:hover \.resizeHandle::after,[\s\S]*visibility:\s*visible;\s*opacity:\s*1/);
   assert.doesNotMatch(scene, /data-resize-toggle/);
 });
 

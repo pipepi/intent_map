@@ -8,7 +8,11 @@ import {
 } from "react";
 import type { WorkspaceWindowFrame } from "../contracts/package-types.ts";
 import type { FreeLayoutWorkspaceViews } from "../workspace/view-state.ts";
-import styles from "./relation-host.module.css";
+import styles from "./workspace-window.module.css";
+import {
+  useWorkspaceWindowChromeTargets,
+  WorkspaceWindowChromeContext,
+} from "./workspace-window-chrome.tsx";
 
 const directions = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
 type Direction = typeof directions[number];
@@ -85,6 +89,7 @@ export function WorkspaceWindow({
   onClose,
 }: WorkspaceWindowProps) {
   const [preview, setPreview] = useState(frame);
+  const chrome = useWorkspaceWindowChromeTargets();
   const gesture = useRef<Gesture | undefined>(undefined);
   const latestPreview = useRef(preview);
   const outsideRelease = useRef<AbortController | undefined>(undefined);
@@ -139,8 +144,9 @@ export function WorkspaceWindow({
       (item) => item?.dataset?.windowDragButton !== undefined,
     );
     if (interactive && !resizeTarget && !dragButton) return;
-
     event.preventDefault();
+    // 嵌套工作区中的内层窗口接管手势后，不允许外层工作区窗口一起移动。
+    event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     gesture.current = {
       pointerId: event.pointerId,
@@ -195,7 +201,6 @@ export function WorkspaceWindow({
   const handles = preview.resizeMode === "simple"
     ? ["e", "s", "se"] as const
     : directions;
-
   // 系统节点和普通节点共享同一组悬浮控制、玻璃背景和拖拽轨道。
   const windowControls = (edge: "top" | "bottom") => <div
     className={`${styles.windowSystemControls} ${
@@ -206,6 +211,10 @@ export function WorkspaceWindow({
     data-window-drag
     aria-label={`${edge === "top" ? "顶部" : "底部"}窗口控制与拖动区域`}
   >
+    <span
+      className={styles.windowExtraControls}
+      ref={edge === "top" ? chrome.setTop : chrome.setBottom}
+    />
     <button
       data-resize-toggle
       aria-label="切换尺寸缩放模式"
@@ -216,7 +225,8 @@ export function WorkspaceWindow({
     <button data-window-close aria-label="关闭节点" title="关闭节点">×</button>
   </div>;
 
-  return <article
+  return <WorkspaceWindowChromeContext.Provider value={chrome.targets}>
+    <article
     className={styles.freeWindow}
     data-node-id={id}
     style={{
@@ -244,6 +254,10 @@ export function WorkspaceWindow({
     onLostPointerCapture={() => finish()}
     onClickCapture={(event) => {
       const path = event.nativeEvent.composedPath() as HTMLElement[];
+      // click 阶段激活不会吞掉交互控件已经开始的点击，也能覆盖嵌套窗口。
+      if (!active) onActivate?.();
+      // 嵌套窗口的按钮只能由路径中最近的 WorkspaceWindow 处理。
+      if (path.find((item) => item?.dataset?.nodeId) !== event.currentTarget) return;
       if (path.some((item) => item?.dataset?.resizeToggle !== undefined)) {
         onFrame({
           ...preview,
@@ -280,5 +294,6 @@ export function WorkspaceWindow({
       data-resize-direction={direction}
       data-direction={direction}
     />)}
-  </article>;
+    </article>
+  </WorkspaceWindowChromeContext.Provider>;
 }

@@ -5,7 +5,7 @@ export function windowChromeKey(state) {
   if (!chrome || !navigation) return "";
   const current = navigation.entries?.[navigation.index]?.projectionNodeId ?? "";
   return JSON.stringify([
-    chrome.windowId, chrome.canBack, chrome.canForward, chrome.scale,
+    chrome.windowId, chrome.canBack, chrome.canForward,
     navigation.index, navigation.semanticScale, current, chrome.options ?? [],
   ]);
 }
@@ -20,6 +20,5 @@ export function windowNavigation(state) {
     <button data-window-forward aria-label="前进" ${chrome.canForward ? "" : "disabled"}>›</button>
     <select data-window-projection aria-label="当前投影">${options.map((option) =>
       `<option value="${esc(option.projectionNodeId)}" ${option.projectionNodeId === current ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select>
-    <button data-window-reset aria-label="重置投影缩放与位置">${Math.round(Number(chrome.scale ?? 1) * 100)}%</button>
   </nav>`;
 }

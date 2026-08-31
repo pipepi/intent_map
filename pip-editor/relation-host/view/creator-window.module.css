@@ -1,0 +1,59 @@
+.creator {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  overflow: auto;
+}
+
+.creator input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #354268;
+  border-radius: 7px;
+  color: #eef2ff;
+  background: #090e20;
+  outline: none;
+}
+
+.creator > div {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.creator button {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 9px;
+  border: 0;
+  border-radius: 7px;
+  color: #dbe3fa;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.creator button:hover,
+.creatorActive {
+  background: #26345f !important;
+}
+
+.creator button > b {
+  font-size: 18px;
+}
+
+.creator button > span {
+  display: grid;
+}
+
+.creator small,
+.creator p {
+  color: #7f8bad;
+}
+
+.creator p {
+  text-align: center;
+}

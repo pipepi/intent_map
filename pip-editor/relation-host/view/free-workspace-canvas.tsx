@@ -19,14 +19,18 @@ import type { WorkspaceSession } from "../workspace/workspace-store.ts";
 import type {
   FreeLayoutWorkspaceViews,
 } from "../workspace/view-state.ts";
-import { NodeCreator, type CreatorChoice } from "./node-creator.tsx";
+import type { CreatorChoice } from "./node-creator.tsx";
+import { CreatorWindow, creatorFrameAt } from "./creator-window.tsx";
 import { ProjectionNavbar } from "./projection-navbar.tsx";
 import styles from "./relation-host.module.css";
 import type {
   CreationWire,
   CreatorPosition,
 } from "./workspace-canvas-pointer.ts";
+import { SystemPluginWindowView } from "./system-plugin-window.tsx";
 import { WorkspaceWindow } from "./workspace-window.tsx";
+import { WindowScaleControls } from "./workspace-window-chrome.tsx";
+import { ProjectionScaleControls } from "./projection-scale-controls.tsx";
 
 type FreeWorkspaceCanvasProps = {
   creator?: CreatorPosition;
@@ -88,14 +92,14 @@ export function FreeWorkspaceCanvas({
   wire,
   workspace,
 }: FreeWorkspaceCanvasProps) {
-  const SystemPluginRenderer = systemPlugins.Renderer;
   return <section className={styles.canvasWrap} data-testid="relation-workspace">
-    <div className={styles.canvasInfo}>
+    <div className={styles.canvasInfo} data-workspace-status>
       RelationGraph · revision {workspace.graph.revision} · {nodeCount} 个节点 · {status}
     </div>
     <div
       ref={viewport}
       tabIndex={-1}
+      data-canvas-shortcuts
       className={`${styles.canvas} ${styles.freeViewport}`}
       onScroll={(event) => {
         event.currentTarget.scrollLeft = 0;
@@ -181,7 +185,6 @@ export function FreeWorkspaceCanvas({
                   graph={workspace.graph}
                   nodeTypes={nodeTypes}
                   onChange={setNavigation}
-                  onReset={resetProjection}
                 />}
                 <SemanticProjection
                   workspace={workspace}
@@ -201,6 +204,19 @@ export function FreeWorkspaceCanvas({
                   selection={scopedSelections[node.id] ?? workspace.selection}
                   onRequest={onRequest}
                 />
+                <ProjectionScaleControls
+                  frame={frame}
+                  graph={workspace.graph}
+                  navigation={navigation}
+                  nodeTypes={nodeTypes}
+                  selection={scopedSelections[node.id] ?? workspace.selection}
+                  onChange={(next) => onRequest({
+                    kind: "set-workspace-window",
+                    windowId: node.id,
+                    frame: next,
+                  })}
+                  onFit={resetProjection}
+                />
               </div>
               : <RelationNodeRenderer
                 workspaceId={workspace.id}
@@ -218,11 +234,14 @@ export function FreeWorkspaceCanvas({
           </WorkspaceWindow>;
         })}
 
-        {Object.values(views.systemWindows).map((item) => <WorkspaceWindow
+        {Object.values(views.systemWindows).map((item) => <SystemPluginWindowView
           key={item.id}
-          id={item.id}
-          frame={item.frame}
+          window={item}
           views={views}
+          plugins={systemPlugins}
+          services={systemPluginServices}
+          surface="workspace"
+          workspace={workspace}
           active={views.activeWindowId === item.id}
           front={views.frontWindowId === item.id}
           onActivate={() => onActivateWindow(item.id)}
@@ -232,13 +251,16 @@ export function FreeWorkspaceCanvas({
             frame,
           })}
           onClose={() => onCloseSystemPlugin(item)}
-        >
-          <SystemPluginRenderer
-            window={item}
-            workspace={workspace}
-            services={systemPluginServices}
-          />
-        </WorkspaceWindow>)}
+        />)}
+
+        {creator && <CreatorWindow
+          candidates={creatorChoices}
+          frame={creator.frame ?? creatorFrameAt(creator.world, views)}
+          views={views}
+          onCancel={() => setCreator(undefined)}
+          onChoose={onChooseCreator}
+          onFrame={(frame) => setCreator({ ...creator, frame })}
+        />}
       </div>
 
       {wire && <svg className={styles.creationWire}>
@@ -251,25 +273,18 @@ export function FreeWorkspaceCanvas({
         <circle cx={wire.to.x} cy={wire.to.y} r="5" />
       </svg>}
 
-      {creator && <NodeCreator
-        point={creator.screen}
-        candidates={creatorChoices}
-        onCancel={() => setCreator(undefined)}
-        onChoose={onChooseCreator}
-      />}
-
-      <div className={styles.cameraControls}>
-        <button onClick={() => persistCamera({
+      <WindowScaleControls
+        scale={views.camera.scale}
+        onZoomOut={() => persistCamera({
           ...views.camera,
           scale: Math.max(.5, views.camera.scale - .1),
-        })}>−</button>
-        <span>{Math.round(views.camera.scale * 100)}%</span>
-        <button onClick={() => persistCamera({
+        })}
+        onZoomIn={() => persistCamera({
           ...views.camera,
           scale: Math.min(2, views.camera.scale + .1),
-        })}>+</button>
-        <button onClick={fit}>适应</button>
-      </div>
+        })}
+        onFit={fit}
+      />
     </div>
   </section>;
 }

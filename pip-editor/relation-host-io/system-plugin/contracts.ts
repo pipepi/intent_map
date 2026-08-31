@@ -9,6 +9,7 @@ import type { WorkspaceWindowFrame } from "../../relation-host/contracts/package
 import type { SystemPluginWorkspace } from "../../relation-host/contracts/system-plugin.ts";
 
 export type SystemPluginScope = "workspace" | "host";
+export type SystemPluginSurface = "host" | "workspace";
 export type SystemPluginInstancePolicy = "singleton" | "multiple";
 
 export type SystemPluginInstance = {
@@ -25,7 +26,8 @@ export type SystemPluginInstance = {
  * 自己需要的宿主能力，通用 runtime 不理解这些特权对象。
  */
 export type SystemPluginHostSnapshot = {
-  workspace: SystemPluginWorkspace;
+  surface: SystemPluginSurface;
+  workspace?: SystemPluginWorkspace;
   services: unknown;
 };
 
@@ -44,6 +46,8 @@ export type SystemPluginDefinition = {
   category: string;
   icon?: string;
   scope: SystemPluginScope;
+  /** scope 决定生命周期，surfaces 只声明允许呈现的位置。 */
+  surfaces: SystemPluginSurface[];
   instancePolicy: SystemPluginInstancePolicy;
   defaultWindow: Pick<
     WorkspaceWindowFrame,

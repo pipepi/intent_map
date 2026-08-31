@@ -14,6 +14,5 @@ export function withWindowChrome(state, workspaceView, projectionNodeId, title =
     windowId, frame: jsonFrame, title,
     options,
     canBack: navigation.index > 0, canForward: navigation.index < navigation.entries.length - 1,
-    scale: Number(navigation.semanticScale ?? 1),
   } };
 }

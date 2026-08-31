@@ -32,6 +32,7 @@ import {
 } from "./workspace-canvas-pointer.ts";
 import { useWorkspaceCanvasWheel } from "./workspace-canvas-wheel.ts";
 type NodeCanvasProps = {
+  autoFocus?: boolean;
   elements: ElementPluginRegistry;
   execution?: ExecutionContextSnapshot;
   nodeTypes: NodeTypePluginRegistry;
@@ -58,6 +59,7 @@ const isFree = (views: unknown) => Boolean(
   ),
 );
 export function NodeCanvas({
+  autoFocus = true,
   elements,
   execution,
   nodeTypes,
@@ -111,18 +113,14 @@ export function NodeCanvas({
       if (!editing) element.focus({ preventScroll: true });
     };
 
-    focusCanvas();
-    const frame = requestAnimationFrame(focusCanvas);
-    const timer = setTimeout(focusCanvas, 160);
-    addEventListener("pageshow", focusCanvas);
-    addEventListener("focus", focusCanvas);
+    if (autoFocus) focusCanvas();
+    const frame = autoFocus ? requestAnimationFrame(focusCanvas) : undefined;
+    const timer = autoFocus ? setTimeout(focusCanvas, 160) : undefined;
     return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timer);
-      removeEventListener("pageshow", focusCanvas);
-      removeEventListener("focus", focusCanvas);
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      if (timer !== undefined) clearTimeout(timer);
     };
-  }, [free, workspace.id]);
+  }, [autoFocus, free, workspace.id]);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // 输入控件和可编辑区域保留空格键的原生输入语义，不触发编辑器命令。
@@ -134,6 +132,8 @@ export function NodeCanvas({
       // 空格键是编辑器级节点创建入口：在当前视口中心打开 Creator。
       if (event.code === "Space" && !interactive) {
         event.preventDefault();
+        // 工作区窗口嵌套在宿主画布中，已消费的快捷键不能继续冒泡到宿主。
+        event.stopPropagation();
         if (event.repeat || !viewport.current) return;
         const screen = {
           x: viewport.current.clientWidth / 2,
@@ -146,8 +146,9 @@ export function NodeCanvas({
         setWire(undefined);
       }
     };
-    addEventListener("keydown", handleKeyDown);
-    return () => removeEventListener("keydown", handleKeyDown);
+    const element = viewport.current;
+    element?.addEventListener("keydown", handleKeyDown);
+    return () => element?.removeEventListener("keydown", handleKeyDown);
   }, [views]);
   const hasWorkspaceProjection = workspaceHasProjection(workspace, nodeTypes);
   const status = workspaceSelectionStatus(

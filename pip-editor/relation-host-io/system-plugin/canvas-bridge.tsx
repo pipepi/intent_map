@@ -13,6 +13,7 @@ export function createSystemPluginCanvasBridge(
 ): SystemPluginCanvasBridge {
   function Renderer({
     services,
+    surface,
     window,
     workspace,
   }: SystemPluginCanvasRendererProps) {
@@ -21,6 +22,7 @@ export function createSystemPluginCanvasBridge(
       registry={registry}
       runtime={runtime}
       snapshot={{
+        surface,
         workspace,
         services,
       }}
@@ -28,9 +30,13 @@ export function createSystemPluginCanvasBridge(
   }
 
   return {
-    creatorChoices: (workspace) => registry
+    creatorChoices: (surface, workspace) => registry
       .list()
-      .filter((definition) => definition.accepts?.(workspace) !== false)
+      .filter((definition) => definition.surfaces.includes(surface))
+      .filter((definition) => {
+        if (!workspace) return definition.scope === "host";
+        return definition.accepts?.(workspace) !== false;
+      })
       .map((definition) => ({
         id: definition.id,
         label: definition.label,

@@ -5,7 +5,10 @@ import {
   type RefObject,
 } from "react";
 import type { RelationRef } from "../../relation/index.ts";
-import type { WorkspacePoint } from "../contracts/package-types.ts";
+import type {
+  WorkspacePoint,
+  WorkspaceWindowFrame,
+} from "../contracts/package-types.ts";
 import {
   screenToWorld,
   type FreeLayoutWorkspaceViews,
@@ -15,6 +18,7 @@ export type CreatorPosition = {
   screen: WorkspacePoint;
   world: WorkspacePoint;
   origin?: RelationRef;
+  frame?: WorkspaceWindowFrame;
 };
 
 export type CreationWire = {

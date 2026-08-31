@@ -22,7 +22,6 @@ import {
 import { validateNodeTypeDependencies } from "./packages/node-type-package.ts";
 import { selectedPipFilePolicy } from "../pip/index.ts";
 import { trustPackageHashes } from "../pip/host-client.ts";
-import { preserveSystemWindows } from "./workspace/view-state.ts";
 import {
   graphFingerprint,
   type WorkspaceSession,
@@ -30,15 +29,13 @@ import {
 } from "./workspace/workspace-store.ts";
 
 type PluginCatalogOptions = {
-  active?: WorkspaceSession;
-  setActiveWorkspaceId: Dispatch<SetStateAction<string>>;
+  onOpenWorkspace: (workspace: WorkspaceSession) => void;
   setMessage: Dispatch<SetStateAction<string>>;
   workspaceStore: WorkspaceSessionStore;
 };
 
 export function usePluginCatalog({
-  active,
-  setActiveWorkspaceId,
+  onOpenWorkspace,
   setMessage,
   workspaceStore,
 }: PluginCatalogOptions) {
@@ -139,24 +136,8 @@ export function usePluginCatalog({
       capabilityDiagnostics: [],
       savedGraphFingerprint: graphFingerprint(base.graph),
     };
-    const reusable =
-      active?.source.id === "host.new-tab" &&
-      !active.rootNodeIds.length &&
-      active.graph.revision === 0;
-
-    if (reusable && active) {
-      workspace.id = active.id;
-      workspace.views = preserveSystemWindows(
-        workspace.views,
-        active.views,
-        active.rootNodeIds,
-      );
-      workspaceStore.replace(active.id, workspace);
-      setActiveWorkspaceId(active.id);
-    } else {
-      workspaceStore.add(workspace);
-      setActiveWorkspaceId(workspace.id);
-    }
+    workspaceStore.add(workspace);
+    onOpenWorkspace(workspace);
 
     setMessage(
       `${status === "installed" ? "已打开" : "已再次打开"} Node Map ${portable.nodeMap.manifest.name}`,

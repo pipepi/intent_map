@@ -47,7 +47,7 @@ function buildModel(snapshot: SystemPluginHostSnapshot): PluginManagerModel {
   } = services.catalog;
 
   return {
-    activeWorkspaceId: snapshot.workspace.id,
+    activeWorkspaceId: snapshot.workspace?.id,
     canRedo: services.canRedo,
     canUndo: services.canUndo,
     disabledElements,
@@ -101,6 +101,7 @@ export const pluginManagerSystemPlugin: SystemPluginDefinition = {
   category: "系统",
   icon: "⚙",
   scope: "host",
+  surfaces: ["host", "workspace"],
   instancePolicy: "singleton",
   defaultWindow: {
     width: 640,

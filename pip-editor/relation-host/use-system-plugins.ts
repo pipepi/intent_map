@@ -1,14 +1,19 @@
-/** 把内置系统插件 runtime 接到工作区生命周期和窗口呈现。 */
+/** 把内置系统插件 runtime 接到宿主与工作区两种呈现表面。 */
 import { useEffect, useState } from "react";
 import {
   createBuiltinSystemPluginRegistry,
   createSystemPluginCanvasBridge,
   SystemPluginRuntime,
+  type EditorPreferenceStore,
   type PluginManagerHostServices,
 } from "../relation-host-io/index.ts";
 import type { WorkspacePoint } from "./contracts/package-types.ts";
 import type { SystemPluginWindow } from "./contracts/system-plugin.ts";
 import type { usePluginCatalog } from "./use-plugin-catalog.ts";
+import type {
+  HostCanvasState,
+  HostPresentationStore,
+} from "./workspace/host-presentation-store.ts";
 import { normalizeFreeLayout } from "./workspace/view-state.ts";
 import type {
   WorkspaceSession,
@@ -16,29 +21,36 @@ import type {
 } from "./workspace/workspace-store.ts";
 
 type SystemPluginHostOptions = {
-  active?: WorkspaceSession;
   catalog: ReturnType<typeof usePluginCatalog>;
   canExportNative: boolean;
-  history: (direction: "undo" | "redo") => void;
+  host: HostCanvasState;
+  hostStore: HostPresentationStore;
   message: string;
   onExport: (workspace: WorkspaceSession, native?: boolean) => void;
+  onHistory: (
+    workspace: WorkspaceSession,
+    direction: "undo" | "redo",
+  ) => void;
   onMessage: (message: string) => void;
+  preferences: EditorPreferenceStore;
   workspaces: WorkspaceSession[];
   workspaceStore: WorkspaceSessionStore;
 };
 
-export function useSystemPlugins({
-  active,
-  catalog,
-  canExportNative,
-  history,
-  message,
-  onExport,
-  onMessage,
-  workspaces,
-  workspaceStore,
-}: SystemPluginHostOptions) {
-  // revision 只负责通知 React 重新读取 runtime 中的实例状态。
+export function useSystemPlugins(options: SystemPluginHostOptions) {
+  const {
+    catalog,
+    canExportNative,
+    host,
+    hostStore,
+    message,
+    onExport,
+    onHistory,
+    onMessage,
+    preferences,
+    workspaces,
+    workspaceStore,
+  } = options;
   const [, setRevision] = useState(0);
   const [registry] = useState(createBuiltinSystemPluginRegistry);
   const [runtime] = useState(
@@ -51,7 +63,6 @@ export function useSystemPlugins({
     () => createSystemPluginCanvasBridge(registry, runtime),
   );
 
-  // 恢复工作区时，旧窗口会先归一化，再按插件 scope 找回内存实例。
   useEffect(() => {
     for (const workspace of workspaces) {
       const views = normalizeFreeLayout(
@@ -59,39 +70,52 @@ export function useSystemPlugins({
         workspace.rootNodeIds,
       );
       for (const window of Object.values(views.systemWindows)) {
-        if (!registry.get(window.pluginId)) continue;
-        if (runtime.get(window.instanceId)) continue;
-        runtime.ensure(window.pluginId, workspace.id);
+        if (registry.get(window.pluginId) && !runtime.get(window.instanceId)) {
+          runtime.ensure(window.pluginId, workspace.id);
+        }
       }
     }
-  }, [registry, runtime, workspaces]);
+    for (const window of Object.values(host.systemWindows)) {
+      if (registry.get(window.pluginId) && !runtime.get(window.instanceId)) {
+        runtime.ensure(window.pluginId);
+      }
+    }
+  }, [host.systemWindows, registry, runtime, workspaces]);
 
   useEffect(() => () => {
-    // host scope 单例跨工作区保留，但必须在宿主会话卸载时最终释放。
     runtime.disposeAll();
   }, [runtime]);
 
-  const services: PluginManagerHostServices | undefined = active
-    ? {
-      catalog,
-      canRedo: Boolean(active.redo.length),
-      canUndo: Boolean(active.undo.length),
-      message,
-      onExport: () => onExport(active),
-      onExportNative: canExportNative
-        ? () => onExport(active, true)
-        : undefined,
-      onHistory: history,
-      onMessage,
-    }
-    : undefined;
+  const servicesFor = (
+    workspace?: WorkspaceSession,
+  ): PluginManagerHostServices & { preferences: EditorPreferenceStore } => ({
+    catalog,
+    canRedo: Boolean(workspace?.redo.length),
+    canUndo: Boolean(workspace?.undo.length),
+    message,
+    onExport: () => {
+      if (workspace) onExport(workspace);
+    },
+    onExportNative: canExportNative && workspace
+      ? () => onExport(workspace, true)
+      : undefined,
+    onHistory: (direction) => {
+      if (workspace) onHistory(workspace, direction);
+    },
+    onMessage,
+    preferences,
+  });
 
-  const open = (pluginId: string, point: WorkspacePoint) => {
-    if (!active) return;
+  const openWorkspace = (
+    workspace: WorkspaceSession,
+    pluginId: string,
+    point: WorkspacePoint,
+  ) => {
     const definition = registry.require(pluginId);
-    if (definition.accepts?.(active) === false) return;
-    const instance = runtime.ensure(pluginId, active.id);
-    workspaceStore.openSystemPluginWindow(active.id, {
+    if (!definition.surfaces.includes("workspace")) return;
+    if (definition.accepts?.(workspace) === false) return;
+    const instance = runtime.ensure(pluginId, workspace.id);
+    workspaceStore.openSystemPluginWindow(workspace.id, {
       windowId: instance.id,
       pluginId,
       instanceId: instance.id,
@@ -100,15 +124,39 @@ export function useSystemPlugins({
     });
   };
 
-  const close = (window: SystemPluginWindow) => {
-    if (!active) return;
-    workspaceStore.closeSystemWindow(active.id, window.id);
+  const openHost = (pluginId: string, point: WorkspacePoint) => {
+    const definition = registry.require(pluginId);
+    if (!definition.surfaces.includes("host")) return;
+    const instance = runtime.ensure(pluginId);
+    hostStore.openSystemWindow(
+      {
+        id: instance.id,
+        pluginId,
+        instanceId: instance.id,
+      },
+      point,
+      definition.defaultWindow,
+    );
+  };
+
+  const closeWorkspace = (
+    workspace: WorkspaceSession,
+    window: SystemPluginWindow,
+  ) => {
+    workspaceStore.closeSystemWindow(workspace.id, window.id);
     runtime.releasePresentation(window.instanceId);
   };
 
+  const closeHost = (windowId: string) => {
+    const window = host.systemWindows[windowId];
+    hostStore.closeSystemWindow(windowId);
+    if (window) runtime.releasePresentation(window.instanceId);
+  };
+
   return {
-    close,
     canvas,
+    closeHost,
+    closeWorkspace,
     disposeWorkspace: (workspaceId: string) => {
       const workspace = workspaces.find((item) => item.id === workspaceId);
       if (workspace) {
@@ -117,13 +165,15 @@ export function useSystemPlugins({
           workspace.rootNodeIds,
         );
         for (const window of Object.values(views.systemWindows)) {
-          // host singleton 仅撤下呈现；multiple 实例则在最后一个窗口关闭时释放。
           runtime.releasePresentation(window.instanceId);
         }
       }
       runtime.disposeWorkspace(workspaceId);
     },
-    open,
-    services,
+    openHost,
+    openWorkspace,
+    servicesFor,
   };
 }
+
+export type ReturnTypeOfSystemPlugins = ReturnType<typeof useSystemPlugins>;

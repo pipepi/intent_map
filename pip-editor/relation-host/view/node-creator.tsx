@@ -2,26 +2,23 @@
 import { useMemo, useState } from "react";
 import type {
   RelationCreator,
-  WorkspacePoint,
 } from "../contracts/package-types.ts";
-import styles from "./relation-host.module.css";
+import styles from "./creator-window.module.css";
 
 export type CreatorChoice = Pick<
   RelationCreator,
   "id" | "label" | "description" | "category" | "icon"
 > & {
-  provider: "system" | "node-type";
+  provider: "host" | "system" | "node-type";
 };
 
 type NodeCreatorProps = {
-  point: WorkspacePoint;
   candidates: CreatorChoice[];
   onChoose: (choice: CreatorChoice) => void;
   onCancel: () => void;
 };
 
 export function NodeCreator({
-  point,
   candidates,
   onChoose,
   onCancel,
@@ -39,7 +36,6 @@ export function NodeCreator({
 
   return <div
     className={styles.creator}
-    style={{ left: point.x, top: point.y }}
     role="dialog"
     aria-label="创建节点"
     onPointerDown={(event) => event.stopPropagation()}

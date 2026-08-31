@@ -19,6 +19,7 @@ const definition = ({
   label: id,
   category: "系统",
   scope,
+  surfaces: scope === "host" ? ["host", "workspace"] : ["workspace"],
   instancePolicy,
   defaultWindow: {
     width: 640,
@@ -83,6 +84,15 @@ test("registry rejects duplicate ids, duplicate type nodes, and invalid windows"
   assert.throws(
     () => new SystemPluginRegistry([invalidTypeNode]),
     /type node is not canonical/,
+  );
+
+  const invalidSurface = {
+    ...definition({ id: "workspace-on-host", scope: "workspace" }),
+    surfaces: ["host"],
+  };
+  assert.throws(
+    () => new SystemPluginRegistry([invalidSurface]),
+    /surfaces are invalid/,
   );
 });
 

@@ -39,16 +39,20 @@ export type SystemPluginCreatorCandidate = {
   provider: "system";
 };
 
+export type SystemPluginSurface = "host" | "workspace";
+
 export type SystemPluginCanvasRendererProps = {
   window: SystemPluginWindow;
-  workspace: SystemPluginWorkspace;
+  surface: SystemPluginSurface;
+  workspace?: SystemPluginWorkspace;
   services: unknown;
 };
 
 /** Canvas 只消费此桥接面，不感知具体 registry、runtime 或插件 ID。 */
 export type SystemPluginCanvasBridge = {
   creatorChoices: (
-    workspace: SystemPluginWorkspace,
+    surface: SystemPluginSurface,
+    workspace?: SystemPluginWorkspace,
   ) => SystemPluginCreatorCandidate[];
   Renderer: ComponentType<SystemPluginCanvasRendererProps>;
 };

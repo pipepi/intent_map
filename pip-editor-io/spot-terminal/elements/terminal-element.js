@@ -57,13 +57,12 @@ export class SpotTerminalElement extends HTMLElement {
   hostRequest(detail) {
     this.dispatchEvent(new CustomEvent("intent-relation-request", { bubbles: true, composed: true, detail }));
   }
-  #updateWindow(delta, reset = false) {
+  #updateWindow(delta) {
     const chrome = this.#context?.projection?.data?.windowChrome;
     if (!chrome?.frame?.navigation) return;
     const frame = structuredClone(chrome.frame), navigation = frame.navigation;
     if (delta) navigation.index = Math.max(0, Math.min(navigation.entries.length - 1, navigation.index + delta));
-    if (delta || reset) navigation.semanticScale = 1;
-    if (reset) frame.contentOffset = { x: 0, y: 0 };
+    if (delta) navigation.semanticScale = 1;
     this.hostRequest({ kind: "set-workspace-window", windowId: chrome.windowId, frame });
   }
   #selectProjection(projectionNodeId) {
@@ -237,7 +236,6 @@ export class SpotTerminalElement extends HTMLElement {
     }));
     this.querySelector('[data-window-back]')?.addEventListener("click", () => this.#updateWindow(-1));
     this.querySelector('[data-window-forward]')?.addEventListener("click", () => this.#updateWindow(1));
-    this.querySelector('[data-window-reset]')?.addEventListener("click", () => this.#updateWindow(0, true));
     this.querySelector('[data-window-projection]')?.addEventListener("change", (event) => this.#selectProjection(event.currentTarget.value));
     this.querySelectorAll("[data-bot-side]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.bot-side", { botSide: button.dataset.botSide })));
     this.querySelectorAll("[data-bot-type]").forEach((button) => button.addEventListener("click", () => this.request("spot.terminal.bot-type", { botType: button.dataset.botType })));
