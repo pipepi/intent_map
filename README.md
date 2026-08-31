@@ -29,13 +29,17 @@ npm test
 npm run plugins:relation:build
 ```
 
-产物写入 `dist/pip-editor-io/`。完整架构与包契约见 [A3–A5 RelationNode PIP 架构](doc/relation_node_plugins.md)。
+产物写入 `dist/pip-editor-io/`。工程目录、处理链与状态边界见
+[工程目录与处理机制](doc/project_structure.md)，包契约见
+[A3–A5 RelationNode PIP 架构](doc/relation_node_plugins.md)。
 
 ## PIP 与自托管
 
 系统统一维护 A0 Seed、A1 Loader、A2 Editor、A3 Node Element、A4 Node Type、A5 Node Map 六层协议。常用命令：
 
-根目录按处理机制命名：`pip-seed/` 负责自举，`pip-editor/` 负责编辑，`pip-editor-io/` 负责外部 PIP 的进入与离开。
+根目录按处理机制命名：`pip-seed/` 负责自举，`pip-editor/` 负责通用编辑与
+PIP I/O，`pip-editor-io/` 保存可独立构建和安装的领域 A3–A5 插件套件；
+随 A2 编译发布的宿主特权插件位于 `pip-editor/relation-host-io/`。
 
 - `npm run pip:system`：重建 Git 跟踪的 A0–A2 PIP。
 - `npm run pip:self:audit`：审计 PIP 内源码与仓库边界。
