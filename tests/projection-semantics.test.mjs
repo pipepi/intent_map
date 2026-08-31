@@ -151,11 +151,11 @@ test("Flow animation follows only the latest event of an active session", () => 
 });
 
 test("ending a partial semantic pinch preserves its chosen scale", async () => {
-  const canvas = await readFile("pip-editor/relation-host/view/workspace-canvas.tsx", "utf8");
+  const canvas = await readFile("pip-editor/relation-host/view/workspace-canvas-wheel.ts", "utf8");
   const settle = canvas.slice(canvas.indexOf("const finishGesture"), canvas.indexOf("const scale = gesture.scale"));
   assert.match(settle, /semanticGestures\.current\.delete/);
   assert.doesNotMatch(settle, /semanticScale:\s*1/);
-  assert.match(settle, /if \(previous\?\.switched\) \{ finishGesture\(\); return; \}/);
+  assert.match(settle, /if \(previous\?\.switched\) \{\s*finishGesture\(\);\s*return;\s*\}/);
   assert.equal(applySemanticScale({ entries: [{ projectionNodeId: "p", observedNodeId: "n", scope: "self" }], index: 0, semanticScale: 1 }, 1.3).semanticScale, 1.3);
 });
 
