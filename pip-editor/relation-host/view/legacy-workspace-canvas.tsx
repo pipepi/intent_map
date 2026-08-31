@@ -1,5 +1,5 @@
 /** 渲染不使用自由布局窗口模型的旧工作区。 */
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import type { RelationNode } from "../../relation/index.ts";
 import type { ElementPluginRegistry } from "../activation/element-registry.ts";
 import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts";
@@ -7,24 +7,32 @@ import type {
   RelationElementRequest,
   WorkspacePoint,
 } from "../contracts/package-types.ts";
+import type {
+  SystemPluginCanvasBridge,
+  SystemPluginWindow,
+} from "../contracts/system-plugin.ts";
 import type { WorkspaceSession } from "../workspace/workspace-store.ts";
-import { normalizeFreeLayout } from "../workspace/view-state.ts";
+import {
+  normalizeFreeLayout,
+} from "../workspace/view-state.ts";
 import { RelationNodeRenderer } from "../projection/projection-renderer.tsx";
-import { NodeCreator } from "./node-creator.tsx";
+import { NodeCreator, type CreatorChoice } from "./node-creator.tsx";
 import { WorkspaceWindow } from "./workspace-window.tsx";
 import styles from "./relation-host.module.css";
 
 type LegacyCanvasProps = {
+  creatorChoices: CreatorChoice[];
   elements: ElementPluginRegistry;
   hasWorkspaceProjection: boolean;
   nodeTypes: NodeTypePluginRegistry;
   nodes: RelationNode[];
-  onClosePluginManager: () => void;
-  onOpenPluginManager: (point: WorkspacePoint) => void;
+  onChooseCreator: (choice: CreatorChoice, point: WorkspacePoint) => void;
+  onCloseSystemPlugin: (window: SystemPluginWindow) => void;
   onRequest: (request: RelationElementRequest) => void;
   onSelectionChange: (selection: string[]) => void;
-  pluginManager?: ReactNode;
   roots: RelationNode[];
+  systemPlugins: SystemPluginCanvasBridge;
+  systemPluginServices: unknown;
   workspace: WorkspaceSession;
 };
 
@@ -38,19 +46,22 @@ const pointIn = (
 };
 
 export function LegacyWorkspaceCanvas({
+  creatorChoices,
   elements,
   hasWorkspaceProjection,
   nodeTypes,
   nodes,
-  onClosePluginManager,
-  onOpenPluginManager,
+  onChooseCreator,
+  onCloseSystemPlugin,
   onRequest,
   onSelectionChange,
-  pluginManager,
   roots,
+  systemPlugins,
+  systemPluginServices,
   workspace,
 }: LegacyCanvasProps) {
   const views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
+  const SystemPluginRenderer = systemPlugins.Renderer;
   const drag = useRef<WorkspacePoint | undefined>(undefined);
   const [creatorPoint, setCreatorPoint] = useState<WorkspacePoint>();
 
@@ -142,30 +153,26 @@ export function LegacyWorkspaceCanvas({
         id={item.id}
         frame={item.frame}
         views={{ ...views, camera: { scale: 1, x: 0, y: 0 } }}
-        system
         onFrame={(frame) => onRequest({
           kind: "set-workspace-window",
           windowId: item.id,
           frame,
         })}
-        onClose={onClosePluginManager}
+        onClose={() => onCloseSystemPlugin(item)}
       >
-        {pluginManager}
+        <SystemPluginRenderer
+          window={item}
+          workspace={workspace}
+          services={systemPluginServices}
+        />
       </WorkspaceWindow>)}
 
       {creatorPoint && <NodeCreator
         point={creatorPoint}
-        candidates={[{
-          id: "host.plugin-manager",
-          label: "插件管理器",
-          description: "安装、禁用和导出 PIP",
-          category: "系统",
-          icon: "⚙",
-          provider: "system",
-        }]}
+        candidates={creatorChoices}
         onCancel={() => setCreatorPoint(undefined)}
-        onChoose={() => {
-          onOpenPluginManager(creatorPoint);
+        onChoose={(choice) => {
+          onChooseCreator(choice, creatorPoint);
           setCreatorPoint(undefined);
         }}
       />}

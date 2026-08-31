@@ -1,5 +1,5 @@
 /** 只负责自由布局画布的窗口树与浮层渲染。 */
-import type { PointerEventHandler, RefObject, ReactNode } from "react";
+import type { PointerEventHandler, RefObject } from "react";
 import type { RelationNode } from "../../relation/index.ts";
 import type { ElementPluginRegistry } from "../activation/element-registry.ts";
 import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts";
@@ -7,12 +7,18 @@ import type {
   ExecutionContextSnapshot,
   RelationElementRequest,
 } from "../contracts/package-types.ts";
+import type {
+  SystemPluginCanvasBridge,
+  SystemPluginWindow,
+} from "../contracts/system-plugin.ts";
 import { projectionForInstance } from "../projection/projection-instance.ts";
 import { navigationForRoot } from "../projection/projection-routes.ts";
 import { RelationNodeRenderer } from "../projection/projection-renderer.tsx";
 import { SemanticProjection } from "../projection/semantic-projection.tsx";
 import type { WorkspaceSession } from "../workspace/workspace-store.ts";
-import type { FreeLayoutWorkspaceViews } from "../workspace/view-state.ts";
+import type {
+  FreeLayoutWorkspaceViews,
+} from "../workspace/view-state.ts";
 import { NodeCreator, type CreatorChoice } from "./node-creator.tsx";
 import { ProjectionNavbar } from "./projection-navbar.tsx";
 import styles from "./relation-host.module.css";
@@ -24,7 +30,7 @@ import { WorkspaceWindow } from "./workspace-window.tsx";
 
 type FreeWorkspaceCanvasProps = {
   creator?: CreatorPosition;
-  creatorChoices: () => CreatorChoice[];
+  creatorChoices: CreatorChoice[];
   elements: ElementPluginRegistry;
   execution?: ExecutionContextSnapshot;
   fit: () => void;
@@ -32,12 +38,11 @@ type FreeWorkspaceCanvasProps = {
   nodeTypes: NodeTypePluginRegistry;
   normalized: FreeLayoutWorkspaceViews;
   onActivateWindow: (windowId: string) => void;
-  onChooseCreator: (id: string) => void;
-  onClosePluginManager: () => void;
+  onChooseCreator: (choice: CreatorChoice) => void;
+  onCloseSystemPlugin: (window: SystemPluginWindow) => void;
   onRequest: (request: RelationElementRequest) => void;
   onViewsChange: (views: FreeLayoutWorkspaceViews) => void;
   persistCamera: (camera: FreeLayoutWorkspaceViews["camera"]) => void;
-  pluginManager?: ReactNode;
   pointer: {
     begin: PointerEventHandler<HTMLDivElement>;
     cancel: PointerEventHandler<HTMLDivElement>;
@@ -48,6 +53,8 @@ type FreeWorkspaceCanvasProps = {
   scopedSelections: Record<string, string[]>;
   setCreator: (creator: CreatorPosition | undefined) => void;
   status: string;
+  systemPlugins: SystemPluginCanvasBridge;
+  systemPluginServices: unknown;
   viewport: RefObject<HTMLDivElement | null>;
   views: FreeLayoutWorkspaceViews;
   wire?: CreationWire;
@@ -65,21 +72,23 @@ export function FreeWorkspaceCanvas({
   normalized,
   onActivateWindow,
   onChooseCreator,
-  onClosePluginManager,
+  onCloseSystemPlugin,
   onRequest,
   onViewsChange,
   persistCamera,
-  pluginManager,
   pointer,
   roots,
   scopedSelections,
   setCreator,
   status,
+  systemPlugins,
+  systemPluginServices,
   viewport,
   views,
   wire,
   workspace,
 }: FreeWorkspaceCanvasProps) {
+  const SystemPluginRenderer = systemPlugins.Renderer;
   return <section className={styles.canvasWrap} data-testid="relation-workspace">
     <div className={styles.canvasInfo}>
       RelationGraph · revision {workspace.graph.revision} · {nodeCount} 个节点 · {status}
@@ -214,7 +223,6 @@ export function FreeWorkspaceCanvas({
           id={item.id}
           frame={item.frame}
           views={views}
-          system
           active={views.activeWindowId === item.id}
           front={views.frontWindowId === item.id}
           onActivate={() => onActivateWindow(item.id)}
@@ -223,9 +231,13 @@ export function FreeWorkspaceCanvas({
             windowId: item.id,
             frame,
           })}
-          onClose={onClosePluginManager}
+          onClose={() => onCloseSystemPlugin(item)}
         >
-          {pluginManager}
+          <SystemPluginRenderer
+            window={item}
+            workspace={workspace}
+            services={systemPluginServices}
+          />
         </WorkspaceWindow>)}
       </div>
 
@@ -241,7 +253,7 @@ export function FreeWorkspaceCanvas({
 
       {creator && <NodeCreator
         point={creator.screen}
-        candidates={creatorChoices()}
+        candidates={creatorChoices}
         onCancel={() => setCreator(undefined)}
         onChoose={onChooseCreator}
       />}

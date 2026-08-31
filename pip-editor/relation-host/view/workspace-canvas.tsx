@@ -1,5 +1,5 @@
 /** 渲染关系节点，或带工作区相机的自由布局投影世界。 */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RelationRef } from "../../relation/index.ts";
 import type { ElementPluginRegistry } from "../activation/element-registry.ts";
 import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts";
@@ -8,7 +8,10 @@ import type {
   RelationElementRequest,
   WorkspacePoint,
 } from "../contracts/package-types.ts";
-import { projectionForInstance } from "../projection/projection-instance.ts";
+import type {
+  SystemPluginCanvasBridge,
+  SystemPluginWindow,
+} from "../contracts/system-plugin.ts";
 import type { WorkspaceSession } from "../workspace/workspace-store.ts";
 import {
   normalizeFreeLayout,
@@ -16,8 +19,12 @@ import {
   type FreeLayoutWorkspaceViews,
 } from "../workspace/view-state.ts";
 import { LegacyWorkspaceCanvas } from "./legacy-workspace-canvas.tsx";
-import type { CreatorChoice } from "./node-creator.tsx";
 import { FreeWorkspaceCanvas } from "./free-workspace-canvas.tsx";
+import {
+  workspaceCreatorChoices,
+  workspaceHasProjection,
+  workspaceSelectionStatus,
+} from "./workspace-canvas-model.ts";
 import {
   useWorkspaceCanvasPointer,
   type CreationWire,
@@ -29,17 +36,18 @@ type NodeCanvasProps = {
   execution?: ExecutionContextSnapshot;
   nodeTypes: NodeTypePluginRegistry;
   onActivateWindow: (windowId: string) => void;
-  onClosePluginManager: () => void;
+  onCloseSystemPlugin: (window: SystemPluginWindow) => void;
   onInvokeCreator: (
     creatorId: string,
     point: WorkspacePoint,
     origin?: RelationRef,
   ) => void;
-  onOpenPluginManager: (point: WorkspacePoint) => void;
+  onOpenSystemPlugin: (pluginId: string, point: WorkspacePoint) => void;
   onRequest: (request: RelationElementRequest) => void;
   onSelectionChange: (selection: string[]) => void;
   onViewsChange: (views: FreeLayoutWorkspaceViews) => void;
-  pluginManager?: ReactNode;
+  systemPlugins: SystemPluginCanvasBridge;
+  systemPluginServices: unknown;
   workspace: WorkspaceSession;
 };
 const isFree = (views: unknown) => Boolean(
@@ -54,13 +62,14 @@ export function NodeCanvas({
   execution,
   nodeTypes,
   onActivateWindow,
-  onClosePluginManager,
+  onCloseSystemPlugin,
   onInvokeCreator,
-  onOpenPluginManager,
+  onOpenSystemPlugin,
   onRequest,
   onSelectionChange,
   onViewsChange,
-  pluginManager,
+  systemPlugins,
+  systemPluginServices,
   workspace,
 }: NodeCanvasProps) {
   const nodes = Object.values(workspace.graph.nodes);
@@ -114,14 +123,15 @@ export function NodeCanvas({
       removeEventListener("focus", focusCanvas);
     };
   }, [free, workspace.id]);
-
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // 输入控件和可编辑区域保留空格键的原生输入语义，不触发编辑器命令。
       const interactive = event.target instanceof HTMLElement && (
         ["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(
           event.target.tagName,
         ) || event.target.isContentEditable
       );
+      // 空格键是编辑器级节点创建入口：在当前视口中心打开 Creator。
       if (event.code === "Space" && !interactive) {
         event.preventDefault();
         if (event.repeat || !viewport.current) return;
@@ -139,67 +149,18 @@ export function NodeCanvas({
     addEventListener("keydown", handleKeyDown);
     return () => removeEventListener("keydown", handleKeyDown);
   }, [views]);
-
-  const hasWorkspaceProjection = roots.some((node) => {
-    if (projectionForInstance(node, nodeTypes.projections())) return true;
-    return nodeTypes.projections().some((projection) => {
-      if (projection.purpose !== "workspace") return false;
-      try {
-        return projection.matches(node, workspace.graph);
-      } catch {
-        return true;
-      }
-    });
-  });
-
-  const displayName = (nodeId: string) => {
-    const node = workspace.graph.nodes[nodeId];
-    if (!node) return nodeId;
-    for (const descriptor of nodeTypes.types()) {
-      try {
-        if (!descriptor.matches?.(node, workspace.graph)) continue;
-        const label = descriptor.label?.(node, workspace.graph).trim();
-        if (label) return label;
-      } catch {
-        continue;
-      }
-    }
-    return nodeId;
-  };
-
-  const status = hasWorkspaceProjection
-    ? roots.map((node) => `${displayName(node.id)} → ${
-      scopedSelections[node.id]?.map(displayName).join(", ") || "未选择"
-    }`).join(" · ")
-    : `${workspace.selection.length} 个已选`;
-
-  const creatorChoices = (): CreatorChoice[] => [{
-    id: "host.plugin-manager",
-    label: "插件管理器",
-    description: "安装、禁用和导出 PIP",
-    category: "系统",
-    icon: "⚙",
-    provider: "system",
-  }, ...nodeTypes.creators().filter((item) => {
-    try {
-      return item.accepts({
-        workspaceId: workspace.id,
-        graph: workspace.graph,
-        rootNodeIds: workspace.rootNodeIds,
-        worldPosition: creator?.world ?? { x: 0, y: 0 },
-        origin: creator?.origin,
-      });
-    } catch {
-      return false;
-    }
-  }).map((item) => ({
-    id: item.id,
-    label: item.label,
-    description: item.description,
-    category: item.category,
-    icon: item.icon,
-    provider: "node-type" as const,
-  }))];
+  const hasWorkspaceProjection = workspaceHasProjection(workspace, nodeTypes);
+  const status = workspaceSelectionStatus(
+    workspace,
+    nodeTypes,
+    hasWorkspaceProjection,
+  );
+  const creatorChoices = workspaceCreatorChoices(
+    workspace,
+    nodeTypes,
+    systemPlugins,
+    creator,
+  );
 
   const persistCamera = (next: FreeLayoutWorkspaceViews["camera"]) => {
     setPreviewCamera(undefined);
@@ -254,11 +215,17 @@ export function NodeCanvas({
       hasWorkspaceProjection={hasWorkspaceProjection}
       elements={elements}
       nodeTypes={nodeTypes}
-      pluginManager={pluginManager}
+      creatorChoices={creatorChoices.filter(
+        (choice) => choice.provider === "system",
+      )}
+      systemPlugins={systemPlugins}
+      systemPluginServices={systemPluginServices}
       onSelectionChange={onSelectionChange}
       onRequest={onRequest}
-      onOpenPluginManager={onOpenPluginManager}
-      onClosePluginManager={onClosePluginManager}
+      onCloseSystemPlugin={onCloseSystemPlugin}
+      onChooseCreator={(choice, point) => {
+        onOpenSystemPlugin(choice.id, point);
+      }}
     />;
   }
 
@@ -270,7 +237,8 @@ export function NodeCanvas({
     elements={elements}
     nodeTypes={nodeTypes}
     execution={execution}
-    pluginManager={pluginManager}
+    systemPlugins={systemPlugins}
+    systemPluginServices={systemPluginServices}
     normalized={normalized}
     views={views}
     viewport={viewport}
@@ -284,13 +252,13 @@ export function NodeCanvas({
     persistCamera={persistCamera}
     onViewsChange={onViewsChange}
     onActivateWindow={onActivateWindow}
-    onClosePluginManager={onClosePluginManager}
+    onCloseSystemPlugin={onCloseSystemPlugin}
     onRequest={onRequest}
-    onChooseCreator={(id) => {
-      if (id === "host.plugin-manager") {
-        onOpenPluginManager(creator!.world);
+    onChooseCreator={(choice) => {
+      if (choice.provider === "system") {
+        onOpenSystemPlugin(choice.id, creator!.world);
       } else {
-        onInvokeCreator(id, creator!.world, creator!.origin);
+        onInvokeCreator(choice.id, creator!.world, creator!.origin);
       }
       setCreator(undefined);
     }}

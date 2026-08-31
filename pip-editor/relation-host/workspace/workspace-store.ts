@@ -2,7 +2,13 @@
 import { applyRelationPatch, type JsonValue, type RelationGraph, type RelationPatch } from "../../relation/index.ts";
 import type { RelationWorkspace } from "../packages/node-map-package.ts";
 import type { ExactPackageRef, RelationCreationResult, RelationValidator, WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
-import { assertWorkspaceFrame, normalizeFreeLayout, normalizeProjectionNavigation, withSystemWindows } from "./view-state.ts";
+import type { SystemPluginWindow } from "../contracts/system-plugin.ts";
+import {
+  assertWorkspaceFrame,
+  normalizeFreeLayout,
+  normalizeProjectionNavigation,
+  withSystemWindows,
+} from "./view-state.ts";
 
 export type CapabilityDiagnostic = {
   dependencyKind: "element" | "node-type";
@@ -106,14 +112,52 @@ export class WorkspaceSessionStore {
       ? views : withSystemWindows(workspace.views, views.systemWindows, windowId, windowId));
   }
 
-  openPluginManager(workspaceId: string, point: WorkspacePoint) {
-    const workspace = this.#workspace(workspaceId), views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
-    const width = 640, height = 720;
-    const x = Math.max(0, Math.min(views.world.width - width, point.x - width / 2));
-    const y = Math.max(0, Math.min(views.world.height - height, point.y - height / 2));
-    views.systemWindows["host.plugin-manager"] = { id: "host.plugin-manager", type: "plugin-manager", frame: { x, y, width, height, resizeMode: "full" } };
-    views.activeWindowId = "host.plugin-manager"; views.frontWindowId = "host.plugin-manager";
-    this.updateViews(workspaceId, (workspace.views as { kind?: unknown })?.kind === "free-layout" ? views : withSystemWindows(workspace.views, views.systemWindows, views.activeWindowId, views.frontWindowId));
+  openSystemPluginWindow(
+    workspaceId: string,
+    input: Omit<SystemPluginWindow, "id" | "frame"> & {
+      windowId: string;
+      point: WorkspacePoint;
+      defaultFrame: Pick<
+        WorkspaceWindowFrame,
+        "width" | "height" | "resizeMode"
+      >;
+    },
+  ) {
+    const workspace = this.#workspace(workspaceId);
+    const views = normalizeFreeLayout(workspace.views, workspace.rootNodeIds);
+    const existing = views.systemWindows[input.windowId];
+    const base = existing?.frame ?? input.defaultFrame;
+    const x = Math.max(
+      0,
+      Math.min(views.world.width - base.width, input.point.x - base.width / 2),
+    );
+    const y = Math.max(
+      0,
+      Math.min(views.world.height - base.height, input.point.y - base.height / 2),
+    );
+    views.systemWindows[input.windowId] = {
+      id: input.windowId,
+      pluginId: input.pluginId,
+      instanceId: input.instanceId,
+      frame: {
+        ...base,
+        x,
+        y,
+      },
+    };
+    views.activeWindowId = input.windowId;
+    views.frontWindowId = input.windowId;
+    this.updateViews(
+      workspaceId,
+      (workspace.views as { kind?: unknown })?.kind === "free-layout"
+        ? views
+        : withSystemWindows(
+          workspace.views,
+          views.systemWindows,
+          views.activeWindowId,
+          views.frontWindowId,
+        ),
+    );
   }
 
   closeSystemWindow(workspaceId: string, windowId: string) {

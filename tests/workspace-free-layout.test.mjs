@@ -5,6 +5,22 @@ import { createNodeMapWorkspace } from "../pip-editor/relation-host/packages/nod
 import { exportedWorkspaceViews, normalizeFreeLayout, panWindowContent, preserveSystemWindows, zoomWindowContentAt } from "../pip-editor/relation-host/workspace/view-state.ts";
 import { graphFingerprint, WorkspaceSessionStore } from "../pip-editor/relation-host/workspace/workspace-store.ts";
 
+const pluginManagerInstanceId = "system.instance.host:host.plugin-manager";
+
+const openPluginManager = (store, workspaceId, point) => {
+  store.openSystemPluginWindow(workspaceId, {
+    windowId: pluginManagerInstanceId,
+    pluginId: "host.plugin-manager",
+    instanceId: pluginManagerInstanceId,
+    point,
+    defaultFrame: {
+      width: 640,
+      height: 720,
+      resizeMode: "full",
+    },
+  });
+};
+
 const session = async () => {
   const suite = await buildScenePluginSuite(), base = createNodeMapWorkspace(suite.nodeMap, "workspace.layout");
   base.rootNodeIds = ["scene.view.quadrant", "scene.view.tube"];
@@ -38,26 +54,40 @@ test("workspace frame accepts a finite pointer origin for semantic transitions",
 
 test("view-only changes preserve graph revision and history while system windows stay local", async () => {
   const { workspace } = await session(), store = new WorkspaceSessionStore([workspace], () => {});
-  store.openPluginManager(workspace.id, { x: 300, y: 240 });
+  openPluginManager(store, workspace.id, { x: 300, y: 240 });
   let current = store.list()[0], views = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.equal(current.graph.revision, 0); assert.equal(current.undo.length, 0);
-  assert.deepEqual({ x: views.systemWindows["host.plugin-manager"].frame.x, y: views.systemWindows["host.plugin-manager"].frame.y }, { x: 0, y: 0 });
-  assert.equal(views.activeWindowId, "host.plugin-manager");
+  assert.deepEqual({ x: views.systemWindows[pluginManagerInstanceId].frame.x, y: views.systemWindows[pluginManagerInstanceId].frame.y }, { x: 0, y: 0 });
+  assert.equal(views.activeWindowId, pluginManagerInstanceId);
   store.activateWindow(workspace.id, "scene.view.quadrant");
   current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.equal(views.activeWindowId, "scene.view.quadrant"); assert.equal(views.frontWindowId, "scene.view.quadrant");
   store.updateViews(workspace.id, { ...views, activeWindowId: undefined });
   current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.equal(views.activeWindowId, undefined); assert.equal(views.frontWindowId, "scene.view.quadrant");
-  store.setWindow(workspace.id, "host.plugin-manager", { x: 360, y: 280, width: 700, height: 760, resizeMode: "simple" });
+  store.setWindow(workspace.id, pluginManagerInstanceId, { x: 360, y: 280, width: 700, height: 760, resizeMode: "simple" });
   current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
-  assert.equal(views.systemWindows["host.plugin-manager"].frame.resizeMode, "simple");
+  assert.equal(views.systemWindows[pluginManagerInstanceId].frame.resizeMode, "simple");
+  openPluginManager(store, workspace.id, { x: 1000, y: 900 });
+  current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
+  assert.deepEqual(views.systemWindows[pluginManagerInstanceId].frame, {
+    x: 650,
+    y: 520,
+    width: 700,
+    height: 760,
+    resizeMode: "simple",
+  });
+  assert.equal(views.frontWindowId, pluginManagerInstanceId);
+  store.activateWindow(workspace.id, "scene.view.quadrant");
+  current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
   store.setWindow(workspace.id, "scene.view.quadrant", { ...views.projections["scene.view.quadrant"], contentScale: 1.4 });
   current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.equal(views.projections["scene.view.quadrant"].contentScale, 1.4);
   store.setWindow(workspace.id, "scene.view.quadrant", { ...views.projections["scene.view.quadrant"], navigation: {
     entries: [{ projectionNodeId: "scene.view.quadrant", observedNodeId: "scene.today", context: "self-workspace" }], index: 0, semanticScale: 1,
   } });
+  current = store.list()[0]; views = normalizeFreeLayout(current.views, current.rootNodeIds);
+  store.updateViews(workspace.id, { ...views, activeWindowId: undefined });
   current = store.list()[0];
   assert.deepEqual(current.views.projections["scene.view.quadrant"].navigation.entries[0], { projectionNodeId: "scene.view.quadrant", observedNodeId: "scene.today", scope: "self" });
   assert.deepEqual(exportedWorkspaceViews(current.views).systemWindows, {});
@@ -126,9 +156,9 @@ test("closing a projection root keeps its graph data and makes it creatable agai
 test("system manager overlays a non-free workspace without replacing its domain view kind", async () => {
   const { workspace } = await session(); workspace.views = { kind: "workbench", panels: ["tree", "canvas"] };
   const store = new WorkspaceSessionStore([workspace], () => {});
-  store.openPluginManager(workspace.id, { x: 120, y: 100 });
+  openPluginManager(store, workspace.id, { x: 120, y: 100 });
   const views = store.list()[0].views;
-  assert.equal(views.kind, "workbench"); assert.ok(views.systemWindows["host.plugin-manager"]);
+  assert.equal(views.kind, "workbench"); assert.ok(views.systemWindows[pluginManagerInstanceId]);
   const exported = exportedWorkspaceViews(views);
   assert.equal(exported.kind, "workbench"); assert.deepEqual(exported.systemWindows, {});
 });
@@ -139,5 +169,52 @@ test("reusing a blank tab for A5 preserves its local plugin manager", async () =
   }, activeWindowId: "host.plugin-manager" }, []);
   const next = preserveSystemWindows({ kind: "free-layout", projections: {}, systemWindows: {} }, previous, []);
   const views = normalizeFreeLayout(next, []);
-  assert.ok(views.systemWindows["host.plugin-manager"]); assert.equal(views.activeWindowId, "host.plugin-manager"); assert.equal(views.frontWindowId, "host.plugin-manager");
+  assert.equal(views.systemWindows[pluginManagerInstanceId].pluginId, "host.plugin-manager");
+  assert.equal(views.systemWindows[pluginManagerInstanceId].instanceId, pluginManagerInstanceId);
+  assert.equal(views.activeWindowId, pluginManagerInstanceId);
+  assert.equal(views.frontWindowId, pluginManagerInstanceId);
+});
+
+test("unknown system plugin presentations remain isolated and recover safely", () => {
+  const views = normalizeFreeLayout({
+    kind: "free-layout",
+    systemWindows: {
+      diagnostic: {
+        id: "diagnostic",
+        pluginId: "host.unknown",
+        instanceId: "system.instance.host:host.unknown",
+        frame: {
+          x: 100,
+          y: 100,
+          width: 640,
+          height: 720,
+          resizeMode: "full",
+        },
+      },
+    },
+  }, []);
+  assert.equal(views.systemWindows.diagnostic.pluginId, "host.unknown");
+  assert.deepEqual(exportedWorkspaceViews(views).systemWindows, {});
+});
+
+test("host singleton presentations are independent in each workspace", async () => {
+  const { workspace: first } = await session();
+  const second = structuredClone(first);
+  second.id = "workspace.second";
+  const store = new WorkspaceSessionStore([first, second], () => {});
+
+  openPluginManager(store, first.id, { x: 400, y: 400 });
+  openPluginManager(store, second.id, { x: 1200, y: 700 });
+  store.closeSystemWindow(first.id, pluginManagerInstanceId);
+
+  const firstViews = normalizeFreeLayout(
+    store.list()[0].views,
+    first.rootNodeIds,
+  );
+  const secondViews = normalizeFreeLayout(
+    store.list()[1].views,
+    second.rootNodeIds,
+  );
+  assert.equal(firstViews.systemWindows[pluginManagerInstanceId], undefined);
+  assert.ok(secondViews.systemWindows[pluginManagerInstanceId]);
 });

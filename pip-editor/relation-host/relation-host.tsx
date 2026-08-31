@@ -9,8 +9,8 @@ import { importPip } from "./packages/import-pip.ts";
 import { dispatchRelationElementRequest } from "./relation-host-actions.ts";
 import { createScratchWorkspace, downloadBlob } from "./relation-host-workspace.ts";
 import { usePluginCatalog } from "./use-plugin-catalog.ts";
+import { useSystemPlugins } from "./use-system-plugins.ts";
 import { CloseWorkspaceDialog } from "./view/close-workspace-dialog.tsx";
-import { PluginManagerWindow } from "./view/plugin-manager-window.tsx";
 import styles from "./view/relation-host.module.css";
 import { NodeCanvas } from "./view/workspace-canvas.tsx";
 import { WorkspaceTabs } from "./view/workspace-tabs.tsx";
@@ -123,8 +123,22 @@ export function RelationHost() {
     }
   }
 
+  const systemPlugins = useSystemPlugins({
+    active,
+    catalog,
+    canExportNative: location.protocol === "pip:",
+    history,
+    message,
+    onExport: (workspace, native) => void exportWorkspace(workspace, native),
+    onMessage: setMessage,
+    workspaces,
+    workspaceStore,
+  });
+
   const closeNow = (id: string) => {
     const index = workspaces.findIndex((item) => item.id === id);
+    // workspace scope 实例随工作区释放，host scope 单例继续服务其他工作区。
+    systemPlugins.disposeWorkspace(id);
     workspaceStore.remove(id);
     if (id === activeWorkspaceId) {
       setActiveWorkspaceId(workspaces[index + 1]?.id ?? workspaces[index - 1]?.id ?? "");
@@ -216,18 +230,6 @@ export function RelationHost() {
     return () => removeEventListener("intent-relation-hook", handleHook);
   }, [triggerRuntime]);
 
-  const pluginManager = active ? <PluginManagerWindow
-    active={active}
-    catalog={catalog}
-    message={message}
-    canUndo={Boolean(active.undo.length)}
-    canRedo={Boolean(active.redo.length)}
-    onHistory={history}
-    onMessage={setMessage}
-    onExport={() => void exportWorkspace(active)}
-    onExportNative={location.protocol === "pip:" ? () => void exportWorkspace(active, true) : undefined}
-  /> : undefined;
-
   return <main className={styles.shell}>
     <div className={styles.layout}>
       <section className={styles.workspaceArea}>
@@ -252,14 +254,15 @@ export function RelationHost() {
             sessions: execution.sessions.filter((item) => item.workspaceId === active.id),
             activeSessionId: execution.activeSessionId,
           }}
-          pluginManager={pluginManager}
+          systemPlugins={systemPlugins.canvas}
+          systemPluginServices={systemPlugins.services}
           onSelectionChange={(selection) => workspaceStore.select(active.id, selection)}
           onRequest={handleRequest}
           onViewsChange={(views) => workspaceStore.updateViews(active.id, views)}
           onActivateWindow={(id) => workspaceStore.activateWindow(active.id, id)}
           onInvokeCreator={(id, point, origin) => void invokeCreator(id, point, undefined, origin)}
-          onOpenPluginManager={(point) => workspaceStore.openPluginManager(active.id, point)}
-          onClosePluginManager={() => workspaceStore.closeSystemWindow(active.id, "host.plugin-manager")}
+          onOpenSystemPlugin={systemPlugins.open}
+          onCloseSystemPlugin={systemPlugins.close}
         /> : <section className={styles.canvasWrap}>
           <div className={styles.empty}>点击 + 新建工作区标签</div>
         </section>}

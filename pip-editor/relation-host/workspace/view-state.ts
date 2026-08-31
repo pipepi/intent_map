@@ -1,14 +1,18 @@
 import type { JsonValue } from "../../relation/index.ts";
+import {
+  normalizeSystemPluginReference,
+  type SystemPluginWindow,
+} from "../contracts/system-plugin.ts";
 import type { ObservationScope, ProjectionExecutionViewState, ProjectionNavigationState, ProjectionRouteEntry, WorkspacePoint, WorkspaceWindowFrame } from "../contracts/package-types.ts";
 import { exportedNavigation } from "../projection/projection-navigation.ts";
 
-export type SystemWorkspaceWindow = { id: string; type: "plugin-manager"; frame: WorkspaceWindowFrame };
+/** 系统插件窗口只保存 UI 呈现；插件实例和状态属于宿主 runtime。 */
 export type FreeLayoutWorkspaceViews = {
   kind: "free-layout";
   world: { width: number; height: number };
   camera: { scale: number; x: number; y: number };
   projections: Record<string, WorkspaceWindowFrame>;
-  systemWindows: Record<string, SystemWorkspaceWindow>;
+  systemWindows: Record<string, SystemPluginWindow>;
   activeWindowId?: string;
   frontWindowId?: string;
 };
@@ -114,20 +118,38 @@ export function normalizeFreeLayout(value: JsonValue, rootNodeIds: string[]): Fr
     }
     catch { projections[id] = defaultFrame(index); }
   });
-  const systemWindows: Record<string, SystemWorkspaceWindow> = {};
+  const systemWindows: Record<string, SystemPluginWindow> = {};
+  const migratedWindowIds = new Map<string, string>();
   const systems = record(source?.systemWindows);
   for (const [id, raw] of Object.entries(systems ?? {})) {
     const item = record(raw);
     try {
-      if (item?.type !== "plugin-manager") continue;
+      if (!item) continue;
+      const reference = normalizeSystemPluginReference(item);
+      if (!reference) continue;
       assertWorkspaceFrame(item.frame, world);
-      systemWindows[id] = { id, type: "plugin-manager", frame: structuredClone(item.frame as WorkspaceWindowFrame) };
+      const windowId = reference.migratedWindowId ?? id;
+      migratedWindowIds.set(id, windowId);
+      systemWindows[windowId] = {
+        id: windowId,
+        pluginId: reference.pluginId,
+        instanceId: reference.instanceId,
+        frame: structuredClone(item.frame as WorkspaceWindowFrame),
+      };
     } catch { continue; }
   }
-  const activeWindowId = typeof source?.activeWindowId === "string" && (projections[source.activeWindowId] || systemWindows[source.activeWindowId])
-    ? source.activeWindowId : undefined;
-  const frontWindowId = typeof source?.frontWindowId === "string" && (projections[source.frontWindowId] || systemWindows[source.frontWindowId])
-    ? source.frontWindowId : activeWindowId;
+  const sourceActiveId = typeof source?.activeWindowId === "string"
+    ? migratedWindowIds.get(source.activeWindowId) ?? source.activeWindowId
+    : undefined;
+  const sourceFrontId = typeof source?.frontWindowId === "string"
+    ? migratedWindowIds.get(source.frontWindowId) ?? source.frontWindowId
+    : undefined;
+  const activeWindowId = sourceActiveId && (
+    projections[sourceActiveId] || systemWindows[sourceActiveId]
+  ) ? sourceActiveId : undefined;
+  const frontWindowId = sourceFrontId && (
+    projections[sourceFrontId] || systemWindows[sourceFrontId]
+  ) ? sourceFrontId : activeWindowId;
   return { kind: "free-layout", world, camera, projections, systemWindows, activeWindowId, frontWindowId };
 }
 
@@ -147,7 +169,7 @@ export const exportedWorkspaceViews = (value: JsonValue): JsonValue => {
   return (source ?? value) as JsonValue;
 };
 
-export const withSystemWindows = (value: JsonValue, systemWindows: Record<string, SystemWorkspaceWindow>, activeWindowId?: string, frontWindowId?: string): JsonValue => {
+export const withSystemWindows = (value: JsonValue, systemWindows: Record<string, SystemPluginWindow>, activeWindowId?: string, frontWindowId?: string): JsonValue => {
   const source = record(structuredClone(value)) ?? {};
   source.systemWindows = structuredClone(systemWindows);
   if (activeWindowId) source.activeWindowId = activeWindowId;
