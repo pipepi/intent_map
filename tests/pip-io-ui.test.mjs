@@ -25,11 +25,14 @@ test("the generic host records verified hashes without a trust prompt", async ()
 });
 
 test("plugin commands are serialized per workspace against the latest graph snapshot", async () => {
-  const host = await readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8");
+  const [host, actions] = await Promise.all([
+    readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/relation-host/relation-host-actions.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(host, /commandQueuesRef = useRef\(new Map<string, Promise<void>>\(\)\)/);
-  assert.match(host, /workspaceStore\.list\(\)\.find\(\(item\) => item\.id === workspaceId\)/);
-  assert.match(host, /previous\.catch\(\(\) => undefined\)\.then/);
-  assert.doesNotMatch(host, /command\(request\.input, active\.graph\)/);
+  assert.match(actions, /workspaceStore\s*\.list\(\)\s*\.find\(\(workspace\) => workspace\.id === workspaceId\)/);
+  assert.match(actions, /previous\.catch\(\(\) => undefined\)\.then/);
+  assert.doesNotMatch(actions, /command\(request\.input, active\.graph\)/);
 });
 
 test("the workspace remains a bounded two-axis trackpad scroll region", async () => {
