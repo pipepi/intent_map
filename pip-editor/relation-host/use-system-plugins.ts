@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   createBuiltinSystemPluginRegistry,
   createSystemPluginCanvasBridge,
+  PLUGIN_MANAGER_SYSTEM_PLUGIN_ID,
   SystemPluginRuntime,
   type EditorPreferenceStore,
   type PluginManagerHostServices,
@@ -172,6 +173,21 @@ export function useSystemPlugins(options: SystemPluginHostOptions) {
     },
     openHost,
     openWorkspace,
+    importAtHost: (files: File[], point: WorkspacePoint) => {
+      openHost(PLUGIN_MANAGER_SYSTEM_PLUGIN_ID, point);
+      void catalog.installFiles(files);
+    },
+    importAtWorkspace: (
+      workspace: WorkspaceSession,
+      files: File[],
+      point: WorkspacePoint,
+    ) => {
+      openWorkspace(workspace, PLUGIN_MANAGER_SYSTEM_PLUGIN_ID, point);
+      void catalog.installFiles(files);
+    },
+    rejectImport: () => {
+      onMessage("只支持拖入 A3、A4 或 A5 的 .pip 文件");
+    },
     servicesFor,
   };
 }

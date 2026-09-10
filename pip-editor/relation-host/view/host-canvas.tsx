@@ -19,6 +19,7 @@ import {
 } from "./workspace-canvas-pointer.ts";
 import { SystemPluginWindowView } from "./system-plugin-window.tsx";
 import { WorkspaceWindow } from "./workspace-window.tsx";
+import { PipDropZone } from "./pip-drop-zone.tsx";
 
 type HostCanvasProps = {
   creatorRequest: number;
@@ -37,6 +38,8 @@ type HostCanvasProps = {
   onOpenSystemPlugin: (pluginId: string, point: WorkspacePoint) => void;
   onRestoreWorkspaceTab: (workspaceId: string) => void;
   onCloseSystemPlugin: (windowId: string) => void;
+  onPipDrop: (files: File[], point: WorkspacePoint) => void;
+  onUnsupportedPipDrop: (files: File[]) => void;
 };
 
 export function HostCanvas({
@@ -53,6 +56,8 @@ export function HostCanvas({
   onOpenSystemPlugin,
   onRestoreWorkspaceTab,
   onCloseSystemPlugin,
+  onPipDrop,
+  onUnsupportedPipDrop,
 }: HostCanvasProps) {
   const viewport = useRef<HTMLDivElement>(null);
   const [previewCamera, setPreviewCamera] = useState<HostCanvasState["camera"]>();
@@ -125,11 +130,14 @@ export function HostCanvas({
   }, [creatorRequest]);
 
   return <section className={styles.canvasWrap} data-testid="host-canvas">
-    <div
+    <PipDropZone
       ref={viewport}
       tabIndex={-1}
       data-canvas-shortcuts
       className={`${styles.canvas} ${styles.freeViewport}`}
+      pointFromScreen={(screen) => screenToWorld(screen, views)}
+      onPipFiles={onPipDrop}
+      onUnsupportedFiles={onUnsupportedPipDrop}
       onKeyDown={(event) => {
         const target = event.target as HTMLElement;
         // 嵌套工作区拥有自己的快捷键；宿主只处理直接发生在宿主画布的事件。
@@ -246,6 +254,6 @@ export function HostCanvas({
         <line x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y} />
         <circle cx={wire.to.x} cy={wire.to.y} r="5" />
       </svg>}
-    </div>
+    </PipDropZone>
   </section>;
 }

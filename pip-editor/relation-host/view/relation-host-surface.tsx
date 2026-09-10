@@ -143,6 +143,8 @@ export function RelationHostSurface({
         onCreateWorkspace={onCreateWorkspace}
         onFocusWorkspace={onFocusWorkspace}
         onOpenSystemPlugin={systemPlugins.openHost}
+        onPipDrop={systemPlugins.importAtHost}
+        onUnsupportedPipDrop={systemPlugins.rejectImport}
         onRestoreWorkspaceTab={onActivateTab}
         onCloseSystemPlugin={systemPlugins.closeHost}
       />}

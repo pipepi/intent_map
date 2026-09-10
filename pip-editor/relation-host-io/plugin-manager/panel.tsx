@@ -1,5 +1,7 @@
 /** 插件管理器系统节点的可视界面。 */
+import { useId } from "react";
 import type { PortableNodeMap } from "../../relation-host/packages/node-map-package.ts";
+import type { PipImportBatchState } from "../../relation-host/packages/import-batch.ts";
 import type {
   ElementPluginPackage,
   NodeTypePluginPackage,
@@ -10,6 +12,7 @@ import {
   NodeMapPackageList,
   NodeTypePackageList,
 } from "./package-lists.tsx";
+import { PluginImportStatus } from "./import-status.tsx";
 
 export type PluginManagerModel = {
   activeWorkspaceId?: string;
@@ -19,13 +22,14 @@ export type PluginManagerModel = {
   disabledNodeTypes: Set<string>;
   elements: ElementPluginPackage[];
   message: string;
+  importBatch?: PipImportBatchState;
   nodeMaps: PortableNodeMap[];
   nodeTypes: NodeTypePluginPackage[];
   onDisableElement: (id: string) => void;
   onDisableNodeType: (id: string) => void;
   onExport: () => void;
   onExportNative?: () => void;
-  onInstall: (file: File) => void;
+  onInstallFiles: (files: FileList) => void;
   onOpenNodeMap: (nodeMap: PortableNodeMap) => void | Promise<void>;
   onRedo: () => void;
   onUndo: () => void;
@@ -40,6 +44,7 @@ export function PluginManagerPanel({
   disabledElements,
   disabledNodeTypes,
   elements,
+  importBatch,
   message,
   nodeMaps,
   nodeTypes,
@@ -47,13 +52,15 @@ export function PluginManagerPanel({
   onDisableNodeType,
   onExport,
   onExportNative,
-  onInstall,
+  onInstallFiles,
   onOpenNodeMap,
   onRedo,
   onUndo,
   onUninstallElement,
   onUninstallNodeType,
 }: PluginManagerModel) {
+  const inputId = useId();
+
   return <section className={styles.panel} data-testid="plugin-manager">
     <div className={styles.panelTitle} data-window-drag>
       <div className={styles.panelIdentity}>
@@ -79,7 +86,7 @@ export function PluginManagerPanel({
     </div>
 
     <div className={styles.panelActions}>
-      <label className={styles.primary} htmlFor="pip-import">导入 .pip</label>
+      <label className={styles.primary} htmlFor={inputId}>导入 .pip</label>
       <button disabled={!activeWorkspaceId} onClick={onExport}>导出 A5</button>
       {onExportNative && <button
         disabled={!activeWorkspaceId}
@@ -87,17 +94,19 @@ export function PluginManagerPanel({
       >导出原生包</button>}
     </div>
     <input
-      id="pip-import"
+      id={inputId}
       type="file"
+      multiple
       accept=".pip,application/vnd.intent-map.pip"
       hidden
       onChange={(event) => {
-        const file = event.target.files?.[0];
-        if (file) onInstall(file);
+        const files = event.target.files;
+        if (files?.length) onInstallFiles(files);
         event.currentTarget.value = "";
       }}
     />
     <p className={styles.message} data-testid="status-message">{message}</p>
+    <PluginImportStatus batch={importBatch} />
 
     <h3>A3 Node Element <small>表现与交互</small></h3>
     <div className={styles.pluginList}>

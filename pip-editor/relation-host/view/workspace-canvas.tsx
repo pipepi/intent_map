@@ -44,6 +44,8 @@ type NodeCanvasProps = {
     origin?: RelationRef,
   ) => void;
   onOpenSystemPlugin: (pluginId: string, point: WorkspacePoint) => void;
+  onPipDrop: (files: File[], point: WorkspacePoint) => void;
+  onUnsupportedPipDrop: (files: File[]) => void;
   onRequest: (request: RelationElementRequest) => void;
   onSelectionChange: (selection: string[]) => void;
   onViewsChange: (views: FreeLayoutWorkspaceViews) => void;
@@ -67,6 +69,8 @@ export function NodeCanvas({
   onCloseSystemPlugin,
   onInvokeCreator,
   onOpenSystemPlugin,
+  onPipDrop,
+  onUnsupportedPipDrop,
   onRequest,
   onSelectionChange,
   onViewsChange,
@@ -223,6 +227,8 @@ export function NodeCanvas({
       systemPluginServices={systemPluginServices}
       onSelectionChange={onSelectionChange}
       onRequest={onRequest}
+      onPipDrop={onPipDrop}
+      onUnsupportedPipDrop={onUnsupportedPipDrop}
       onCloseSystemPlugin={onCloseSystemPlugin}
       onChooseCreator={(choice, point) => {
         onOpenSystemPlugin(choice.id, point);
@@ -255,6 +261,8 @@ export function NodeCanvas({
     onActivateWindow={onActivateWindow}
     onCloseSystemPlugin={onCloseSystemPlugin}
     onRequest={onRequest}
+    onPipDrop={onPipDrop}
+    onUnsupportedPipDrop={onUnsupportedPipDrop}
     onChooseCreator={(choice) => {
       if (choice.provider === "system") {
         onOpenSystemPlugin(choice.id, creator!.world);

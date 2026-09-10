@@ -35,7 +35,8 @@ function buildModel(snapshot: SystemPluginHostSnapshot): PluginManagerModel {
     disabledNodeTypes,
     elementPackages,
     elements,
-    install,
+    importBatch,
+    installFiles,
     nodeMaps,
     nodeTypePackages,
     nodeTypes,
@@ -53,12 +54,13 @@ function buildModel(snapshot: SystemPluginHostSnapshot): PluginManagerModel {
     disabledElements,
     disabledNodeTypes,
     elements: elementPackages,
+    importBatch,
     message: services.message,
     nodeMaps,
     nodeTypes: nodeTypePackages,
     onUndo: () => services.onHistory("undo"),
     onRedo: () => services.onHistory("redo"),
-    onInstall: install,
+    onInstallFiles: installFiles,
     onExport: services.onExport,
     onExportNative: services.onExportNative,
     onDisableElement: (id) => {
@@ -93,8 +95,10 @@ function PluginManagerSystemNode({ model }: SystemPluginComponentProps) {
   return <PluginManagerPanel {...model as PluginManagerModel} />;
 }
 
+export const PLUGIN_MANAGER_SYSTEM_PLUGIN_ID = "host.plugin-manager";
+
 export const pluginManagerSystemPlugin: SystemPluginDefinition = {
-  id: "host.plugin-manager",
+  id: PLUGIN_MANAGER_SYSTEM_PLUGIN_ID,
   typeNode: createSystemPluginTypeNode("relation.host.type.plugin-manager"),
   label: "插件管理器",
   description: "安装、禁用和导出 PIP",

@@ -1,0 +1,72 @@
+.importStatus {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 18px;
+  padding: 12px;
+  border: 1px solid #35446f;
+  border-radius: 10px;
+  background: #0c1328aa;
+}
+
+.importStatus header,
+.importStatus li > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.importStatus header {
+  justify-content: space-between;
+}
+
+.importStatus h3,
+.importStatus p {
+  margin: 0;
+}
+
+.importStatus ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.importStatus li {
+  padding: 8px 10px;
+  border-left: 3px solid #66739b;
+  border-radius: 6px;
+  background: #151e3a;
+}
+
+.importStatus strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.importStatus span {
+  color: #aab5d8;
+  font-size: 12px;
+}
+
+.importStatus p {
+  padding-top: 5px;
+  color: #aab5d8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.importing {
+  border-left-color: #63a7ff !important;
+}
+
+.succeeded {
+  border-left-color: #4fd29a !important;
+}
+
+.failed {
+  border-left-color: #ff6f91 !important;
+}
+

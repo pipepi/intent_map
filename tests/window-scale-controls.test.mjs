@@ -7,6 +7,7 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 test("workspace and projection scale controls share the external window chrome", async () => {
   const [
     canvas,
+    cameraControls,
     controls,
     projectionControls,
     window,
@@ -20,6 +21,7 @@ test("workspace and projection scale controls share the external window chrome",
     preferences,
   ] = await Promise.all([
     read("pip-editor/relation-host/view/free-workspace-canvas.tsx"),
+    read("pip-editor/relation-host/view/workspace-camera-controls.tsx"),
     read("pip-editor/relation-host/view/workspace-window-chrome.tsx"),
     read("pip-editor/relation-host/view/projection-scale-controls.tsx"),
     read("pip-editor/relation-host/view/workspace-window.tsx"),
@@ -37,7 +39,8 @@ test("workspace and projection scale controls share the external window chrome",
     css,
     /\.cameraControls \{[^}]*position:absolute;[^}]*right:0;[^}]*bottom:0;/,
   );
-  assert.match(canvas, /<WindowScaleControls/);
+  assert.match(canvas, /<WorkspaceCameraControls/);
+  assert.match(cameraControls, /<WindowScaleControls/);
   assert.match(canvas, /<ProjectionScaleControls/);
   assert.match(canvas, /data-workspace-status/);
   assert.match(

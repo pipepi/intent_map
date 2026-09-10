@@ -189,7 +189,6 @@ export function RelationHost() {
     if (id === focusedWorkspaceId) setFocusedWorkspaceId(undefined);
     setPendingClose(undefined);
   };
-
   const requestClose = (id: string) => {
     const workspace = workspaces.find((item) => item.id === id);
     if (!workspace) return;
@@ -201,7 +200,6 @@ export function RelationHost() {
       closeNow(id);
     }
   };
-
   const renderWorkspace = (workspace: WorkspaceSession, autoFocus: boolean) =>
     <WorkspaceSessionCanvas
       autoFocus={autoFocus}
@@ -220,10 +218,12 @@ export function RelationHost() {
         void invokeCreator(workspace, id, point, undefined, origin)}
       onOpenSystemPlugin={(id, point) =>
         systemPlugins.openWorkspace(workspace, id, point)}
+      onPipDrop={(files, point) =>
+        systemPlugins.importAtWorkspace(workspace, files, point)}
+      onUnsupportedPipDrop={systemPlugins.rejectImport}
       onCloseSystemPlugin={(window) =>
         systemPlugins.closeWorkspace(workspace, window)}
     />;
-
   const tabWorkspaces = workspaces.filter(
     (workspace) => !host.workspaceWindows[workspace.id],
   );
@@ -248,7 +248,6 @@ export function RelationHost() {
     tabWorkspaces,
     workspaces,
   });
-
   return <main className={styles.shell}>
     <RelationHostSurface
       active={active}

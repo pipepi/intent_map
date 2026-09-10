@@ -13,15 +13,15 @@ import type {
   NodeTypePluginPackage,
   PluginInstallStatus,
 } from "./contracts/package-types.ts";
-import { browserTrustHashes, importPip } from "./packages/import-pip.ts";
+import { browserTrustHashes } from "./packages/import-pip.ts";
 import {
   createNodeMapWorkspace,
   PortableNodeMapCatalog,
   type PortableNodeMap,
 } from "./packages/node-map-package.ts";
 import { validateNodeTypeDependencies } from "./packages/node-type-package.ts";
-import { selectedPipFilePolicy } from "../pip/index.ts";
 import { trustPackageHashes } from "../pip/host-client.ts";
+import { usePipImportQueue } from "./use-pip-import-queue.ts";
 import {
   graphFingerprint,
   type WorkspaceSession,
@@ -144,41 +144,34 @@ export function usePluginCatalog({
     );
   }
 
-  async function install(file: File) {
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const result = await importPip(bytes, {
-        fileName: file.name,
-        ioOptions: { policy: selectedPipFilePolicy(bytes.length) },
-        resolvePackage: (ref) =>
-          elementPackages.find((item) => item.contentSha256 === ref.sha256)
-            ?.pipBytes ??
-          nodeTypePackages.find((item) => item.contentSha256 === ref.sha256)
-            ?.pipBytes,
-        confirmTrust: () => true,
-        trustHashes: persistTrust,
-        installElement,
-        installNodeType,
-        openNodeMap,
-        uninstallElement: rollbackElement,
-        uninstallNodeType: rollbackNodeType,
-      });
-      const name =
-        result.package instanceof Object && "manifest" in result.package
-          ? result.package.manifest.name
-          : result.package.nodeMap.manifest.name;
-      setMessage(`已导入 ${result.layer.toUpperCase()} ${name}`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "PIP 导入失败");
-    }
-  }
+  const imports = usePipImportQueue({
+    context: () => ({
+      confirmTrust: () => true,
+      trustHashes: persistTrust,
+      installElement,
+      installNodeType,
+      openNodeMap,
+      uninstallElement: rollbackElement,
+      uninstallNodeType: rollbackNodeType,
+    }),
+    onMessage: setMessage,
+    // Registry 是同步事实源，不依赖 React catalog state 是否已完成重渲染。
+    resolveInstalled: (reference) =>
+      elements.list().find(
+        (item) => item.contentSha256 === reference.sha256,
+      )?.pipBytes ??
+      nodeTypes.list().find(
+        (item) => item.contentSha256 === reference.sha256,
+      )?.pipBytes,
+  });
 
   return {
     disabledElements,
     disabledNodeTypes,
     elementPackages,
     elements,
-    install,
+    importBatch: imports.importBatch,
+    installFiles: imports.installFiles,
     installElement,
     installNodeType,
     nodeMaps,

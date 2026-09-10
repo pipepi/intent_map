@@ -19,6 +19,7 @@ import { RelationNodeRenderer } from "../projection/projection-renderer.tsx";
 import type { CreatorChoice } from "./node-creator.tsx";
 import { CreatorWindow, creatorFrameAt } from "./creator-window.tsx";
 import { SystemPluginWindowView } from "./system-plugin-window.tsx";
+import { PipDropZone } from "./pip-drop-zone.tsx";
 import styles from "./relation-host.module.css";
 
 type LegacyCanvasProps = {
@@ -30,6 +31,8 @@ type LegacyCanvasProps = {
   onChooseCreator: (choice: CreatorChoice, point: WorkspacePoint) => void;
   onCloseSystemPlugin: (window: SystemPluginWindow) => void;
   onRequest: (request: RelationElementRequest) => void;
+  onPipDrop: (files: File[], point: WorkspacePoint) => void;
+  onUnsupportedPipDrop: (files: File[]) => void;
   onSelectionChange: (selection: string[]) => void;
   roots: RelationNode[];
   systemPlugins: SystemPluginCanvasBridge;
@@ -55,6 +58,8 @@ export function LegacyWorkspaceCanvas({
   onChooseCreator,
   onCloseSystemPlugin,
   onRequest,
+  onPipDrop,
+  onUnsupportedPipDrop,
   onSelectionChange,
   roots,
   systemPlugins,
@@ -73,7 +78,7 @@ export function LegacyWorkspaceCanvas({
     className={styles.canvasWrap}
     data-testid="relation-workspace"
   >
-    <div
+    <PipDropZone
       ref={canvas}
       tabIndex={-1}
       data-canvas-shortcuts
@@ -82,6 +87,9 @@ export function LegacyWorkspaceCanvas({
           ? styles.workspaceProjectionGrid
           : styles.relationGrid
       }`}
+      pointFromScreen={(screen) => screen}
+      onPipFiles={onPipDrop}
+      onUnsupportedFiles={onUnsupportedPipDrop}
       onKeyDown={(event) => {
         const target = event.target as HTMLElement;
         const interactive = target.matches(
@@ -199,6 +207,6 @@ export function LegacyWorkspaceCanvas({
         }}
         onFrame={(frame) => setCreator({ ...creator, frame })}
       />}
-    </div>
+    </PipDropZone>
   </section>;
 }

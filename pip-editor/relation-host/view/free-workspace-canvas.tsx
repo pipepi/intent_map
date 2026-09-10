@@ -6,6 +6,7 @@ import type { NodeTypePluginRegistry } from "../activation/node-type-registry.ts
 import type {
   ExecutionContextSnapshot,
   RelationElementRequest,
+  WorkspacePoint,
 } from "../contracts/package-types.ts";
 import type {
   SystemPluginCanvasBridge,
@@ -19,6 +20,7 @@ import type { WorkspaceSession } from "../workspace/workspace-store.ts";
 import type {
   FreeLayoutWorkspaceViews,
 } from "../workspace/view-state.ts";
+import { screenToWorld } from "../workspace/view-state.ts";
 import type { CreatorChoice } from "./node-creator.tsx";
 import { CreatorWindow, creatorFrameAt } from "./creator-window.tsx";
 import { ProjectionNavbar } from "./projection-navbar.tsx";
@@ -29,8 +31,9 @@ import type {
 } from "./workspace-canvas-pointer.ts";
 import { SystemPluginWindowView } from "./system-plugin-window.tsx";
 import { WorkspaceWindow } from "./workspace-window.tsx";
-import { WindowScaleControls } from "./workspace-window-chrome.tsx";
 import { ProjectionScaleControls } from "./projection-scale-controls.tsx";
+import { PipDropZone } from "./pip-drop-zone.tsx";
+import { WorkspaceCameraControls } from "./workspace-camera-controls.tsx";
 
 type FreeWorkspaceCanvasProps = {
   creator?: CreatorPosition;
@@ -45,6 +48,8 @@ type FreeWorkspaceCanvasProps = {
   onChooseCreator: (choice: CreatorChoice) => void;
   onCloseSystemPlugin: (window: SystemPluginWindow) => void;
   onRequest: (request: RelationElementRequest) => void;
+  onPipDrop: (files: File[], point: WorkspacePoint) => void;
+  onUnsupportedPipDrop: (files: File[]) => void;
   onViewsChange: (views: FreeLayoutWorkspaceViews) => void;
   persistCamera: (camera: FreeLayoutWorkspaceViews["camera"]) => void;
   pointer: {
@@ -78,6 +83,8 @@ export function FreeWorkspaceCanvas({
   onChooseCreator,
   onCloseSystemPlugin,
   onRequest,
+  onPipDrop,
+  onUnsupportedPipDrop,
   onViewsChange,
   persistCamera,
   pointer,
@@ -96,11 +103,14 @@ export function FreeWorkspaceCanvas({
     <div className={styles.canvasInfo} data-workspace-status>
       RelationGraph · revision {workspace.graph.revision} · {nodeCount} 个节点 · {status}
     </div>
-    <div
+    <PipDropZone
       ref={viewport}
       tabIndex={-1}
       data-canvas-shortcuts
       className={`${styles.canvas} ${styles.freeViewport}`}
+      pointFromScreen={(screen) => screenToWorld(screen, views)}
+      onPipFiles={onPipDrop}
+      onUnsupportedFiles={onUnsupportedPipDrop}
       onScroll={(event) => {
         event.currentTarget.scrollLeft = 0;
         event.currentTarget.scrollTop = 0;
@@ -273,18 +283,11 @@ export function FreeWorkspaceCanvas({
         <circle cx={wire.to.x} cy={wire.to.y} r="5" />
       </svg>}
 
-      <WindowScaleControls
-        scale={views.camera.scale}
-        onZoomOut={() => persistCamera({
-          ...views.camera,
-          scale: Math.max(.5, views.camera.scale - .1),
-        })}
-        onZoomIn={() => persistCamera({
-          ...views.camera,
-          scale: Math.min(2, views.camera.scale + .1),
-        })}
-        onFit={fit}
+      <WorkspaceCameraControls
+        views={views}
+        persistCamera={persistCamera}
+        fit={fit}
       />
-    </div>
+    </PipDropZone>
   </section>;
 }

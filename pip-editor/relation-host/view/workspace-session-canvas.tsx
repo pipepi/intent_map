@@ -30,6 +30,8 @@ type WorkspaceSessionCanvasProps = {
     origin?: RelationRef,
   ) => void;
   onOpenSystemPlugin: (pluginId: string, point: WorkspacePoint) => void;
+  onPipDrop: (files: File[], point: WorkspacePoint) => void;
+  onUnsupportedPipDrop: (files: File[]) => void;
   onRequest: (request: RelationElementRequest) => void;
   onSelectionChange: (selection: string[]) => void;
   onViewsChange: NodeCanvasProps["onViewsChange"];
@@ -49,6 +51,8 @@ export function WorkspaceSessionCanvas({
   onCloseSystemPlugin,
   onInvokeCreator,
   onOpenSystemPlugin,
+  onPipDrop,
+  onUnsupportedPipDrop,
   onRequest,
   onSelectionChange,
   onViewsChange,
@@ -72,6 +76,8 @@ export function WorkspaceSessionCanvas({
     onActivateWindow={onActivateWindow}
     onInvokeCreator={onInvokeCreator}
     onOpenSystemPlugin={onOpenSystemPlugin}
+    onPipDrop={onPipDrop}
+    onUnsupportedPipDrop={onUnsupportedPipDrop}
     onCloseSystemPlugin={onCloseSystemPlugin}
   />;
 }

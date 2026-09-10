@@ -35,6 +35,10 @@ Alt/Option + 左键拖拽会在当前聚焦画布打开 Creator；Tab 栏的 `+`
 打开 Creator。Creator、业务投影、工作区窗口和系统插件都复用 `WorkspaceWindow`
 的拖动、三向/八向缩放、关闭、玻璃背景和内容缩放结构。
 
+宿主画布和工作区画布都可直接拖入 A3–A5 `.pip`。释放位置只决定插件管理器
+呈现在哪个表面；A3/A4 仍安装到宿主共享 Registry，A5 始终创建新的独立
+WorkspaceSession。多文件按 A3→A4→A5 排序，单个失败不会撤销其他成功文件。
+
 A4 可通过 `registerCreator()` 声明节点或 Projection Instance 创建能力。Creator
 返回可选 `RelationPatch`、root 增量和首选窗口尺寸，宿主把它们作为一个事务校验、
 提交并记录历史。
