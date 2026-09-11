@@ -275,6 +275,8 @@ export function PipHost() {
       }}
       onReorder={(id, before) => workspaceStore.reorder(id, before)}
       onWorkspaceDrop={(id, point, viewport) => {
+        // 拖放会重新挂载宿主画布，不能重放之前由“＋”发出的创建器请求。
+        setCreatorRequest(0);
         hostStore.presentWorkspace(id, point, "top-left", viewport);
         setActiveWorkspaceId(undefined);
         setFocusedWorkspaceId(id);
