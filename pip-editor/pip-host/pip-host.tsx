@@ -235,7 +235,7 @@ export function PipHost() {
       if (!focusedWorkspaceId || !host.workspaceWindows[focusedWorkspaceId]) {
         return;
       }
-      hostStore.restoreWorkspaceTab(focusedWorkspaceId);
+      hostStore.restoreAllWorkspaceTabs();
       setActiveWorkspaceId(focusedWorkspaceId);
     },
     requestClose,
@@ -259,7 +259,7 @@ export function PipHost() {
       workspaces={workspaces}
       onActivateTab={(id) => {
         setFocusedWorkspaceId(id);
-        if (host.workspaceWindows[id]) hostStore.restoreWorkspaceTab(id);
+        if (host.workspaceWindows[id]) hostStore.restoreAllWorkspaceTabs();
         setActiveWorkspaceId(id === activeWorkspaceId ? undefined : id);
       }}
       onCloseWorkspace={requestClose}

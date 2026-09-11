@@ -189,6 +189,19 @@ export class HostPresentationStore {
     this.restoreWorkspaceTab(workspaceId);
   }
 
+  /** 返回标签模式时一次恢复所有工作区，保留系统插件窗口和画布状态。 */
+  restoreAllWorkspaceTabs() {
+    const window_ids = new Set(Object.values(this.#value.workspaceWindows).map(window => window.id));
+    this.#replace({
+      ...this.#value,
+      workspaceWindows: {},
+      activeWindowId: window_ids.has(this.#value.activeWindowId ?? "")
+        ? undefined : this.#value.activeWindowId,
+      frontWindowId: window_ids.has(this.#value.frontWindowId ?? "")
+        ? undefined : this.#value.frontWindowId,
+    });
+  }
+
   setWindow(windowId: string, frame: WorkspaceWindowFrame) {
     const workspace = Object.values(this.#value.workspaceWindows).find(
       (item) => item.id === windowId,

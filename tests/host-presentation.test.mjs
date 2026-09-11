@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import {
   createHostCanvasState,
   HostPresentationStore,
@@ -8,6 +9,35 @@ import {
 import {
   EditorPreferenceStore,
 } from "../pip-editor/pip-host-io/preferences/store.ts";
+
+test("返回标签模式一次恢复所有工作区，不影响系统插件窗口", () => {
+  const published = [];
+  const store = new HostPresentationStore(state => published.push(state));
+  store.presentWorkspace("one", { x: 10, y: 20 });
+  store.presentWorkspace("two", { x: 30, y: 40 });
+  store.openSystemWindow(
+    { id: "system.preferences", pluginId: "preferences", instanceId: "preferences" },
+    { x: 50, y: 60 }, { width: 400, height: 300, resizeMode: "full" },
+  );
+  const before = structuredClone(store.snapshot());
+  const count = published.length;
+  store.restoreAllWorkspaceTabs();
+  assert.deepEqual(store.snapshot().workspaceWindows, {});
+  assert.deepEqual(store.snapshot().systemWindows, before.systemWindows);
+  assert.deepEqual(store.snapshot().camera, before.camera);
+  assert.equal(store.snapshot().activeWindowId, "system.preferences");
+  assert.equal(published.length, count + 1);
+  store.presentWorkspace("one");
+  store.restoreAllWorkspaceTabs();
+  assert.equal(store.snapshot().activeWindowId, undefined);
+  assert.equal(store.snapshot().frontWindowId, undefined);
+});
+
+test("窗口关闭和快捷键返回标签都恢复全部工作区", async () => {
+  const source = await readFile(new URL("../pip-editor/pip-host/pip-host.tsx", import.meta.url), "utf8");
+  assert.match(source, /onCloseFocusedWindow:[\s\S]*?restoreAllWorkspaceTabs\(\);\s*setActiveWorkspaceId\(focusedWorkspaceId\)/);
+  assert.match(source, /if \(host\.workspaceWindows\[id\]\) hostStore\.restoreAllWorkspaceTabs\(\)/);
+});
 
 test("host canvas starts empty and workspace windows stay outside business state", () => {
   const published = [];
