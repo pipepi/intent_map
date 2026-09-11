@@ -1,7 +1,7 @@
-import type { Relation } from "../../pip-editor/relation/index.ts";
-import { assertRelationGraph } from "../../pip-editor/relation/index.ts";
-import { constRelation, mergeGraphs, ontologyGraph, refRelation, relationNode } from "../shared/relation-builders.ts";
-import { relationProjectionOntology } from "../relation-projections/domain.ts";
+import type { Pip } from "../../pip-editor/pip/index.ts";
+import { assertPipGraph } from "../../pip-editor/pip/index.ts";
+import { constPip, mergeGraphs, ontologyGraph, refPip, pipNode } from "../shared/pip-builders.ts";
+import { pipProjectionOntology } from "../pip-projections/domain.ts";
 import { buildProjectionBundle } from "./projection-bundle.ts";
 
 export const SCENE_ELEMENT_PLUGIN_ID = "official.scene-elements";
@@ -14,28 +14,28 @@ export const SCENE_PREDICATES = [
   "contains", "observes", "projection", "camera",
 ] as const;
 
-const predicates = SCENE_PREDICATES.map((name) => relationNode(`scene.predicate.${name}`));
-const types = SCENE_TYPES.map((id) => relationNode(id, [refRelation("type", "relation.core.type", "relation.core.type")]));
-const projections = [relationNode("scene.projection.quadrant"), relationNode("scene.projection.tube")];
+const predicates = SCENE_PREDICATES.map((name) => pipNode(`scene.predicate.${name}`));
+const types = SCENE_TYPES.map((id) => pipNode(id, [refPip("type", "pip.core.type", "pip.core.type")]));
+const projections = [pipNode("scene.projection.quadrant"), pipNode("scene.projection.tube")];
 export const sceneOntology = ontologyGraph([...predicates, ...types, ...projections]);
 
-const entity = (id: string, name: string, type: "person" | "physical" | "virtual", sector: number, depth: number, extra: Relation[] = []) => relationNode(id, [
-  constRelation("name", "scene.predicate.name", name),
-  refRelation("type", "scene.predicate.type", `scene.type.${type}`),
-  constRelation("position", "scene.predicate.position", { sector, depth, manual: false }), ...extra,
+const entity = (id: string, name: string, type: "person" | "physical" | "virtual", sector: number, depth: number, extra: Pip[] = []) => pipNode(id, [
+  constPip("name", "scene.predicate.name", name),
+  refPip("type", "scene.predicate.type", `scene.type.${type}`),
+  constPip("position", "scene.predicate.position", { sector, depth, manual: false }), ...extra,
 ]);
-const event = (id: string, name: string, start: number, end: number, roles: Array<["subject" | "source" | "target" | "object", string]>) => relationNode(id, [
-  constRelation("name", "scene.predicate.name", name), refRelation("type", "scene.predicate.type", "scene.type.event"),
-  constRelation("time", "scene.predicate.time", { start, end }),
-  ...roles.map(([role, target], index) => refRelation(`${role}:${index}`, `scene.predicate.${role}`, target)),
+const event = (id: string, name: string, start: number, end: number, roles: Array<["subject" | "source" | "target" | "object", string]>) => pipNode(id, [
+  constPip("name", "scene.predicate.name", name), refPip("type", "scene.predicate.type", "scene.type.event"),
+  constPip("time", "scene.predicate.time", { start, end }),
+  ...roles.map(([role, target], index) => refPip(`${role}:${index}`, `scene.predicate.${role}`, target)),
 ]);
 
 const businessNodes = [
   entity("scene.xiaoming", "小明", "person", 0.18, 0.32), entity("scene.xiaohong", "小红", "person", 0.34, 0.42),
   entity("scene.usdt", "USDT", "virtual", 0.47, 0.72), entity("scene.btc", "BTC", "virtual", 0.74, 0.54),
   entity("scene.chicken", "烤鸡", "physical", 0.88, 0.82),
-  entity("scene.home", "小明家", "physical", 0.05, 0.82, [refRelation("subject:0", "scene.predicate.subject", "scene.xiaoming")]),
-  entity("scene.xiaohong-home", "小红家", "physical", 0.32, 0.85, [refRelation("subject:0", "scene.predicate.subject", "scene.xiaohong")]),
+  entity("scene.home", "小明家", "physical", 0.05, 0.82, [refPip("subject:0", "scene.predicate.subject", "scene.xiaoming")]),
+  entity("scene.xiaohong-home", "小红家", "physical", 0.32, 0.85, [refPip("subject:0", "scene.predicate.subject", "scene.xiaohong")]),
   entity("scene.breakfast", "早餐", "physical", 0.62, 0.9),
   event("scene.deliver-breakfast", "从家跑到小红家送早餐", 8, 8.5, [["subject", "scene.xiaoming"], ["source", "scene.home"], ["target", "scene.xiaohong-home"], ["target", "scene.xiaohong"], ["object", "scene.breakfast"]]),
   event("scene.receive-breakfast", "小红在家收到早餐", 8.6, 8.75, [["subject", "scene.xiaohong"], ["source", "scene.xiaohong-home"], ["object", "scene.breakfast"]]),
@@ -52,14 +52,14 @@ const businessNodes = [
   event("scene.review-breakfast", "小红评价早餐", 19.7, 20, [["subject", "scene.xiaohong"], ["object", "scene.breakfast"]]),
 ];
 export const SCENE_BUSINESS_IDS = businessNodes.map(({ id }) => id);
-const sceneRoot = relationNode("scene.today", [
-  constRelation("name", "scene.predicate.name", "小明的今天"), refRelation("type", "scene.predicate.type", "scene.type.scene"),
-  ...SCENE_BUSINESS_IDS.map((id, index) => refRelation(`contains:${index}`, "scene.predicate.contains", id)),
+const sceneRoot = pipNode("scene.today", [
+  constPip("name", "scene.predicate.name", "小明的今天"), refPip("type", "scene.predicate.type", "scene.type.scene"),
+  ...SCENE_BUSINESS_IDS.map((id, index) => refPip(`contains:${index}`, "scene.predicate.contains", id)),
 ]);
 const projectionBundle = buildProjectionBundle([sceneRoot, ...businessNodes], "scene.predicate.contains");
 
-export const sceneNodeMapGraph = mergeGraphs(relationProjectionOntology, sceneOntology, ontologyGraph([...businessNodes, sceneRoot, ...projectionBundle.nodes]));
-assertRelationGraph(sceneNodeMapGraph);
+export const sceneNodeMapGraph = mergeGraphs(pipProjectionOntology, sceneOntology, ontologyGraph([...businessNodes, sceneRoot, ...projectionBundle.nodes]));
+assertPipGraph(sceneNodeMapGraph);
 
 export const sceneNodeMapData = {
   graph: sceneNodeMapGraph,

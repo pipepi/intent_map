@@ -5,8 +5,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-import { unpackWorkspaceBundle } from "../pip-editor/pip/bundle/workspace-bundle.ts";
-import { UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/io-policy.ts";
+import { unpackWorkspaceBundle } from "../pip-editor/pip-package/bundle/workspace-bundle.ts";
+import { UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip-package/io-policy.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const run = (script, args) => spawnSync(

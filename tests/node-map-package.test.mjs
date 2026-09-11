@@ -1,14 +1,15 @@
+import { graphNodes, setGraphRevision, graphRevision } from "../pip-editor/pip/pip-model.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createNodeMapWorkspace, decodeNodeMapPackage, importRelationGraph, PortableNodeMapCatalog, selectRelationClosure } from "../pip-editor/relation-host/packages/node-map-package.ts";
+import { createNodeMapWorkspace, decodeNodeMapPackage, importPipGraph, PortableNodeMapCatalog, selectPipClosure } from "../pip-editor/pip-host/packages/node-map-package.ts";
 import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
-import { exportNodeMap } from "../pip-editor/relation-host/packages/export-node-map.ts";
-import { UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/index.ts";
+import { exportNodeMap } from "../pip-editor/pip-host/packages/export-node-map.ts";
+import { UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip-package/index.ts";
 
-test("Node Map closure follows relation refs without persisting edges", async () => {
+test("Node Map closure follows pip refs without persisting edges", async () => {
   const suite = await buildScenePluginSuite();
-  const selected = selectRelationClosure(suite.nodeMap.graph, ["scene.buy-btc"]);
-  assert.ok(selected.nodes["scene.buy-btc"]); assert.ok(selected.nodes["scene.xiaoming"]); assert.equal("edges" in selected, false);
+  const selected = selectPipClosure(suite.nodeMap.graph, ["scene.buy-btc"]);
+  assert.ok(graphNodes(selected)["scene.buy-btc"]); assert.ok(graphNodes(selected)["scene.xiaoming"]); assert.equal("edges" in selected, false);
 });
 
 test("portable A5 carries exact A4/A3 PIPs and opens independent workspaces", async () => {
@@ -17,7 +18,7 @@ test("portable A5 carries exact A4/A3 PIPs and opens independent workspaces", as
   assert.equal(decoded.elementPlugins[0].contentSha256, decoded.nodeTypes[0].manifest.dependencies[0].sha256);
   const first = createNodeMapWorkspace(decoded.nodeMap, "workspace.first", decoded.contentSha256);
   const second = createNodeMapWorkspace(decoded.nodeMap, "workspace.second");
-  first.graph.revision = 9; assert.equal(second.graph.revision, 0); assert.notEqual(first.graph, second.graph);
+    setGraphRevision(first.graph, 9); assert.equal(graphRevision(second.graph), 0); assert.notEqual(first.graph, second.graph);
 });
 
 test("Node Map catalog is idempotent by exact PIP content", async () => {
@@ -30,9 +31,9 @@ test("A5 rejects any tampered inner package before activation", async () => {
   await assert.rejects(() => decodeNodeMapPackage(tampered), /hash mismatch/);
 });
 
-test("relation graph import rewrites colliding node and relation identities", async () => {
-  const suite = await buildScenePluginSuite(), imported = importRelationGraph(suite.nodeMap.graph, suite.nodeMap.graph);
-  assert.notEqual(imported.nodeIds.get("scene.today"), "scene.today"); assert.equal(imported.graph.revision, 1);
+test("pip graph import rewrites colliding node and pip identities", async () => {
+  const suite = await buildScenePluginSuite(), imported = importPipGraph(suite.nodeMap.graph, suite.nodeMap.graph);
+  assert.notEqual(imported.nodeIds.get("scene.today"), "scene.today"); assert.equal(graphRevision(imported.graph), 1);
 });
 
 test("thin A5 resolves already installed exact dependencies", async () => {

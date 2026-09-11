@@ -11,7 +11,7 @@ fn temporary_directory(label: &str) -> PathBuf {
 fn installs_user_packages_without_overwriting_versions() {
     let directory = temporary_directory("install");
     let bytes = include_bytes!("../../../../tests/fixtures/minimal-valid.pip");
-    let file = "a1_intent_map_test_0_1_0_20260726.pip";
+    let file = "a1_pip_intent_test_0_1_0_20260726.pip";
     let destination =
         install_user_package(&directory, file, bytes, &PipIoPolicy::unlimited()).unwrap();
     assert_eq!(destination, directory.join("registry/a1").join(file));

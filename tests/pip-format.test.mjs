@@ -1,3 +1,4 @@
+import { graphNodes } from "../pip-editor/pip/pip-model.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,19 +7,19 @@ import {
   decodePip as decodePipWithPolicy,
   encodePip as encodePipWithPolicy,
   pipFilename,
-} from "../pip-editor/pip/index.ts";
+} from "../pip-editor/pip-package/index.ts";
 import {
   ASK_PIP_IO_POLICY,
   UNLIMITED_PIP_IO_POLICY,
   pipLimit,
-} from "../pip-editor/pip/io-policy.ts";
-import { loadRelationDocument, relationDocumentValues, serializeRelationDocument } from "../pip-editor/relation/document.ts";
-import { sampleRelationDocument } from "./relation-document-fixture.mjs";
+} from "../pip-editor/pip-package/io-policy.ts";
+import { loadPipDocument, pipDocumentValues, serializePipDocument } from "../pip-editor/pip/document.ts";
+import { samplePipDocument } from "./pip-document-fixture.mjs";
 
 const manifest = {
-  packageId: "intent-map.test",
+  packageId: "pip-intent.test",
   layer: "a1",
-  artifactName: "intent_map_test",
+  artifactName: "pip_intent_test",
   name: "Intent Map Test",
   packageVersion: "0.1.0",
   releaseDate: "20260726",
@@ -37,7 +38,7 @@ const manifest = {
   contentType: "application/vnd.intent-map.pip",
 };
 
-const rootTreeText = serializeRelationDocument(sampleRelationDocument());
+const rootTreeText = serializePipDocument(samplePipDocument());
 
 const ioOptions = { policy: UNLIMITED_PIP_IO_POLICY };
 const encodePip = (input) => encodePipWithPolicy(input, ioOptions);
@@ -90,17 +91,17 @@ test("PIP export filenames preserve manifest identity across every layer", () =>
         providedEditorKinds: ["tree-map/1"],
       } : {}),
       ...(layer === "a3" ? {
-        elementAbi: "relation-element/2", entry: "entry.mjs", elements: [{ id: "node", tag: "test-node", purpose: "node" }],
+        elementAbi: "pip-element/2", entry: "entry.mjs", elements: [{ id: "node", tag: "test-node", purpose: "node" }],
         permissions: [], sourcePaths: ["source/index.js"], sourceSha256: "a".repeat(64), entrySha256: "b".repeat(64), redistributable: true,
-        providedCapabilities: ["relation-element/2"],
+        providedCapabilities: ["pip-element/2"],
       } : {}),
       ...(layer === "a4" ? {
-        nodeTypeAbi: "relation-node-type/2", entry: "entry.mjs", typeNodeIds: ["test.type"], permissions: [], sourcePaths: ["source/index.js"],
+        nodeTypeAbi: "pip-node-type/2", entry: "entry.mjs", typeNodeIds: ["test.type"], permissions: [], sourcePaths: ["source/index.js"],
         sourceSha256: "a".repeat(64), entrySha256: "b".repeat(64), redistributable: true,
         dependencies: [{ origin: "user", packageId: "test.a3", version: "1.0.0", releaseDate: "20260726", sha256: "c".repeat(64) }],
       } : {}),
       ...(layer === "a5" ? {
-        nodeMapAbi: "relation-node-map/1", rootNodeIds: [],
+        nodeMapAbi: "pip-node-map/1", rootNodeIds: [],
         dependencies: [{ origin: "user", packageId: "test.a4", version: "1.0.0", releaseDate: "20260726", sha256: "d".repeat(64) }],
       } : {}),
     };
@@ -110,7 +111,6 @@ test("PIP export filenames preserve manifest identity across every layer", () =>
     );
   }
 });
-
 test("PIP v1 rejects corruption, truncation, and overlapping sections", async () => {
   const bytes = await encodePip({
     manifest,
@@ -137,7 +137,6 @@ test("PIP v1 rejects corruption, truncation, and overlapping sections", async ()
     /maxPipBytes exceeded/,
   );
 });
-
 test("PIP codecs require confirmation when no caller policy is supplied", async () => {
   const input = {
     manifest,
@@ -153,48 +152,45 @@ test("PIP codecs require confirmation when no caller policy is supplied", async 
     input,
   );
 });
-
-test("PIP preserves a RelationDocument workspace", async () => {
-  const document = sampleRelationDocument(4);
-  const bytes = await encodePip({
+test("PIP preserves a Pip workspace", async () => {
+    const document = samplePipDocument(4);
+    const bytes = await encodePip({
     manifest,
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeRelationDocument(document),
+    rootTreeText: serializePipDocument(document),
     assets: [],
   });
-  const decoded = await decodePip(bytes);
-  const loaded = loadRelationDocument(JSON.parse(decoded.rootTreeText));
-  const values = relationDocumentValues(loaded);
-  assert.equal(loaded.id, "relation-workspace@2");
-  assert.ok(values.graph.nodes["sample.depth-4"]);
-  assert.deepEqual(values.workspace.views, ["relation-graph"]);
+    const decoded = await decodePip(bytes);
+    const loaded = loadPipDocument(JSON.parse(decoded.rootTreeText));
+    const values = pipDocumentValues(loaded);
+    assert.equal(loaded.id, "pip-workspace@3");
+    assert.ok(graphNodes(values.graph)["sample.depth-4"]);
+    assert.deepEqual(values.workspace.views, ["pip-graph"]);
 });
-
-test("RelationDocument uses value-only relations and normalizes the legacy envelope", () => {
-  const document = sampleRelationDocument();
-  assert.equal(document.id, "relation-workspace@2");
-  assert.deepEqual(document.relations.map(({ id }) => id), ["graph", "rootNodeIds", "workspace"]);
-  assert.ok(document.relations.every((relation) => "value" in relation && !("predicate" in relation)));
-  const values = relationDocumentValues(document);
-  const legacy = loadRelationDocument({
+test("Pip uses value-only pips and normalizes the legacy envelope", () => {
+    const document = samplePipDocument();
+    assert.equal(document.id, "pip-workspace@3");
+    assert.deepEqual(document.pips.map(({ id }) => id), ["graph", "root-node-ids", "workspace"]);
+    assert.ok(document.pips.every((pip) => "fork_level" in pip && "pips" in pip));
+    const values = pipDocumentValues(document);
+    const legacy = loadPipDocument({
     format: "relation-workspace", schemaVersion: 1, ...values,
   });
-  assert.deepEqual(legacy, document);
-  assert.throws(() => loadRelationDocument({
-    ...document, relations: [...document.relations, document.relations[0]],
-  }), /Unsupported relation workspace document/);
+    assert.deepEqual(legacy, document);
+    assert.throws(() => loadPipDocument({
+        ...document, pips: [...document.pips, document.pips[0]],
+    }), /Duplicate Pip id/);
 });
-
-test("PIP round-trips an eight-level relation composition without a depth cap", async () => {
-  const document = sampleRelationDocument(8);
-  const bytes = await encodePip({
+test("PIP round-trips an eight-level pip composition without a depth cap", async () => {
+    const document = samplePipDocument(8);
+    const bytes = await encodePip({
     manifest,
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeRelationDocument(document),
+    rootTreeText: serializePipDocument(document),
     assets: [],
   });
-  const loaded = loadRelationDocument(
+    const loaded = loadPipDocument(
     JSON.parse((await decodePip(bytes)).rootTreeText),
   );
-  assert.ok(relationDocumentValues(loaded).graph.nodes["sample.depth-8"]);
+    assert.ok(graphNodes(pipDocumentValues(loaded).graph)["sample.depth-8"]);
 });

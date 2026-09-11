@@ -1,3 +1,6 @@
+import { PipForkLevel } from "../pip-editor/pip/types.ts";
+import { createCorePipGraph, graphNodes } from "../pip-editor/pip/index.ts";
+import { createGraph } from "../pip-editor/pip/pip-model.ts";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -44,18 +47,16 @@ export const collectSourceAssets = async (root, entries, prefix = "source") => {
   for (const entry of entries) await visit(entry);
   return assets;
 };
-
-const identity = { nodeId: "relation.core.identity", relationId: "identity" };
-const relation = (id, value) => ({ id, predicate: identity, object: { kind: "const", value }, relations: [] });
-const ref = (id, nodeId) => ({ id, predicate: identity, object: { kind: "ref", target: { nodeId, relationId: "identity" } }, relations: [] });
-const node = (id, relations) => ({ id, relations: [relation("identity", id), ...relations] });
-
+const identity = { node_id: "pip.core.identity", pip_id: "identity" };
+const pip = (id, value) => ({ id, fork_level: PipForkLevel.PIPE, predicate_value: { predicate: identity, value: { kind: "const", value } }, pips: [] });
+const ref = (id, nodeId) => ({ id, fork_level: PipForkLevel.PIPE, predicate_value: { predicate: identity, value: { kind: "ref", target: { node_id: nodeId, pip_id: "identity" } } }, pips: [] });
+const node = (id, pips) => ({ id, fork_level: PipForkLevel.NODE, pips: [pip("identity", id), ...pips] });
 export const softwareProjectGraph = ({ id, name, description, compiler, assets }) => {
-  const core = ["identity", "predicate", "type"].map((kind) => node(`relation.core.${kind}`, []));
-  const sources = assets.filter((asset) => asset.path.startsWith("source/")).map((asset, index) => node(
+    const core = Object.values(graphNodes(createCorePipGraph()));
+    const sources = assets.filter((asset) => asset.path.startsWith("source/")).map((asset, index) => node(
     `source_${index}_${asset.path.replaceAll(/[^a-zA-Z0-9]/g, "_")}`,
-    [relation("name", asset.path.replace(/^source\//, "")), relation("description", `${asset.mime} · ${asset.bytes.length} bytes`), relation("asset", { path: asset.path, mime: asset.mime })],
+    [pip("name", asset.path.replace(/^source\//, "")), pip("description", `${asset.mime} · ${asset.bytes.length} bytes`), pip("asset", { path: asset.path, mime: asset.mime })],
   ));
-  const root = node(id, [relation("name", name), relation("description", description), relation("compiler", compiler), ...sources.map((source) => ref(`contains:${source.id}`, source.id))]);
-  return { rootNodeId: id, graph: { revision: 0, nodes: Object.fromEntries([...core, root, ...sources].map((item) => [item.id, item])) } };
+    const root = node(id, [pip("name", name), pip("description", description), pip("compiler", compiler), ...sources.map((source) => ref(`contains:${source.id}`, source.id))]);
+    return { rootNodeId: id, graph: createGraph(Object.fromEntries([...core, root, ...sources].map((item) => [item.id, item])), 0) };
 };

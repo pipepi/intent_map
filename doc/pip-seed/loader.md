@@ -1,6 +1,6 @@
 # PIP Loader：可演进加载器
 
-[← 上一篇：PIP Seed](seed.md) · [RelationNode 插件架构](../relation_node_plugins.md)
+[← 上一篇：PIP Seed](seed.md) · [PipNode 插件架构](../pip_node_plugins.md)
 
 ## 定位
 
@@ -85,4 +85,4 @@ Intent Map 可以由 Loader 启动，但 Loader 也应能够启动不依赖 Inte
 
 ---
 
-[← 上一篇：PIP Seed](seed.md) · [RelationNode 插件架构](../relation_node_plugins.md)
+[← 上一篇：PIP Seed](seed.md) · [PipNode 插件架构](../pip_node_plugins.md)

@@ -4,7 +4,7 @@ import path from "node:path";
 import {
   DEFAULT_PIP_LOADER_SOURCE,
   encodePip as encodePipWithPolicy,
-} from "../pip-editor/pip/index.ts";
+} from "../pip-editor/pip-package/index.ts";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 
 const encodePip = (input) => encodePipWithPolicy(input, trustedBuildPipIo);
@@ -38,9 +38,9 @@ const common = {
 const entries = [
   ["minimal-valid.pip", await build({
     ...common,
-    packageId: "intent-map.test",
+    packageId: "pip-intent.test",
   layer: "a1",
-    artifactName: "intent_map_test",
+    artifactName: "pip_intent_test",
     name: "Intent Map Test",
     packageVersion: "0.1.0",
     releaseDate: "20260726",
@@ -61,7 +61,7 @@ const entries = [
   }, "Loader", [{
     path: "config.json",
     mime: "application/json; charset=utf-8",
-    bytes: new TextEncoder().encode(JSON.stringify({ defaultEditorPackageId: "intent-map.test" })),
+    bytes: new TextEncoder().encode(JSON.stringify({ defaultEditorPackageId: "pip-intent.test" })),
   }])],
   ["a1_loader_next_1_0_0_20260726.pip", await build({
     ...common,

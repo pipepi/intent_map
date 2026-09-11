@@ -24,7 +24,7 @@ fn parses_layered_names_from_the_right() {
 #[test]
 fn rejects_bad_layers_names_versions_and_dates() {
     for name in [
-        "intent_map_1_0_0_20260806.pip",
+        "pip_intent_1_0_0_20260806.pip",
         "a6_app_1_0_0_20260806.pip",
         "a2_Intent_Map_1_0_0_20260806.pip",
         "a2_intent-map_1_0_0_20260806.pip",

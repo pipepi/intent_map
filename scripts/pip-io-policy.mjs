@@ -1,7 +1,7 @@
 import {
   ASK_PIP_IO_POLICY,
   UNLIMITED_PIP_IO_POLICY,
-} from "../pip-editor/pip/io-policy.ts";
+} from "../pip-editor/pip-package/io-policy.ts";
 
 export const packagedPipIoPolicy = ASK_PIP_IO_POLICY;
 

@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip } from "../pip-editor/pip/index.ts";
+import { decodePip } from "../pip-editor/pip-package/index.ts";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 import {
   artifactFilename,
@@ -45,7 +45,7 @@ const temporary = await mkdtemp(path.join(parent, `.${path.basename(output)}.tmp
 
 try {
   const release = await readReleaseConfig();
-  const selected = [release.seed, release.loader, release.intentMap];
+  const selected = [release.seed, release.loader, release.pipIntent];
   const merged = new Map();
   const packages = [];
 

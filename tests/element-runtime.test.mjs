@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ElementPluginRegistry } from "../pip-editor/relation-host/activation/element-registry.ts";
+import { ElementPluginRegistry } from "../pip-editor/pip-host/activation/element-registry.ts";
 
 const plugin = (id = "official.text", tag = "intent-text-preview") => ({
   manifest: { packageId: id, packageVersion: "1.0.0", entrySha256: "a".repeat(64), sourceSha256: "b".repeat(64), elements: [{ id: "text", tag, purpose: "preview" }] }, entrySource: "register", files: {}, pipBytes: new Uint8Array(), contentSha256: "c".repeat(64),

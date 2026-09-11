@@ -1,9 +1,10 @@
+import { graphRevision, graphNodes } from "../pip-editor/pip/pip-model.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
-import { createNodeMapWorkspace } from "../pip-editor/relation-host/packages/node-map-package.ts";
-import { exportedWorkspaceViews, normalizeFreeLayout, panWindowContent, preserveSystemWindows, zoomWindowContentAt } from "../pip-editor/relation-host/workspace/view-state.ts";
-import { graphFingerprint, WorkspaceSessionStore } from "../pip-editor/relation-host/workspace/workspace-store.ts";
+import { createNodeMapWorkspace } from "../pip-editor/pip-host/packages/node-map-package.ts";
+import { exportedWorkspaceViews, normalizeFreeLayout, panWindowContent, preserveSystemWindows, zoomWindowContentAt } from "../pip-editor/pip-host/workspace/view-state.ts";
+import { graphFingerprint, WorkspaceSessionStore } from "../pip-editor/pip-host/workspace/workspace-store.ts";
 
 const pluginManagerInstanceId = "system.instance.host:host.plugin-manager";
 
@@ -56,7 +57,7 @@ test("view-only changes preserve graph revision and history while system windows
   const { workspace } = await session(), store = new WorkspaceSessionStore([workspace], () => {});
   openPluginManager(store, workspace.id, { x: 300, y: 240 });
   let current = store.list()[0], views = normalizeFreeLayout(current.views, current.rootNodeIds);
-  assert.equal(current.graph.revision, 0); assert.equal(current.undo.length, 0);
+  assert.equal(graphRevision(current.graph), 0); assert.equal(current.undo.length, 0);
   assert.deepEqual({ x: views.systemWindows[pluginManagerInstanceId].frame.x, y: views.systemWindows[pluginManagerInstanceId].frame.y }, { x: 0, y: 0 });
   assert.equal(views.activeWindowId, pluginManagerInstanceId);
   store.activateWindow(workspace.id, "scene.view.quadrant");
@@ -93,7 +94,7 @@ test("view-only changes preserve graph revision and history while system windows
   assert.deepEqual(exportedWorkspaceViews(current.views).systemWindows, {});
   assert.equal(exportedWorkspaceViews(current.views).activeWindowId, undefined);
   assert.equal(exportedWorkspaceViews(current.views).frontWindowId, "scene.view.quadrant");
-  assert.equal(current.graph.revision, 0); assert.equal(current.undo.length, 0);
+  assert.equal(graphRevision(current.graph), 0); assert.equal(current.undo.length, 0);
 });
 
 test("workspace camera starts at the origin but permits movement beyond the top-left boundary", async () => {
@@ -114,21 +115,21 @@ test("projection content pan is independent from the workspace camera", () => {
 test("creator transaction adds a projection root and undo restores graph roots and views", async () => {
   const { workspace } = await session(), store = new WorkspaceSessionStore([workspace], () => {});
   const initialRootNodeIds = [...workspace.rootNodeIds];
-  const source = structuredClone(workspace.graph.nodes["scene.view.quadrant"]); source.id = "scene.view.created";
+  const source = structuredClone(graphNodes(workspace.graph)["scene.view.quadrant"]); source.id = "scene.view.created";
   const result = {
-    patch: { schemaVersion: 1, baseRevision: 0, operations: [{ op: "put-node", node: source }] },
+    patch: { schemaVersion: 2, baseRevision: 0, operations: [{ op: "put", parent_path: [], pip: source }] },
     addRootNodeIds: [source.id], preferredProjection: { projectionId: source.id, width: 1120, height: 720 },
   };
   store.commitCreation(workspace.id, result, { x: 400, y: 300 }, []);
   let current = store.list()[0];
-  assert.equal(current.graph.revision, 1); assert.ok(current.rootNodeIds.includes(source.id));
+  assert.equal(graphRevision(current.graph), 1); assert.ok(current.rootNodeIds.includes(source.id));
   const createdViews = normalizeFreeLayout(current.views, current.rootNodeIds);
   assert.deepEqual({ x: createdViews.projections[source.id].x, y: createdViews.projections[source.id].y }, { x: 0, y: 0 });
   assert.equal(createdViews.activeWindowId, source.id); assert.equal(createdViews.frontWindowId, source.id);
   store.history(workspace.id, "undo", []); current = store.list()[0];
-  assert.equal(current.graph.nodes[source.id], undefined); assert.deepEqual(current.rootNodeIds, initialRootNodeIds);
+  assert.equal(graphNodes(current.graph)[source.id], undefined); assert.deepEqual(current.rootNodeIds, initialRootNodeIds);
   store.history(workspace.id, "redo", []); current = store.list()[0];
-  assert.ok(current.graph.nodes[source.id]); assert.ok(current.rootNodeIds.includes(source.id));
+  assert.ok(graphNodes(current.graph)[source.id]); assert.ok(current.rootNodeIds.includes(source.id));
 });
 
 test("workspace frame validation rejects invalid geometry without publishing", async () => {
@@ -142,14 +143,14 @@ test("workspace frame validation rejects invalid geometry without publishing", a
   assert.throws(() => store.setWindow(workspace.id, "scene.view.quadrant", { x: 2200, y: 0, width: 800, height: 600, resizeMode: "simple" }), /outside/);
   assert.throws(() => store.setWindow(workspace.id, "scene.view.quadrant", { x: 0, y: 0, width: 800, height: 600, resizeMode: "simple", contentScale: 3 }), /content scale/);
   assert.throws(() => store.setWindow(workspace.id, "scene.view.quadrant", { x: 0, y: 0, width: 800, height: 600, resizeMode: "simple", contentOffset: { x: 0, y: "bad" } }), /content offset/);
-  assert.equal(publishes, 1); assert.equal(store.list()[0].graph.revision, 0);
+  assert.equal(publishes, 1); assert.equal(graphRevision(store.list()[0].graph), 0);
 });
 
 test("closing a projection root keeps its graph data and makes it creatable again", async () => {
   const { workspace } = await session(), store = new WorkspaceSessionStore([workspace], () => {});
   store.closeProjectionRoot(workspace.id, "scene.view.quadrant");
   const current = store.list()[0];
-  assert.ok(current.graph.nodes["scene.view.quadrant"]); assert.ok(!current.rootNodeIds.includes("scene.view.quadrant"));
+  assert.ok(graphNodes(current.graph)["scene.view.quadrant"]); assert.ok(!current.rootNodeIds.includes("scene.view.quadrant"));
   assert.equal(normalizeFreeLayout(current.views, current.rootNodeIds).projections["scene.view.quadrant"], undefined);
 });
 

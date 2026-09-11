@@ -22,17 +22,17 @@
     "version": "1.0.0",
     "releaseDate": "20260806"
   },
-  "intentMap": {
+  "pipIntent": {
     "layer": "a2",
-    "artifactName": "intent_map",
-    "packageId": "intent-map",
-    "name": "Intent Map",
+    "artifactName": "pip_intent",
+    "packageId": "pip-intent",
+    "name": "PIP Intent",
     "version": "1.0.0",
     "releaseDate": "20260806"
   },
   "defaults": {
     "loaderPackageId": "pip-loader",
-    "editorPackageId": "intent-map",
+    "editorPackageId": "pip-intent",
     "capabilities": {}
   }
 }

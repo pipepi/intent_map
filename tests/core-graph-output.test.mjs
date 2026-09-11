@@ -1,53 +1,54 @@
+import { createGraph } from "../pip-editor/pip/pip-model.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createCoreRelationGraph } from "../pip-editor/relation/index.ts";
+import { createCorePipGraph } from "../pip-editor/pip/index.ts";
 
 const identity = {
-  nodeId: "relation.core.identity",
-  relationId: "identity",
+    node_id: "pip.core.identity",
+    pip_id: "identity"
 };
 
 const type = {
   id: "type",
-  predicate: {
-    nodeId: "relation.core.type",
-    relationId: "identity",
-  },
-  object: {
+    fork_level: 3,
+    predicate_value: { predicate: {
+            node_id: "pip.core.type",
+            pip_id: "identity"
+        }, value: {
     kind: "ref",
     target: {
-      nodeId: "relation.core.predicate",
-      relationId: "identity",
-    },
-  },
-  relations: [],
+                node_id: "pip.core.predicate",
+                pip_id: "identity"
+            },
+  } },
+    pips: []
 };
 
 const coreNode = (id) => ({
   id,
-  relations: [
+    fork_level: 2,
+    pips: [
     {
       id: "identity",
-      predicate: identity,
-      object: { kind: "const", value: id },
-      relations: [],
-    },
+            fork_level: 3,
+            predicate_value: { predicate: identity, value: { kind: "const", value: id } },
+            pips: []
+        },
     type,
-  ],
+  ]
 });
 
-test("createCoreRelationGraph creates and prints the canonical core graph", () => {
-  const graph = createCoreRelationGraph();
+test("createCorePipGraph creates and prints the canonical core graph", () => {
+  const graph = createCorePipGraph();
 
   process.stdout.write(`${JSON.stringify(graph, null, 2)}\n`);
-
-  assert.deepEqual(graph, {
-    revision: 0,
-    nodes: {
-      "relation.core.identity": coreNode("relation.core.identity"),
-      "relation.core.predicate": coreNode("relation.core.predicate"),
-      "relation.core.type": coreNode("relation.core.type"),
-    },
-  });
+    assert.deepEqual(graph, createGraph({
+        "pip.core.identity": coreNode("pip.core.identity"),
+        "pip.core.predicate": coreNode("pip.core.predicate"),
+        "pip.core.type": coreNode("pip.core.type"),
+"pip.meta.revision": coreNode("pip.meta.revision"),
+"pip.meta.root-node-ids": coreNode("pip.meta.root-node-ids"),
+"pip.meta.workspace": coreNode("pip.meta.workspace"),
+    }, 0));
 });

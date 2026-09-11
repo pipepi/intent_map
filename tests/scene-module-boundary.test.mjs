@@ -38,8 +38,8 @@ test("authored modules stay below 300 physical lines", async () => {
 
 test("projection host and external projection suites have no circular imports", async () => {
   const modules = await authoredModules(), edges = new Map();
-  const inProjectionBoundary = (file) => file.startsWith("pip-editor/relation-host/projection/")
-    || file.startsWith("pip-editor-io/relation-projections/") || file.startsWith("pip-editor-io/scene/");
+  const inProjectionBoundary = (file) => file.startsWith("pip-editor/pip-host/projection/")
+    || file.startsWith("pip-editor-io/pip-projections/") || file.startsWith("pip-editor-io/scene/");
   for (const [file, source] of modules) {
     const imports = [...source.matchAll(/(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g)];
     edges.set(file, imports.map((match) => resolveLocalImport(file, match[1], modules)).filter(Boolean).filter(inProjectionBoundary));

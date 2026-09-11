@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { pipFilename } from "../pip-editor/pip/index.ts";
+import { pipFilename } from "../pip-editor/pip-package/index.ts";
 import {
   createPendingBatch,
   preparePipBatch,
-} from "../pip-editor/relation-host/packages/import-batch.ts";
-import { runPreparedPipBatch } from "../pip-editor/relation-host/packages/import-batch-runner.ts";
-import { exportNodeMap } from "../pip-editor/relation-host/packages/export-node-map.ts";
+} from "../pip-editor/pip-host/packages/import-batch.ts";
+import { runPreparedPipBatch } from "../pip-editor/pip-host/packages/import-batch-runner.ts";
+import { exportNodeMap } from "../pip-editor/pip-host/packages/export-node-map.ts";
 import {
   createNodeMapWorkspace,
   decodeNodeMapPackage,
-} from "../pip-editor/relation-host/packages/node-map-package.ts";
-import { isPipFile } from "../pip-editor/relation-host/view/pip-drop-files.ts";
+} from "../pip-editor/pip-host/packages/node-map-package.ts";
+import { isPipFile } from "../pip-editor/pip-host/view/pip-drop-files.ts";
 import { buildIntentPluginSuite } from "../pip-editor-io/intent/suite.ts";
 
 const pipFile = (bytes, manifest) => new File(
@@ -155,7 +155,7 @@ test("host and workspace canvases share the nested PIP drop zone", async () => {
     "legacy-workspace-canvas.tsx",
   ].map((name) => readFile(
     new URL(
-      `../pip-editor/relation-host/view/${name}`,
+      `../pip-editor/pip-host/view/${name}`,
       import.meta.url,
     ),
     "utf8",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compatibleEditors, resolveExactEditor } from "../pip-editor/pip/profile.ts";
+import { compatibleEditors, resolveExactEditor } from "../pip-editor/pip-package/profile.ts";
 
 const reference = {
   origin: "user",

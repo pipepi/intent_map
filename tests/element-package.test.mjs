@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decodeElementPackage, encodeElementPackage } from "../pip-editor/relation-host/packages/element-package.ts";
+import { decodeElementPackage, encodeElementPackage } from "../pip-editor/pip-host/packages/element-package.ts";
 import { baseElementManifest } from "../pip-editor-io/shared/manifest-builders.ts";
 
 const manifest = { ...baseElementManifest("official.text-elements", "Text"), elements: [{ id: "text", tag: "intent-text-preview", purpose: "preview" }] };

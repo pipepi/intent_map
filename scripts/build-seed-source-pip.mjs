@@ -4,8 +4,8 @@ import path from "node:path";
 import {
   DEFAULT_PIP_LOADER_SOURCE,
   encodePip as encodePipWithPolicy,
-} from "../pip-editor/pip/index.ts";
-import { createRelationDocument, serializeRelationDocument } from "../pip-editor/relation/document.ts";
+} from "../pip-editor/pip-package/index.ts";
+import { createPipDocument, serializePipDocument } from "../pip-editor/pip/document.ts";
 import { createdAtFor, projectRoot, readReleaseConfig, systemPipFilePath } from "./pip-release.mjs";
 import { collectSourceAssets, softwareProjectGraph } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
@@ -36,7 +36,7 @@ const writePackage = async (release, manifest, project, assets) => {
       ...manifest,
     },
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeRelationDocument(createRelationDocument(project.graph, [project.rootNodeId])),
+    rootTreeText: serializePipDocument(createPipDocument(project.graph, [project.rootNodeId])),
     assets,
   });
   await mkdir(path.dirname(output), { recursive: true });

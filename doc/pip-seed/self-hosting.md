@@ -1,6 +1,6 @@
 # PIP Self-Hosting：A0–A2 可审计升级闭环
 
-仓库维护 A0 Seed、A1 Loader 和 A2 Relation Map 三个源码 PIP。`scripts/pip-system-sources.mjs` 明确列出每个包的源码边界；A2 同时携带 Relation 核心、通用宿主、外置插件包构建源码、脚本和测试。
+仓库维护 A0 Seed、A1 Loader 和 A2 Pip Map 三个源码 PIP。`scripts/pip-system-sources.mjs` 明确列出每个包的源码边界；A2 同时携带 Pip 核心、通用宿主、外置插件包构建源码、脚本和测试。
 
 ```text
 系统 A0–A2 source PIP

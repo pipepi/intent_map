@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { resolveRustToolchain } from "./cargo-toolchain.mjs";
 
-import { decodePip as decodePipWithPolicy } from "../pip-editor/pip/index.ts";
+import { decodePip as decodePipWithPolicy } from "../pip-editor/pip-package/index.ts";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 import {
   applicationDirectory,
@@ -34,7 +34,7 @@ run("build-editor-static.mjs");
 run("build-editor-pip.mjs");
 
 const release = await readReleaseConfig();
-const selected = [release.seed, release.loader, release.intentMap];
+const selected = [release.seed, release.loader, release.pipIntent];
 await mkdir(applicationDirectory, { recursive: true });
 for (const item of selected) {
   await copyFile(systemPipFilePath(item), path.join(applicationDirectory, artifactFilename(item)));

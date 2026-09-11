@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { streamBrowserWorkspaceBundle } from "../pip-editor/pip/bundle/browser-streaming-bundle.ts";
-import { bundleSplitWorkspace } from "../pip-editor/pip/bundle/workspace-bundle.ts";
-import { DEFAULT_PIP_LOADER_SOURCE, encodePip } from "../pip-editor/pip/index.ts";
-import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/io-policy.ts";
-import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../pip-editor/pip/workspace/resource-index.ts";
-import { openWorkspaceResourceSession } from "../pip-editor/pip/workspace/resource-store.ts";
+import { streamBrowserWorkspaceBundle } from "../pip-editor/pip-package/bundle/browser-streaming-bundle.ts";
+import { bundleSplitWorkspace } from "../pip-editor/pip-package/bundle/workspace-bundle.ts";
+import { DEFAULT_PIP_LOADER_SOURCE, encodePip } from "../pip-editor/pip-package/index.ts";
+import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip-package/io-policy.ts";
+import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../pip-editor/pip-package/workspace/resource-index.ts";
+import { openWorkspaceResourceSession } from "../pip-editor/pip-package/workspace/resource-store.ts";
 
 class StreamingStore {
   constructor(resources) {
@@ -90,7 +90,7 @@ test("browser Bundle streams resources to a file handle without aggregating them
     rootTreeText: JSON.stringify({ schemaVersion: 3, rootNodeId: "root" }),
     assets: [workspaceResourceIndexAsset(index)],
   }, io);
-  const { decodePip } = await import("../pip-editor/pip/index.ts");
+  const { decodePip } = await import("../pip-editor/pip-package/index.ts");
   const pip = await decodePip(pipBytes, io);
   const store = new StreamingStore(resources);
   const session = openWorkspaceResourceSession(pip, store);

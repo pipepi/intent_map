@@ -1,3 +1,4 @@
+import { createGraph, pipStatement } from "../pip-editor/pip/pip-model.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { environmentConfig, requireEnvironment } from "../pip-editor-io/spot-terminal/runtime/environment.js";
@@ -5,13 +6,15 @@ import { switchEnvironment } from "../pip-editor-io/spot-terminal/runtime/comman
 import { terminalCreator } from "../pip-editor-io/spot-terminal/runtime/creator.js";
 import { loginView, terminalView } from "../pip-editor-io/spot-terminal/elements/render.js";
 
-const relation = (id, predicate, value) => ({
-  id, predicate: { nodeId: predicate, relationId: "identity" },
-  object: { kind: "const", value }, relations: [],
+const pip = (id, predicate, value) => ({
+  id,
+    fork_level: 3,
+    predicate_value: { predicate: { node_id: predicate, pip_id: "identity" }, value: { kind: "const", value } },
+    pips: []
 });
-const terminal = (id, environment) => ({ id, relations: [
-  relation("config", "spot.terminal.predicate.config", { environment }),
-  relation("state", "spot.terminal.predicate.state", { authenticated: true, botEnabled: true }),
+const terminal = (id, environment) => ({ id, fork_level: 2, pips: [
+  pip("config", "spot.terminal.predicate.config", { environment }),
+  pip("state", "spot.terminal.predicate.state", { authenticated: true, botEnabled: true }),
 ] });
 
 test("fixed environments resolve canonical HTTP and WebSocket bases", () => {
@@ -25,21 +28,19 @@ test("fixed environments resolve canonical HTTP and WebSocket bases", () => {
 
 test("environment switch resets only its terminal and persists no credentials", () => {
   const first = terminal("first", "local"), second = terminal("second", "server");
-  const patch = switchEnvironment({ terminalId: "first", environment: "server" }, {
-    revision: 9, nodes: { first, second },
-  });
-  const config = patch.operations.find((operation) => operation.op === "put-relation" && operation.nodeId === "first" && operation.relation.id === "config");
-  const state = patch.operations.find((operation) => operation.op === "put-relation" && operation.nodeId === "first" && operation.relation.id === "state");
-  assert.deepEqual(config.relation.object.value, { environment: "server" });
-  assert.equal(state.relation.object.value.authenticated, false);
-  assert.equal(state.relation.object.value.botEnabled, false);
-  assert.ok(patch.operations.some((operation) => operation.op === "put-node" && operation.node.id.includes(":fact:robot:")));
+  const patch = switchEnvironment({ terminalId: "first", environment: "server" }, createGraph({ first, second }, 9));
+  const config = patch.operations.find((operation) => operation.op === "put" && operation.parent_path[0] === "first" && operation.pip.id === "config");
+  const state = patch.operations.find((operation) => operation.op === "put" && operation.parent_path[0] === "first" && operation.pip.id === "state");
+  assert.deepEqual(pipStatement(config.pip).value.value, { environment: "server" });
+  assert.equal(pipStatement(state.pip).value.value.authenticated, false);
+  assert.equal(pipStatement(state.pip).value.value.botEnabled, false);
+  assert.ok(patch.operations.some((operation) => operation.op === "put" && operation.parent_path.length === 0 && operation.pip.id.includes(":fact:robot:")));
   assert.doesNotMatch(JSON.stringify(patch), /accessToken|password|apiBase/);
-  assert.equal(second.relations[0].object.value.environment, "server");
+  assert.equal(pipStatement(second.pips[0]).value.value.environment, "server");
 });
 
 test("creator persists only the environment identifier", () => {
-  const created = terminalCreator.create({ graph: { revision: 0, nodes: {} } });
+  const created = terminalCreator.create({ graph: createGraph({}, 0) });
   const text = JSON.stringify(created.patch);
   assert.match(text, /\"environment\":\"local\"/);
   assert.doesNotMatch(text, /apiBase|accessToken|password/);

@@ -27,7 +27,7 @@ fn reference(source: &CatalogSource, file: &str) -> PackageRef {
 #[test]
 fn validates_exact_loader_and_editor_profile_references() {
     let loader = system_source("a1", "pip-loader");
-    let editor = system_source("a2", "intent-map");
+    let editor = system_source("a2", "pip-intent");
     let sources = vec![loader.clone(), editor.clone()];
     let profile = RuntimeProfile {
         schema_version: 1,
@@ -35,7 +35,7 @@ fn validates_exact_loader_and_editor_profile_references() {
         name: "System".into(),
         seed: None,
         loader: reference(&loader, "a1_loader_1_0_0_20260806.pip"),
-        editor: reference(&editor, "a2_intent_map_1_0_0_20260806.pip"),
+        editor: reference(&editor, "a2_pip_intent_1_0_0_20260806.pip"),
         capabilities: BTreeMap::new(),
     };
     validate_runtime_profile(&profile, &sources, &PipIoPolicy::unlimited()).unwrap();

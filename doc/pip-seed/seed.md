@@ -1,6 +1,6 @@
 # PIP Seed：无状态初始加载器（种皮）
 
-[RelationNode 插件架构](../relation_node_plugins.md) · [下一篇：Loader →](loader.md)
+[PipNode 插件架构](../pip_node_plugins.md) · [下一篇：Loader →](loader.md)
 
 ## 定位
 
@@ -95,7 +95,7 @@ pip-runtime/
 └── pip/
     ├── a0_pip_seed_1_0_0_20260806.pip
     ├── a1_loader_1_0_0_20260806.pip
-    └── a2_intent_map_1_0_0_20260806.pip
+    └── a2_pip_intent_1_0_0_20260806.pip
 ```
 
 macOS 双击版本化 `.app` 时不会打开 Terminal；Windows 双击版本化 `.exe`。
@@ -167,4 +167,4 @@ CLI 仍有字段为“每次确认”时直接报错；桌面端则在读取 PIP
 
 ---
 
-[RelationNode 插件架构](../relation_node_plugins.md) · [下一篇：Loader →](loader.md)
+[PipNode 插件架构](../pip_node_plugins.md) · [下一篇：Loader →](loader.md)

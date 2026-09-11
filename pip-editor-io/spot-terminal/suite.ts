@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/relation-host/packages/element-package.ts";
-import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/relation-host/packages/node-type-package.ts";
-import { exactPackageRef } from "../../pip-editor/relation-host/packages/pip-package.ts";
+import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/pip-host/packages/element-package.ts";
+import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/pip-host/packages/node-type-package.ts";
+import { exactPackageRef } from "../../pip-editor/pip-host/packages/pip-package.ts";
 import { baseElementManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
 import { SPOT_ELEMENT_PLUGIN_ID, SPOT_FACT_TYPES, SPOT_NODE_PLUGIN_ID, SPOT_TERMINAL_TYPE, spotTerminalOntology } from "./domain.ts";
 

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { streamUnbundleNodeWorkspace } from "../pip-editor/pip/bundle/node-streaming-unbundle.ts";
+import { streamUnbundleNodeWorkspace } from "../pip-editor/pip-package/bundle/node-streaming-unbundle.ts";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 
 const [bundleArgument, outputArgument] = process.argv.slice(2);

@@ -17,8 +17,8 @@ test("root keeps mechanisms in owned directories instead of legacy buckets", asy
   ]) {
     assert.equal(await exists(legacy), false, legacy);
   }
-  assert.equal(await exists("pip-editor/pip/workspace/"), true);
-  assert.equal(await exists("pip-editor/pip/bundle/"), true);
+  assert.equal(await exists("pip-editor/pip-package/workspace/"), true);
+  assert.equal(await exists("pip-editor/pip-package/bundle/"), true);
   assert.equal(await exists("pip-editor/web/main.tsx"), true);
   assert.equal(await exists("pip-editor-io/scene/suite.ts"), true);
   for (const mechanism of ["cli/", "runtime/", "tauri/", "repo/system/", "loader/"]) {

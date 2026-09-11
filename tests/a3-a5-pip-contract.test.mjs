@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertPipManifest } from "../pip-editor/pip/index.ts";
-import { decodeNodeMapPackage } from "../pip-editor/relation-host/packages/node-map-package.ts";
+import { assertPipManifest } from "../pip-editor/pip-package/index.ts";
+import { decodeNodeMapPackage } from "../pip-editor/pip-host/packages/node-map-package.ts";
 import { buildIntentPluginSuite } from "../pip-editor-io/intent/suite.ts";
 import { buildScenePluginSuite } from "../pip-editor-io/scene/suite.ts";
 

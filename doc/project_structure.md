@@ -1,20 +1,20 @@
 # 工程目录、处理机制与层级结构
 
 [项目首页](../README.md) · [PIP Seed](pip-seed/seed.md) ·
-[A3–A5 插件架构](relation_node_plugins.md) ·
-[Relation Host](../pip-editor/relation-host/README.md)
+[A3–A5 插件架构](pip_node_plugins.md) ·
+[Pip Host](../pip-editor/pip-host/README.md)
 
 ## 1. 总体模型
 
 工程不是传统的“前端 + 后端”分层，而是两套结构叠加：
 
 1. PIP 启动层级解决谁加载谁，以及每层能够提供什么能力。
-2. 编辑器处理层级解决 Relation 数据如何修改、投影和呈现。
+2. 编辑器处理层级解决 Pip 数据如何修改、投影和呈现。
 
 ```text
 操作系统
   ↓
-A0 Seed → A1 Loader → A2 Relation Editor
+A0 Seed → A1 Loader → A2 Pip Editor
                            ↓
                     A3 Element
                     A4 Node Type
@@ -24,10 +24,10 @@ A0 Seed → A1 Loader → A2 Relation Editor
 编辑器内部则是：
 
 ```text
-RelationDocument / PIP
+PipDocument / PIP
   ↓
-RelationGraph
-  ↓ RelationPatch
+PipGraph
+  ↓ PipTx
 WorkspaceSession
   ↓ A4 Projection
 A3 Element
@@ -38,9 +38,9 @@ WorkspaceWindow / Tab / Embedded Surface
 ## 2. 顶层目录
 
 ```text
-intent_map/
+pip_intent/
 ├── pip-seed/            A0/A1 原生启动、加载与系统包仓库
-├── pip-editor/          A2 通用 Relation 编辑器
+├── pip-editor/          A2 通用 Pip 编辑器
 ├── pip-editor-io/       可安装的领域 A3/A4/A5 插件源码
 ├── scripts/             构建、验证、自宿主和发布机制
 ├── tests/               跨层契约、行为与静态边界测试
@@ -50,17 +50,17 @@ intent_map/
 ```
 
 `pip-editor-io` 不是通用文件 I/O 层；它保存 Intent、Scene、Spot Terminal 等
-领域插件套件。通用 PIP 编解码和文件工作区能力属于 `pip-editor/pip`，随 A2 编译
-的宿主特权插件属于 `pip-editor/relation-host-io`。
+领域插件套件。核心模型属于 `pip-editor/pip`，通用 PIP 编解码和文件工作区能力属于 `pip-editor/pip-package`，随 A2 编译
+的宿主特权插件属于 `pip-editor/pip-host-io`。
 
 ## 3. PIP 六层协议
 
 | 层 | 主要目录 | 负责 | 不负责 |
 | --- | --- | --- | --- |
 | A0 Seed | `pip-seed/runtime`、`cli`、`tauri` | 原生发现、验证并启动 A1 | 编辑业务节点 |
-| A1 Loader | `pip-seed/loader` | 选择 A2、版本与恢复入口 | 通用 Relation 编辑 |
+| A1 Loader | `pip-seed/loader` | 选择 A2、版本与恢复入口 | 通用 Pip 编辑 |
 | A2 Editor | `pip-editor` | PIP I/O、工作区、事务、投影和宿主 | 猜测领域语义 |
-| A3 Element | `pip-editor-io/*/elements` | Web Component 表现与交互 | 决定 Relation 合法性 |
+| A3 Element | `pip-editor-io/*/elements` | Web Component 表现与交互 | 决定 Pip 合法性 |
 | A4 Node Type | `pip-editor-io/*/runtime`、`suite.ts` | 类型、命令、验证、Creator、Projection、Executor | 保存业务实例 |
 | A5 Node Map | 插件 suite 构建产物 | Graph、roots、views 和精确 A4 依赖 | 执行代码 |
 
@@ -106,45 +106,48 @@ Seed 保持无状态；最近项目、版本选择、下载、更新和恢复体
 ```text
 pip-editor/
 ├── web/                 浏览器挂载入口
-├── relation/            Relation 数据内核
-├── pip/                 PIP 编解码、策略、资源和 Bundle
-├── relation-host/       通用编辑宿主
-└── relation-host-io/    A2 内置高权限系统插件
+├── pip/            Pip 数据内核
+├── pip-package/         PIP 编解码、策略、资源和 Bundle
+├── pip-host/       通用编辑宿主
+└── pip-host-io/    A2 内置高权限系统插件
 ```
 
 ### 5.1 `web/`
 
-`web/main.tsx` 只负责将 `RelationHost` 挂载到静态页面。它不安装领域插件，也不
+`web/main.tsx` 只负责将 `PipHost` 挂载到静态页面。它不安装领域插件，也不
 拥有工作区状态。
 
-### 5.2 `relation/`
+### 5.2 `pip/`
 
 唯一持久化事实是：
 
 ```text
-RelationGraph
-└── RelationNode
-    └── Relation[]
-        ├── predicate: RelationRef
-        ├── object: const | ref | op
-        └── relations: Relation[]
+Pip (DOCUMENT)
+└── pips: Pip[] (GRAPH / metadata PIPE)
+    └── pips: Pip[] (NODE / metadata PIPE)
+        └── pips: Pip[] (PIPE)
+
+每个 Pip: id + fork_level + predicate_value? + pips
+predicate_value: { predicate: PipRef, value: const | ref | op }
+PipRef: { node_id, pip_id, pip_id_parent? }
 ```
 
 主要机制：
 
-- `types.ts` 定义 Graph、Node、Relation、Ref 和 Patch。
-- `core-graph.ts` 自举 `identity`、`predicate`、`type`。
+- `types.ts` 定义统一 Pip、fork level、Ref 和 Patch。
+- `core-graph.ts` 自举 `identity`、`predicate`、`type`，并提供三个元数据谓词。
+- `pip-model.ts` 派生节点字典，通过元数据 PIPE 读写 revision、根节点与工作区状态。
 - `reference-index.ts` 动态派生 incoming/outgoing，不持久化第二份边。
 - `graph-validation.ts` 校验引用闭包和规范结构。
 - `patch.ts` 在副本上应用 revision-bound Patch，并生成 inverse Patch。
-- `document.ts` 在 PIP 与工作区边界保存值化 `relation-workspace@2`。
+- `document.ts` 在 PIP 与工作区边界保存统一 `pip-workspace@3`；`legacy-document.ts` 负责读取旧 v1/v2 格式并迁移。
 
 Graph 修改流程：
 
 ```text
 原 Graph
   ↓ structuredClone
-应用 RelationPatch
+应用 PipTx
   ↓ 完整 Graph 与 A4 Validator 校验
 revision + 1
   ↓
@@ -153,10 +156,10 @@ revision + 1
 
 失败操作不会部分修改原 Graph；inverse Patch 用于 undo/redo。
 
-### 5.3 `pip/`
+### 5.3 `pip-package/`
 
 ```text
-pip/
+pip-package/
 ├── format / codec       PIP 二进制四区段格式
 ├── manifest / types     A0–A5 Manifest 契约
 ├── io-policy            容量与授权策略
@@ -179,10 +182,10 @@ Manifest、文件名、资源 SHA 和依赖闭包校验
 
 任何可执行入口都在完整性和依赖闭包校验之后运行。
 
-## 6. `relation-host`：编辑处理中心
+## 6. `pip-host`：编辑处理中心
 
 ```text
-relation-host/
+pip-host/
 ├── contracts/       宿主与插件共享 ABI
 ├── packages/        A3/A4/A5 解析、闭包、导入与导出
 ├── activation/      A3 Element 与 A4 Node Type Registry
@@ -190,10 +193,10 @@ relation-host/
 ├── projection/      Graph → Projection 的纯计算
 ├── workspace/       业务会话与宿主呈现 Store
 ├── view/            画布、窗口、Creator 和 Tab
-└── relation-host.tsx 以上机制的组合入口
+└── pip-host.tsx 以上机制的组合入口
 ```
 
-`relation-host.tsx` 应只做组合和跨机制协调；具体窗口、Creator、执行、投影和存储
+`pip-host.tsx` 应只做组合和跨机制协调；具体窗口、Creator、执行、投影和存储
 行为分别留在对应目录。
 
 ## 7. 两个状态平面
@@ -229,7 +232,7 @@ HostCanvasState
 └── frontWindowId
 ```
 
-它只表示 A2 如何呈现工作区和系统工具，不进入业务 Graph、RelationDocument、
+它只表示 A2 如何呈现工作区和系统工具，不进入业务 Graph、PipDocument、
 undo/redo 或 A5。当前只在应用会话内存中存在。
 
 同一个 WorkspaceSession 可以有两种宿主外象：
@@ -247,7 +250,7 @@ Tab 与 Window 切换不复制业务状态，也不构成工作区嵌套。
 ### 8.1 A3 Element
 
 A3 Registry 建立 `elementId → custom element tag` 映射。A3 接收宿主和 A4 已经
-投影好的模型，负责视觉与交互，通过 `RelationElementRequest` 表达操作意图，
+投影好的模型，负责视觉与交互，通过 `PipElementRequest` 表达操作意图，
 不直接写入 Graph。
 
 ### 8.2 A4 Node Type
@@ -257,20 +260,20 @@ A4 Registry 可以注册：
 - Node Type、Validator 和 Command；
 - Creator、Projection 和 Executor；
 - Language Provider、Trigger 和 Effect Handler；
-- Execution Planner、Node Runtime 和 Relation Operator。
+- Execution Planner、Node Runtime 和 Pip Operator。
 
 标准业务修改链：
 
 ```text
 A3 用户操作
-  ↓ RelationElementRequest
-relation-host-actions
+  ↓ PipElementRequest
+pip-host-actions
   ↓
 A4 Command / Creator
-  ↓ RelationPatch
+  ↓ PipTx
 WorkspaceSessionStore
   ↓ 原子校验、提交和历史记录
-RelationGraph 新 revision
+PipGraph 新 revision
   ↓
 Projection 重新计算 → A3 重新渲染
 ```
@@ -323,10 +326,10 @@ Overview、Detail、Flow、World Events 等名称不是固定系统层级。同�
 
 Creator frame 属于临时 UI 状态；不会进入业务 views、图历史或宿主持久化。
 
-## 11. `relation-host-io`：A2 系统插件
+## 11. `pip-host-io`：A2 系统插件
 
 ```text
-relation-host-io/
+pip-host-io/
 ├── system-plugin/
 │   ├── contracts
 │   ├── registry
@@ -337,7 +340,7 @@ relation-host-io/
 └── preferences/
 ```
 
-系统插件使用独立合法的 RelationGraph overlay。系统 type node 与 instance node
+系统插件使用独立合法的 PipGraph overlay。系统 type node 与 instance node
 都有标准 `identity/type` 关系，但不会合并到任何业务 Graph。
 
 系统插件的两个维度不能混淆：
@@ -352,7 +355,7 @@ host-scope 单例可以在宿主和多个工作区同时呈现，共享实例状
 
 ```text
 pip-editor-io/
-├── relation-projections/  通用 Relation Projection
+├── pip-projections/  通用 Pip Projection
 ├── intent/                Intent 领域套件
 ├── scene/                 Scene 领域套件
 ├── spot-terminal/         Spot Terminal 领域套件
@@ -368,7 +371,7 @@ elements/       A3 表现层
 runtime/        A4 语义、命令、Creator、Projection
 ```
 
-这些插件不会被空白 A2 自动安装。`relation-host-io` 是可信宿主能力，
+这些插件不会被空白 A2 自动安装。`pip-host-io` 是可信宿主能力，
 `pip-editor-io` 是可安装领域能力，二者有不同的生命周期和信任边界。
 
 ## 13. 导入与导出全流程
@@ -398,7 +401,7 @@ WorkspaceSession
   ↓
 过滤系统窗口与运行时状态
   ↓
-RelationDocument v2：graph + rootNodeIds + workspace
+PipDocument v2：graph + rootNodeIds + workspace
   ↓
 Node Map + 精确 A4 依赖闭包
   ↓
@@ -443,7 +446,7 @@ A3 负责外观与交互
 A4 负责语义与行为
 A5 负责业务数据
        ↓
-RelationPatch 是唯一业务 Graph 修改入口
+PipTx 是唯一业务 Graph 修改入口
        ↓
 Projection 是 Node Instance 的外象
        ↓

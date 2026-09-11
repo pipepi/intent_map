@@ -10,7 +10,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const packageFiles = [
   "pip-seed/repo/system/a0/pip-seed/a0_pip_seed_1_0_0_20260806.pip",
   "pip-seed/repo/system/a1/pip-loader/a1_loader_1_0_0_20260806.pip",
-  "pip-seed/repo/system/a2/intent-map/a2_intent_map_1_0_0_20260806.pip",
+  "pip-seed/repo/system/a2/pip-intent/a2_pip_intent_1_0_0_20260806.pip",
 ];
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 

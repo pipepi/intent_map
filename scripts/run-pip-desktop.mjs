@@ -11,7 +11,7 @@ const result = spawnSync(toolchain.cargo, [
   // Development must execute the authoritative packages rebuilt from this
   // checkout, not potentially stale copies left in dist/pip-runtime.
   "--pip", systemPipFilePath(release.loader),
-  "--editor", systemPipFilePath(release.intentMap),
+  "--editor", systemPipFilePath(release.pipIntent),
   ...process.argv.slice(2),
 ], { cwd: projectRoot, stdio: "inherit", env: toolchain.env });
 process.exit(result.status ?? 1);

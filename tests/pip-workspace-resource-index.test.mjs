@@ -8,11 +8,11 @@ import {
   readWorkspaceResourceIndex,
   verifyWorkspaceResources,
   workspaceResourceIndexAsset,
-} from "../pip-editor/pip/workspace/resource-index.ts";
+} from "../pip-editor/pip-package/workspace/resource-index.ts";
 import {
   MemoryWorkspaceResourceStore,
   openWorkspaceResourceSession,
-} from "../pip-editor/pip/workspace/resource-store.ts";
+} from "../pip-editor/pip-package/workspace/resource-store.ts";
 
 const resources = [
   {

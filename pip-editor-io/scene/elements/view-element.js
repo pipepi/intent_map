@@ -30,7 +30,7 @@ export class SceneViewElement extends HTMLElement {
     this.shadowRoot.innerHTML = renderView(data);
   }
   command(commandId, input) {
-    this.dispatchEvent(new CustomEvent("intent-relation-request", {
+    this.dispatchEvent(new CustomEvent("intent-pip-request", {
       bubbles: true, composed: true, detail: { kind: "command", commandId, input },
     }));
   }
@@ -41,7 +41,7 @@ export class SceneViewElement extends HTMLElement {
     }
     const target = event.target.closest?.("[data-select]");
     if (!target || this.drag) return;
-    this.dispatchEvent(new CustomEvent("intent-relation-request", {
+    this.dispatchEvent(new CustomEvent("intent-pip-request", {
       bubbles: true, composed: true,
       detail: { kind: "select", nodeIds: [target.dataset.select], scopeId: this.data().viewId },
     }));

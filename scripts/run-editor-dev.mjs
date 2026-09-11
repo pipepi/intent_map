@@ -77,7 +77,7 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, "127.0.0.1", () => {
-  process.stdout.write(`Relation editor: http://127.0.0.1:${port}\n`);
+  process.stdout.write(`Pip editor: http://127.0.0.1:${port}\n`);
 });
 
 const stop = async () => {

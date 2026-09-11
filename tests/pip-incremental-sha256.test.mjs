@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { IncrementalSha256 } from "../pip-editor/pip/bundle/incremental-sha256.ts";
+import { IncrementalSha256 } from "../pip-editor/pip-package/bundle/incremental-sha256.ts";
 
 const hex = (bytes) => Buffer.from(bytes).toString("hex");
 

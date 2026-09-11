@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip as decodePipWithPolicy } from "../pip-editor/pip/index.ts";
+import { decodePip as decodePipWithPolicy } from "../pip-editor/pip-package/index.ts";
 import { pipIoOptionsFromArgs } from "./pip-io-cli.mjs";
 import {
   artifactFilename,

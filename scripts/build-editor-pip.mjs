@@ -5,13 +5,13 @@ import process from "node:process";
 import {
   DEFAULT_PIP_LOADER_SOURCE,
   encodePip as encodePipWithPolicy,
-} from "../pip-editor/pip/index.ts";
+} from "../pip-editor/pip-package/index.ts";
 import {
   createdAtFor,
   readReleaseConfig,
   systemPipFilePath,
 } from "./pip-release.mjs";
-import { createRelationDocument, loadRelationDocument, relationDocumentValues, serializeRelationDocument } from "../pip-editor/relation/document.ts";
+import { createPipDocument, loadPipDocument, pipDocumentValues, serializePipDocument } from "../pip-editor/pip/document.ts";
 import { collectSourceAssets, softwareProjectGraph } from "./pip-source-assets.mjs";
 import { packagedPipIoPolicy, trustedBuildPipIo } from "./pip-io-policy.mjs";
 import { systemSourceEntriesFor } from "./pip-system-sources.mjs";
@@ -64,14 +64,13 @@ const collectAssets = async (directory, relative = "") => {
   }
   return assets;
 };
-
 const treePath = option("--tree");
 const assetsDirectory = path.resolve(root, option("--assets") ?? "out");
-const release = (await readReleaseConfig()).intentMap;
+const release = (await readReleaseConfig()).pipIntent;
 const output = systemPipFilePath(release);
 const assetsInfo = await stat(assetsDirectory);
 if (!assetsInfo.isDirectory()) {
-  throw new Error(`PIP asset source is not a directory: ${assetsDirectory}`);
+    throw new Error(`PIP asset source is not a directory: ${assetsDirectory}`);
 }
 const collectedRuntimeAssets = await collectAssets(assetsDirectory);
 const runtimeAssets = collectedRuntimeAssets;
@@ -81,26 +80,29 @@ const sourceAssets = await collectSourceAssets(
 );
 const assets = [...runtimeAssets, ...sourceAssets];
 const tree = treePath
-  ? loadRelationDocument(JSON.parse(await readFile(path.resolve(root, treePath), "utf8")))
-  : (() => { const project = softwareProjectGraph({
-      id: "intent_map_editor_root",
-      name: "RelationNode Host",
-      description: "Generic three-layer RelationNode plugin host source project.",
-      compiler: "relation-host/1",
-      assets: sourceAssets,
-    }); return createRelationDocument(project.graph, [project.rootNodeId]); })();
-const rootTreeText = serializeRelationDocument(tree);
+    ? loadPipDocument(JSON.parse(await readFile(path.resolve(root, treePath), "utf8")))
+    : (() => {
+        const project = softwareProjectGraph({
+            id: "intent_map_editor_root",
+            name: "Pip Host",
+            description: "Generic three-layer Pip plugin host source project.",
+            compiler: "pip-host/1",
+            assets: sourceAssets,
+        });
+        return createPipDocument(project.graph, [project.rootNodeId]);
+    })();
+const rootTreeText = serializePipDocument(tree);
 const assetMap = new Map(assets.map((asset) => [asset.path, asset]));
 const indexAsset = assetMap.get("index.html");
 if (!indexAsset) {
-  throw new Error("PIP static assets must include index.html");
+    throw new Error("PIP static assets must include index.html");
 }
 const indexHtml = new TextDecoder().decode(indexAsset.bytes);
 const stylesheetPaths = [...indexHtml.matchAll(
   /<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["'][^>]*>/gi,
 )].map((match) => match[1].split(/[?#]/, 1)[0].replace(/^(?:\.\/|\/)+/, ""));
 if (!stylesheetPaths.length) {
-  throw new Error("PIP index.html does not reference a stylesheet");
+    throw new Error("PIP index.html does not reference a stylesheet");
 }
 const stylesheetText = stylesheetPaths.map((stylesheetPath) => {
   const stylesheet = assetMap.get(stylesheetPath);
@@ -109,44 +111,40 @@ const stylesheetText = stylesheetPaths.map((stylesheetPath) => {
   }
   return new TextDecoder().decode(stylesheet.bytes);
 }).join("\n");
-if (
-  indexHtml.includes("workspace-v3") &&
-  (!stylesheetText.includes(".workspace-v3") ||
-    !stylesheetText.includes(".workspace-panel") ||
-    !stylesheetText.includes(".workspace-surface"))
-) {
-  throw new Error(
-    "PIP static export is inconsistent: v3 workspace HTML is paired with stale CSS",
-  );
+if (indexHtml.includes("workspace-v3") &&
+    (!stylesheetText.includes(".workspace-v3") ||
+        !stylesheetText.includes(".workspace-panel") ||
+        !stylesheetText.includes(".workspace-surface"))) {
+    throw new Error("PIP static export is inconsistent: v3 workspace HTML is paired with stale CSS");
 }
 const bytes = await encodePip({
-  manifest: {
-    packageId: release.packageId,
-    layer: release.layer,
-    artifactName: release.artifactName,
-    name: release.name,
-    packageVersion: release.version,
-    releaseDate: release.releaseDate,
-    rootNodeId: relationDocumentValues(tree).rootNodeIds[0],
-    loaderAbi: "pip-loader/1",
-    artifactRole: "source-and-runtime",
-    editorAbi: "pip-editor/1",
-    providedEditorKinds: ["relation-graph/1"],
-    supportedDocumentKinds: ["relation-workspace/1", "relation-workspace/2"],
-    preferredEditorKinds: [],
-    requiredEditorCapabilities: [],
-    providedCapabilities: [],
-    requiredCapabilities: [],
-    requiredAuthoringCapabilities: [],
-    ioPolicy: packagedPipIoPolicy,
-    authoringKind: "software-project/1",
-    authoringCompiler: "relation-host/1",
-    createdAt: createdAtFor(release),
-    contentType: "application/vnd.intent-map.pip",
-  },
-  loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-  rootTreeText,
-  assets,
+    manifest: {
+        packageId: release.packageId,
+        layer: release.layer,
+        artifactName: release.artifactName,
+        name: release.name,
+        packageVersion: release.version,
+        releaseDate: release.releaseDate,
+        rootNodeId: pipDocumentValues(tree).rootNodeIds[0],
+        loaderAbi: "pip-loader/1",
+        artifactRole: "source-and-runtime",
+        editorAbi: "pip-editor/1",
+        providedEditorKinds: ["pip-graph/1"],
+        supportedDocumentKinds: ["pip-workspace/1", "pip-workspace/2", "pip-workspace/3"],
+        preferredEditorKinds: [],
+        requiredEditorCapabilities: [],
+        providedCapabilities: [],
+        requiredCapabilities: [],
+        requiredAuthoringCapabilities: [],
+        ioPolicy: packagedPipIoPolicy,
+        authoringKind: "software-project/1",
+        authoringCompiler: "pip-host/1",
+        createdAt: createdAtFor(release),
+        contentType: "application/vnd.intent-map.pip",
+    },
+    loaderSource: DEFAULT_PIP_LOADER_SOURCE,
+    rootTreeText,
+    assets,
 });
 await mkdir(path.dirname(output), { recursive: true });
 await writeFile(output, bytes);

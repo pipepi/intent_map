@@ -5,16 +5,16 @@ import {
   assertPipManifest,
   decodePip as decodePipWithPolicy,
   encodePip as encodePipWithPolicy,
-} from "../pip-editor/pip/index.ts";
+} from "../pip-editor/pip-package/index.ts";
 import {
   ASK_PIP_IO_POLICY,
   UNLIMITED_PIP_IO_POLICY,
-} from "../pip-editor/pip/io-policy.ts";
+} from "../pip-editor/pip-package/io-policy.ts";
 import {
   compatibleEditors,
   entryMatchesRef,
   resolveExactEditor,
-} from "../pip-editor/pip/profile.ts";
+} from "../pip-editor/pip-package/profile.ts";
 
 const sha = "a".repeat(64);
 const releaseDate = "20260807";
@@ -47,7 +47,7 @@ const manifest = (overrides = {}) => ({
 
 const reference = (overrides = {}) => ({
   origin: "system",
-  packageId: "intent-map",
+  packageId: "pip-intent",
   version: "1.0.0",
   releaseDate,
   sha256: sha,
@@ -55,13 +55,13 @@ const reference = (overrides = {}) => ({
 });
 
 const catalogEntry = (overrides = {}) => ({
-  file: "a2_intent_map_1_0_0_20260807.pip",
+  file: "a2_pip_intent_1_0_0_20260807.pip",
   origin: "system",
   readOnly: true,
   installed: true,
   trustedForExecution: true,
   valid: true,
-  packageId: "intent-map",
+  packageId: "pip-intent",
   layer: "a2",
   packageVersion: "1.0.0",
   releaseDate,
@@ -99,8 +99,8 @@ test("a2 and a3 manifests keep their distinct runtime contracts", () => {
   assert.throws(() => assertPipManifest(manifest({ layer: "a3" })), /Invalid PIP manifest/);
   assertPipManifest(manifest({
     layer: "a3",
-    elementAbi: "relation-element/2", entry: "entry.mjs", elements: [{ id: "node", tag: "test-node", purpose: "node" }], permissions: [],
-    sourcePaths: ["source/index.js"], sourceSha256: sha, entrySha256: sha, redistributable: true, providedCapabilities: ["relation-element/2"],
+    elementAbi: "pip-element/2", entry: "entry.mjs", elements: [{ id: "node", tag: "test-node", purpose: "node" }], permissions: [],
+    sourcePaths: ["source/index.js"], sourceSha256: sha, entrySha256: sha, redistributable: true, providedCapabilities: ["pip-element/2"],
   }));
 });
 
@@ -132,6 +132,6 @@ test("editor compatibility filters document kinds and only uses preferences for 
   assert.deepEqual(
     compatibleEditors([table, incompatible, tree], ["intent-document/3"], ["tree-map/1"])
       .map((entry) => entry.packageId),
-    ["intent-map", "table-editor"],
+    ["pip-intent", "table-editor"],
   );
 });

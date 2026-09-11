@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { openNodeSplitWorkspace } from "../pip-editor/pip/workspace/node-directory-store.ts";
+import { openNodeSplitWorkspace } from "../pip-editor/pip-package/workspace/node-directory-store.ts";
 
 test("native split workspace writes intent and nested resources as independent files", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "intent-map-workspace-"));

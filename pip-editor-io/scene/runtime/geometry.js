@@ -1,4 +1,4 @@
-import { kindOf, roleRelations, scalar } from "./selectors.js";
+import { kindOf, role_pips, scalar } from "./selectors.js";
 
 export const TIME_START = 7.5;
 export const TIME_END = 20;
@@ -9,8 +9,7 @@ const stableOffset = (id, salt) => {
   const value = [...`${id}-${salt}`].reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) | 0, 7);
   return ((Math.abs(value) % 1000) / 999) - 0.5;
 };
-export const eventReferenceCount = (node, events) => events.filter((event) =>
-  roleRelations(event).some(({ ref }) => ref.nodeId === node.id)).length;
+export const eventReferenceCount = (node, events) => events.filter((event) => role_pips(event).some(({ ref }) => ref.node_id === node.id)).length;
 export const kindRange = (node, entities) => {
   const kind = kindOf(node);
   const same = entities.filter((item) => kindOf(item) === kind);
@@ -38,9 +37,10 @@ export const entitySurfacePoint = (node, entities, events, mode) => {
   };
 };
 export const eventCenter = (event, graph, pointById) => {
-  const points = roleRelations(event).map(({ ref }) => pointById.get(ref.nodeId)).filter(Boolean);
-  if (!points.length) return undefined;
-  return { y: points.reduce((sum, point) => sum + point.y, 0) / points.length, z: points.reduce((sum, point) => sum + point.z, 0) / points.length };
+    const points = role_pips(event).map(({ ref }) => pointById.get(ref.node_id)).filter(Boolean);
+    if (!points.length)
+        return undefined;
+    return { y: points.reduce((sum, point) => sum + point.y, 0) / points.length, z: points.reduce((sum, point) => sum + point.z, 0) / points.length };
 };
 export const timeX = (hour) => Math.max(0, Math.min(1, (hour - TIME_START) / (TIME_END - TIME_START)));
 export const project = (point, mode, space = "timeline", camera = {}) => {

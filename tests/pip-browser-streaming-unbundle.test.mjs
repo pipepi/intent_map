@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { streamUnbundleBrowserWorkspace } from "../pip-editor/pip/bundle/browser-streaming-unbundle.ts";
-import { bundleSplitWorkspace } from "../pip-editor/pip/bundle/workspace-bundle.ts";
-import { DEFAULT_PIP_LOADER_SOURCE, decodePip } from "../pip-editor/pip/index.ts";
-import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/io-policy.ts";
-import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../pip-editor/pip/workspace/resource-index.ts";
-import { MemoryWorkspaceResourceStore, openWorkspaceResourceSession } from "../pip-editor/pip/workspace/resource-store.ts";
+import { streamUnbundleBrowserWorkspace } from "../pip-editor/pip-package/bundle/browser-streaming-unbundle.ts";
+import { bundleSplitWorkspace } from "../pip-editor/pip-package/bundle/workspace-bundle.ts";
+import { DEFAULT_PIP_LOADER_SOURCE, decodePip } from "../pip-editor/pip-package/index.ts";
+import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip-package/io-policy.ts";
+import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../pip-editor/pip-package/workspace/resource-index.ts";
+import { MemoryWorkspaceResourceStore, openWorkspaceResourceSession } from "../pip-editor/pip-package/workspace/resource-store.ts";
 
 class FileHandle {
   bytes = new Uint8Array();

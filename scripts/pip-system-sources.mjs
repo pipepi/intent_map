@@ -13,7 +13,7 @@ const entries = {
     "pip-seed/tauri/tauri.conf.json",
   ],
   "pip-loader": ["pip-seed/loader"],
-  "intent-map": [
+  "pip-intent": [
     "pip-editor",
     "pip-editor-io",
     "scripts",

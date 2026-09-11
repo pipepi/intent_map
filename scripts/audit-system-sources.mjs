@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { decodePip } from "../pip-editor/pip/index.ts";
+import { decodePip } from "../pip-editor/pip-package/index.ts";
 import { collectSourceAssets } from "./pip-source-assets.mjs";
 import { trustedBuildPipIo } from "./pip-io-policy.mjs";
 import {
@@ -26,7 +26,7 @@ const sourceTreeSha256 = (assets) => {
 };
 
 const release = await readReleaseConfig();
-const selected = [release.seed, release.loader, release.intentMap];
+const selected = [release.seed, release.loader, release.pipIntent];
 const packages = [];
 for (const item of selected) {
   const packagePath = systemPipFilePath(item);

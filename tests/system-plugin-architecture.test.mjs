@@ -6,7 +6,7 @@ import test from "node:test";
 const workspaceRoot = path.resolve(import.meta.dirname, "..");
 const systemPluginRoot = path.join(
   workspaceRoot,
-  "pip-editor/relation-host-io",
+  "pip-editor/pip-host-io",
 );
 
 async function sourceFiles(directory) {
@@ -34,12 +34,12 @@ test("system plugin source files stay below the readability boundary", async () 
 
 test("canvas and workspace state contain no concrete system plugin special case", async () => {
   const files = [
-    "pip-editor/relation-host/view/workspace-canvas.tsx",
-    "pip-editor/relation-host/view/workspace-canvas-model.ts",
-    "pip-editor/relation-host/view/free-workspace-canvas.tsx",
-    "pip-editor/relation-host/view/legacy-workspace-canvas.tsx",
-    "pip-editor/relation-host/workspace/workspace-store.ts",
-    "pip-editor/relation-host/workspace/view-state.ts",
+    "pip-editor/pip-host/view/workspace-canvas.tsx",
+    "pip-editor/pip-host/view/workspace-canvas-model.ts",
+    "pip-editor/pip-host/view/free-workspace-canvas.tsx",
+    "pip-editor/pip-host/view/legacy-workspace-canvas.tsx",
+    "pip-editor/pip-host/workspace/workspace-store.ts",
+    "pip-editor/pip-host/workspace/view-state.ts",
   ];
   const source = (await Promise.all(files.map((file) =>
     readFile(path.join(workspaceRoot, file), "utf8")
@@ -47,13 +47,13 @@ test("canvas and workspace state contain no concrete system plugin special case"
 
   assert.doesNotMatch(source, /host\.plugin-manager/);
   assert.doesNotMatch(source, /openPluginManager|pluginManager=/);
-  assert.doesNotMatch(source, /relation-host-io/);
+  assert.doesNotMatch(source, /pip-host-io/);
 });
 
-test("system plugin implementation never imports the RelationHost component", async () => {
+test("system plugin implementation never imports the PipHost component", async () => {
   const files = await sourceFiles(systemPluginRoot);
   const source = (await Promise.all(files.map((file) =>
     readFile(file, "utf8")
   ))).join("\n");
-  assert.doesNotMatch(source, /relation-host\.tsx/);
+  assert.doesNotMatch(source, /pip-host\.tsx/);
 });

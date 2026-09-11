@@ -9,7 +9,7 @@ import {
   pipLimit,
   selectedPipFilePolicy,
   resolvePipIoPolicy,
-} from "../pip-editor/pip/io-policy.ts";
+} from "../pip-editor/pip-package/io-policy.ts";
 
 test("PIP I/O policy defaults every metric to an explicit confirmation", () => {
   assertPipIoPolicy(ASK_PIP_IO_POLICY);

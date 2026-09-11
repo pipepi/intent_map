@@ -50,12 +50,12 @@ export class SpotTerminalElement extends HTMLElement {
   }
   request(commandId, input = {}) {
     const terminalId = this.#context?.observedNode?.id;
-    this.dispatchEvent(new CustomEvent("intent-relation-request", {
+    this.dispatchEvent(new CustomEvent("intent-pip-request", {
       bubbles: true, composed: true, detail: { kind: "command", commandId, input: { ...input, terminalId } },
     }));
   }
   hostRequest(detail) {
-    this.dispatchEvent(new CustomEvent("intent-relation-request", { bubbles: true, composed: true, detail }));
+    this.dispatchEvent(new CustomEvent("intent-pip-request", { bubbles: true, composed: true, detail }));
   }
   #updateWindow(delta) {
     const chrome = this.#context?.projection?.data?.windowChrome;

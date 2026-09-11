@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { openBrowserSplitWorkspace } from "../pip-editor/pip/workspace/browser-directory-store.ts";
+import { openBrowserSplitWorkspace } from "../pip-editor/pip-package/workspace/browser-directory-store.ts";
 
 class FileHandle {
   constructor(bytes = new Uint8Array()) {

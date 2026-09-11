@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { encodePip as encodePipWithPolicy } from "../pip-editor/pip/index.ts";
-import { createRelationDocument, serializeRelationDocument } from "../pip-editor/relation/document.ts";
+import { encodePip as encodePipWithPolicy } from "../pip-editor/pip-package/index.ts";
+import { createPipDocument, serializePipDocument } from "../pip-editor/pip/document.ts";
 import {
   createdAtFor,
   projectRoot,
@@ -65,7 +65,7 @@ const bytes = await encodePip({
     contentType: "application/vnd.intent-map.pip",
   },
   loaderSource: "export async function load() { return { rootNodeId: 'loader_root' }; }",
-  rootTreeText: serializeRelationDocument(createRelationDocument(project.graph, [project.rootNodeId])),
+  rootTreeText: serializePipDocument(createPipDocument(project.graph, [project.rootNodeId])),
   assets,
 });
 const output = systemPipFilePath(release);

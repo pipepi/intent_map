@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildIntentPluginSuite, INTENT_TYPES } from "../pip-editor-io/intent/suite.ts";
-import { decodeNodeTypePackage, encodeNodeTypePackage, validateNodeTypeDependencies } from "../pip-editor/relation-host/packages/node-type-package.ts";
-import { NodeTypePluginRegistry } from "../pip-editor/relation-host/activation/node-type-registry.ts";
+import { decodeNodeTypePackage, encodeNodeTypePackage, validateNodeTypeDependencies } from "../pip-editor/pip-host/packages/node-type-package.ts";
+import { NodeTypePluginRegistry } from "../pip-editor/pip-host/activation/node-type-registry.ts";
 
 const dataModule = async (source) => import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 
@@ -45,8 +45,8 @@ test("disable clears host registrations even when plugin cleanup throws", async 
   const suite = await buildIntentPluginSuite();
   const expected = suite.nodeType.manifest.typeNodeIds;
   const registry = new NodeTypePluginRegistry({ load: async () => ({ default(host) {
-    for (const nodeId of expected) host.registerType({ type: { nodeId, relationId: "identity" }, name: nodeId });
-    host.registerCommand("throwing.command", () => ({ schemaVersion: 1, baseRevision: 0, operations: [] }));
+    for (const nodeId of expected) host.registerType({ type: { node_id: nodeId, pip_id: "identity" }, name: nodeId });
+    host.registerCommand("throwing.command", () => ({ schemaVersion: 2, baseRevision: 0, operations: [] }));
     return () => { throw new Error("cleanup exploded"); };
   } }) });
   await registry.install(suite.nodeType);
@@ -60,14 +60,14 @@ test("node type registrations must exactly match manifest identity refs", async 
   const suite = await buildIntentPluginSuite();
   const expected = suite.nodeType.manifest.typeNodeIds;
   const registry = new NodeTypePluginRegistry({ load: async () => ({ default(host) {
-    for (const nodeId of expected) host.registerType({ type: { nodeId, relationId: "identity" }, name: nodeId });
-    host.registerType({ type: { nodeId: "intent.type.undeclared", relationId: "identity" }, name: "undeclared" });
+    for (const nodeId of expected) host.registerType({ type: { node_id: nodeId, pip_id: "identity" }, name: nodeId });
+    host.registerType({ type: { node_id: "intent.type.undeclared", pip_id: "identity" }, name: "undeclared" });
   } }) });
   await assert.rejects(() => registry.install(suite.nodeType), /extra \[intent\.type\.undeclared\/identity\]/);
   assert.equal(registry.types().length, 0);
 
   const wrongIdentity = new NodeTypePluginRegistry({ load: async () => ({ default(host) {
-    for (const nodeId of expected) host.registerType({ type: { nodeId, relationId: nodeId === expected[0] ? "other" : "identity" }, name: nodeId });
+    for (const nodeId of expected) host.registerType({ type: { node_id: nodeId, pip_id: nodeId === expected[0] ? "other" : "identity" }, name: nodeId });
   } }) });
   await assert.rejects(() => wrongIdentity.install(suite.nodeType), /missing .*\/identity.*extra .*\/other/);
   assert.equal(wrongIdentity.types().length, 0);

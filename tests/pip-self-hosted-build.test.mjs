@@ -21,7 +21,7 @@ test("self-hosted source builds isolated a0 through a2 candidates with a receipt
   const repeatedCandidates = path.join(temporary, "candidates-repeated");
   const extracted = run("extract-system-sources.mjs", source);
   assert.equal(extracted.status, 0, extracted.stderr);
-  await appendFile(path.join(source, "pip-editor", "relation", "patch.ts"), "\n// Candidate self-hosting edit.\n");
+  await appendFile(path.join(source, "pip-editor", "pip", "patch.ts"), "\n// Candidate self-hosting edit.\n");
   const unsealed = run("build-self-hosted-candidates.mjs", source, candidates);
   assert.notEqual(unsealed.status, 0);
   assert.match(unsealed.stderr, /no longer matches its receipt/);

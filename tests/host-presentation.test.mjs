@@ -4,10 +4,10 @@ import {
   createHostCanvasState,
   HostPresentationStore,
   tabStripHeightAfterWorkspaceDrop,
-} from "../pip-editor/relation-host/workspace/host-presentation-store.ts";
+} from "../pip-editor/pip-host/workspace/host-presentation-store.ts";
 import {
   EditorPreferenceStore,
-} from "../pip-editor/relation-host-io/preferences/store.ts";
+} from "../pip-editor/pip-host-io/preferences/store.ts";
 
 test("host canvas starts empty and workspace windows stay outside business state", () => {
   const published = [];

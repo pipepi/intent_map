@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/relation-host/packages/element-package.ts";
-import { encodeNodeMapPackage } from "../../pip-editor/relation-host/packages/node-map-package.ts";
-import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/relation-host/packages/node-type-package.ts";
-import { exactPackageRef } from "../../pip-editor/relation-host/packages/pip-package.ts";
+import { decodeElementPackage, encodeElementPackage } from "../../pip-editor/pip-host/packages/element-package.ts";
+import { encodeNodeMapPackage } from "../../pip-editor/pip-host/packages/node-map-package.ts";
+import { decodeNodeTypePackage, encodeNodeTypePackage } from "../../pip-editor/pip-host/packages/node-type-package.ts";
+import { exactPackageRef } from "../../pip-editor/pip-host/packages/pip-package.ts";
 import { baseElementManifest, baseNodeMapManifest, baseNodeTypeManifest } from "../shared/manifest-builders.ts";
-import { buildRelationProjectionPlugins } from "../relation-projections/suite.ts";
+import { buildPipProjectionPlugins } from "../pip-projections/suite.ts";
 import { sceneNodeMapData, sceneOntology, SCENE_NODE_MAP_ID, SCENE_ELEMENT_PLUGIN_ID, SCENE_NODE_PLUGIN_ID, SCENE_TYPES } from "./domain.ts";
 
 export * from "./domain.ts";
@@ -36,7 +36,7 @@ async function bundle(entry: string) {
 
 export async function buildScenePluginSuite() {
   const [support, elementSources, nodeSources, elementSource, nodeTypeSource] = await Promise.all([
-    buildRelationProjectionPlugins(),
+    buildPipProjectionPlugins(),
     sources(elementFiles), sources(nodeTypeFiles), bundle("elements/entry.js"), bundle("runtime/entry.js"),
   ]);
   const elementManifest = {
@@ -49,7 +49,7 @@ export async function buildScenePluginSuite() {
   const elementPip = await encodeElementPackage(elementManifest, elementSource, elementSources);
   const element = await decodeElementPackage(elementPip);
   const nodeManifest = baseNodeTypeManifest(
-    SCENE_NODE_PLUGIN_ID, "Scene Relation Types", SCENE_TYPES, [await exactPackageRef(elementPip, element.manifest)], Object.keys(nodeSources),
+    SCENE_NODE_PLUGIN_ID, "Scene Pip Types", SCENE_TYPES, [await exactPackageRef(elementPip, element.manifest)], Object.keys(nodeSources),
   );
   const nodeTypePip = await encodeNodeTypePackage(nodeManifest, sceneOntology, nodeTypeSource, nodeSources);
   const nodeType = await decodeNodeTypePackage(nodeTypePip);

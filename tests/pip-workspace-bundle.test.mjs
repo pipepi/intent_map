@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { relationDocumentValues, serializeRelationDocument } from "../pip-editor/relation/document.ts";
-import { sampleRelationDocument } from "./relation-document-fixture.mjs";
-import { DEFAULT_PIP_LOADER_SOURCE, decodePip, encodePip } from "../pip-editor/pip/index.ts";
-import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip/io-policy.ts";
-import { bundleSplitWorkspace, unpackWorkspaceBundle } from "../pip-editor/pip/bundle/workspace-bundle.ts";
-import { MemoryWorkspaceResourceStore, openWorkspaceResourceSession } from "../pip-editor/pip/workspace/resource-store.ts";
-import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../pip-editor/pip/workspace/resource-index.ts";
+import { pipDocumentValues, serializePipDocument } from "../pip-editor/pip/document.ts";
+import { samplePipDocument } from "./pip-document-fixture.mjs";
+import { DEFAULT_PIP_LOADER_SOURCE, decodePip, encodePip } from "../pip-editor/pip-package/index.ts";
+import { ASK_PIP_IO_POLICY, UNLIMITED_PIP_IO_POLICY } from "../pip-editor/pip-package/io-policy.ts";
+import { bundleSplitWorkspace, unpackWorkspaceBundle } from "../pip-editor/pip-package/bundle/workspace-bundle.ts";
+import { MemoryWorkspaceResourceStore, openWorkspaceResourceSession } from "../pip-editor/pip-package/workspace/resource-store.ts";
+import { createWorkspaceResourceIndex, workspaceResourceIndexAsset } from "../pip-editor/pip-package/workspace/resource-index.ts";
 
 const io = { policy: UNLIMITED_PIP_IO_POLICY };
 const resources = [
@@ -16,7 +16,7 @@ const resources = [
 ];
 
 const packageFor = (index) => {
-  const document = sampleRelationDocument();
+  const document = samplePipDocument();
   return {
     manifest: {
       packageId: "bundle-test",
@@ -25,13 +25,13 @@ const packageFor = (index) => {
       name: "Bundle Test",
       packageVersion: "1.0.0",
       releaseDate: "20260807",
-      rootNodeId: relationDocumentValues(document).rootNodeIds[0],
+      rootNodeId: pipDocumentValues(document).rootNodeIds[0],
       loaderAbi: "pip-loader/1",
       artifactRole: "authoring-source",
       providedEditorKinds: [],
       supportedDocumentKinds: [],
-      preferredEditorKinds: ["relation-graph/1"],
-      requiredEditorCapabilities: ["relation-workspace/2"],
+      preferredEditorKinds: ["pip-graph/1"],
+      requiredEditorCapabilities: ["pip-workspace/2"],
       providedCapabilities: [],
       requiredCapabilities: [],
       requiredAuthoringCapabilities: [],
@@ -40,7 +40,7 @@ const packageFor = (index) => {
       contentType: "application/vnd.intent-map.pip",
     },
     loaderSource: DEFAULT_PIP_LOADER_SOURCE,
-    rootTreeText: serializeRelationDocument(document),
+    rootTreeText: serializePipDocument(document),
     assets: [workspaceResourceIndexAsset(index)],
   };
 };

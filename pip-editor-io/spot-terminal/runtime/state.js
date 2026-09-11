@@ -1,3 +1,5 @@
+import { PipForkLevel } from "../../../pip-editor/pip/types.ts";
+import { graphRevision, graphNodes } from "../../../pip-editor/pip/pip-model.ts";
 import { scalar } from "./selectors.js";
 import { environmentConfig } from "./environment.js";
 import { reconcile_facts } from "./facts/reconcile.js";
@@ -13,29 +15,34 @@ export const initialState = () => ({
 });
 export const stateOf = (node) => ({ ...initialState(), ...scalar(node, STATE, {}) });
 export const configOf = (node) => environmentConfig(scalar(node, CONFIG, {}));
-export const configRelation = (environment) => ({
-  id: "config", predicate: { nodeId: CONFIG, relationId: "identity" },
-  object: { kind: "const", value: { environment } }, relations: [],
+export const configPip = (environment) => ({
+  id: "config",
+    fork_level: PipForkLevel.PIPE,
+    predicate_value: { predicate: { node_id: CONFIG, pip_id: "identity" }, value: { kind: "const", value: { environment } } },
+    pips: []
 });
-export const stateRelation = (value) => ({
-  id: "state", predicate: { nodeId: STATE, relationId: "identity" }, object: { kind: "const", value }, relations: [],
+export const statePip = (value) => ({
+  id: "state",
+    fork_level: PipForkLevel.PIPE,
+    predicate_value: { predicate: { node_id: STATE, pip_id: "identity" }, value: { kind: "const", value } },
+    pips: []
 });
 export const patchState = (graph, terminal_id, value) => {
   const fact_patch = reconcile_facts(graph, terminal_id, value);
-  return { schemaVersion: 1, baseRevision: graph.revision, operations: [
+  return { schemaVersion: 2, baseRevision: graphRevision(graph), operations: [
     ...fact_patch.operations,
-    { op: "put-relation", nodeId: terminal_id, relation: stateRelation(value) },
+    { op: "put", parent_path: [terminal_id], pip: statePip(value) },
   ] };
 };
 export const patchEnvironment = (graph, terminal_id, environment, value) => {
   const fact_patch = reconcile_facts(graph, terminal_id, value);
-  return { schemaVersion: 1, baseRevision: graph.revision, operations: [
+  return { schemaVersion: 2, baseRevision: graphRevision(graph), operations: [
     ...fact_patch.operations,
-    { op: "put-relation", nodeId: terminal_id, relation: configRelation(environment) },
-    { op: "put-relation", nodeId: terminal_id, relation: stateRelation(value) },
+    { op: "put", parent_path: [terminal_id], pip: configPip(environment) },
+    { op: "put", parent_path: [terminal_id], pip: statePip(value) },
   ] };
 };
 export const terminalNode = (input, graph) => {
-  if (!input || typeof input.terminalId !== "string" || !graph.nodes[input.terminalId]) throw new Error("交易终端上下文已失效");
-  return graph.nodes[input.terminalId];
+  if (!input || typeof input.terminalId !== "string" || !graphNodes(graph)[input.terminalId]) throw new Error("交易终端上下文已失效");
+  return graphNodes(graph)[input.terminalId];
 };

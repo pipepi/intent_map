@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("the browser adapter mounts the generic RelationHost", async () => {
+test("the browser adapter mounts the generic PipHost", async () => {
   const [entry, shell, host] = await Promise.all([
     readFile(new URL("../pip-editor/web/main.tsx", import.meta.url), "utf8"),
     readFile(new URL("../pip-editor/web/index.html", import.meta.url), "utf8"),
-    readFile(new URL("../pip-editor/relation-host/relation-host.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/pip-host/pip-host.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(entry, /createRoot\(root\)\.render/);
-  assert.match(entry, /<RelationHost/);
+  assert.match(entry, /<PipHost/);
   assert.match(shell, /<div id="root"><\/div>/);
   assert.match(host, /new WorkspaceSessionStore\(\[\], setWorkspaces\)/);
   assert.doesNotMatch(host, /IntentNode|SceneNode|CanvasNode/);
@@ -28,8 +28,8 @@ test("the esbuild export is a self-contained editor shell without Next assets", 
 
 test("derived views never persist an edges collection", async () => {
   const [model, collection] = await Promise.all([
-    readFile(new URL("../pip-editor/relation/reference-index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../pip-editor/relation-host/packages/node-map-package.ts", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/pip/reference-index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../pip-editor/pip-host/packages/node-map-package.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(model, /\bedges\s*:/);
   assert.doesNotMatch(collection, /\bedges\s*:/);
