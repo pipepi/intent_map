@@ -21,7 +21,10 @@ export type PipValue = {
 };
 // 常量对象兼容 Node 原生 TypeScript 类型擦除，无需枚举的运行时代码转换。
 export const PipForkLevel = {
-    DOCUMENT: 0, GRAPH: 1, NODE: 2, PIPE: 3
+    DOCUMENT: "document",
+    GRAPH: "graph",
+    NODE: "node",
+    PIPE: "pipe",
 } as const;
 export type PipForkLevel = typeof PipForkLevel[keyof typeof PipForkLevel];
 export type PipPredicateValue = {

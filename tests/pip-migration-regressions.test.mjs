@@ -9,9 +9,9 @@ import { triggerProviders } from "../pip-editor-io/pip-projections/flow/triggers
 
 test("触发器输入映射按 payload 字段名读取，不迁移同名操作符", () => {
   const source = {
-    id: "trigger", fork_level: 2,
+    id: "trigger", fork_level: "node",
     pips: [{
-      id: "mapping", fork_level: 3,
+      id: "mapping", fork_level: "pipe",
       predicate_value: {
         predicate: { node_id: "relation.trigger.predicate.input-mapping", pip_id: "identity" },
         value: { kind: "const", value: { op: "relation.flow", target: "source" } },
@@ -63,7 +63,7 @@ test("旧 v1/v2 的 revision 节点与引用保留，元数据确定性避让", 
     const { graph, rootNodeIds: root_ids, workspace } = pipDocumentValues(document);
     assert.deepEqual(input, before);
     assert.equal(graphRevision(graph), 7);
-    const metadata = graph.pips.find(pip => pip.fork_level === 3);
+    const metadata = graph.pips.find(pip => pip.fork_level === "pipe");
     assert.equal(metadata.id, "revision~2");
     assert.equal(graphNodes(graph).source.pips[0].predicate_value.value.target.node_id, "revision");
     assert.deepEqual(root_ids, ["revision"]);
@@ -71,21 +71,21 @@ test("旧 v1/v2 的 revision 节点与引用保留，元数据确定性避让", 
     assert.deepEqual(loadPipDocument(JSON.parse(serializePipDocument(document))), document);
     const applied = applyPipTx(graph, {
       schemaVersion: 2, baseRevision: 7,
-      operations: [{ op: "put", parent_path: ["revision"], pip: { id: "note", fork_level: 3, pips: [] } }],
+      operations: [{ op: "put", parent_path: ["revision"], pip: { id: "note", fork_level: "pipe", pips: [] } }],
     });
     assert.equal(graphRevision(applied.pip), 8);
     const restored = applyPipTx(applied.pip, applied.inverse).pip;
     assert.equal(graphRevision(restored), 9);
     assert.deepEqual(graphNodes(restored), graphNodes(graph));
-    assert.equal(restored.pips.find(pip => pip.fork_level === 3).id, "revision~2");
+    assert.equal(restored.pips.find(pip => pip.fork_level === "pipe").id, "revision~2");
   }
 });
 
 test("元数据避让后仍拒绝同谓词重复元数据", () => {
   const graph = createCorePipGraph();
-  setGraphNode(graph, { id: "revision", fork_level: 2, pips: [] });
+  setGraphNode(graph, { id: "revision", fork_level: "node", pips: [] });
   assert.doesNotThrow(() => assertPipGraph(graph));
-  const metadata = graph.pips.find(pip => pip.fork_level === 3);
+  const metadata = graph.pips.find(pip => pip.fork_level === "pipe");
   graph.pips.push({ ...structuredClone(metadata), id: "duplicate" });
   assert.throws(() => assertPipGraph(graph), /Expected one metadata/);
 });

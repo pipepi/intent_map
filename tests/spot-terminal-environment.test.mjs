@@ -8,11 +8,11 @@ import { loginView, terminalView } from "../pip-editor-io/spot-terminal/elements
 
 const pip = (id, predicate, value) => ({
   id,
-    fork_level: 3,
+    fork_level: "pipe",
     predicate_value: { predicate: { node_id: predicate, pip_id: "identity" }, value: { kind: "const", value } },
     pips: []
 });
-const terminal = (id, environment) => ({ id, fork_level: 2, pips: [
+const terminal = (id, environment) => ({ id, fork_level: "node", pips: [
   pip("config", "spot.terminal.predicate.config", { environment }),
   pip("state", "spot.terminal.predicate.state", { authenticated: true, botEnabled: true }),
 ] });

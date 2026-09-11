@@ -25,7 +25,7 @@ class IntentPipNode extends HTMLElement{set context(v){this._context=v;this.rend
 if(!customElements.get("intent-pip-node"))customElements.define("intent-pip-node",IntentPipNode);
 `;
 const nodeTypeSource = `
-const nodesOf=graph=>Object.fromEntries(graph.pips.filter(p=>p.fork_level===2).map(p=>[p.id,p]));
+const nodesOf=graph=>Object.fromEntries(graph.pips.filter(p=>p.fork_level==="node").map(p=>[p.id,p]));
 const target=(node,predicate)=>node?.pips.find(r=>r.predicate_value?.predicate.node_id===predicate)?.predicate_value?.value?.target;
 const scalar=(node,predicate)=>node?.pips.find(r=>r.predicate_value?.predicate.node_id===predicate)?.predicate_value?.value?.value;
 const typeIds=${JSON.stringify(INTENT_TYPES)};

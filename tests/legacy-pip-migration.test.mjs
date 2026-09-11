@@ -45,20 +45,20 @@ test("旧 v3 的身份、引用和根节点一起迁移，且输入不变、迁�
 
 test("嵌套 ref 被迁移，普通 const 和第三方身份原样保留", () => {
   const source = old_document();
-  const graph = source.pips.find(pip => pip.fork_level === 1);
+  const graph = source.pips.find(pip => pip.fork_level === "graph");
   setGraphNode(graph, {
     id: "relation.custom.user",
-    fork_level: 2,
+    fork_level: "node",
     pips: [{
       id: "text",
-      fork_level: 3,
+      fork_level: "pipe",
       predicate_value: {
         predicate: { node_id: "relation.core.identity", pip_id: "identity" },
         value: { kind: "const", value: "relation.core.type" },
       },
       pips: [{
         id: "nested",
-        fork_level: 3,
+        fork_level: "pipe",
         predicate_value: {
           predicate: { node_id: "relation.core.type", pip_id: "identity" },
           value: {
@@ -79,7 +79,7 @@ test("嵌套 ref 被迁移，普通 const 和第三方身份原样保留", () =>
 
 test("新旧节点身份冲突时拒绝迁移，不覆盖任何一方", () => {
   const source = old_document();
-  const graph = source.pips.find(pip => pip.fork_level === 1);
+  const graph = source.pips.find(pip => pip.fork_level === "graph");
   setGraphNode(graph, graphNodes(createCorePipGraph())["pip.core.type"]);
   assert.throws(() => loadPipDocument(source), /identity collision/);
   assert.ok(graphNodes(graph)["relation.core.type"]);

@@ -2,6 +2,7 @@
 import { createCorePipGraph } from "./core-graph.ts";
 import { createGraph, setGraphNode, setGraphRevision } from "./pip-model.ts";
 import { migrate_identifier } from "./legacy-identifiers.ts";
+import { migrate_fork_levels } from "./legacy-fork-level.ts";
 import { migrate_graph, migrate_workspace } from "./legacy-semantics.ts";
 import { PipForkLevel, type Pip, type PipRef, type PipValue, type JsonValue } from "./types.ts";
 
@@ -77,8 +78,8 @@ export function legacyDocumentValues(value: unknown): {
     throw new Error("Invalid legacy document");
   }
   let graph: Pip;
-  if (values.graph.fork_level === PipForkLevel.GRAPH) {
-    graph = migrate_graph(values.graph as Pip);
+  if (values.graph.fork_level === PipForkLevel.GRAPH || values.graph.fork_level === 1) {
+    graph = migrate_graph(migrate_fork_levels(values.graph) as Pip);
   } else {
     if (!is_record(values.graph.nodes) || typeof values.graph.revision !== "number") {
       throw new Error("Invalid legacy graph");

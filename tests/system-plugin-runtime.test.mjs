@@ -74,7 +74,7 @@ test("registry rejects duplicate ids, duplicate type nodes, and invalid windows"
         ...definition({ id: "invalid-type" }),
         typeNode: {
             id: "pip.host.type.invalid-type",
-            fork_level: 2,
+            fork_level: "node",
             pips: []
         },
     };

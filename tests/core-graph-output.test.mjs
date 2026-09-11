@@ -11,7 +11,7 @@ const identity = {
 
 const type = {
   id: "type",
-    fork_level: 3,
+    fork_level: "pipe",
     predicate_value: { predicate: {
             node_id: "pip.core.type",
             pip_id: "identity"
@@ -27,11 +27,11 @@ const type = {
 
 const coreNode = (id) => ({
   id,
-    fork_level: 2,
+    fork_level: "node",
     pips: [
     {
       id: "identity",
-            fork_level: 3,
+            fork_level: "pipe",
             predicate_value: { predicate: identity, value: { kind: "const", value: id } },
             pips: []
         },

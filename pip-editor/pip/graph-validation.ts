@@ -64,7 +64,7 @@ export function assertPip(value: unknown, depth = 0): asserts value is Pip {
         throw new Error("Unexpected field in Pip");
     }
     assertId(value.id);
-    if (![0, 1, 2, 3].includes(value.fork_level as number)) {
+    if (!(Object.values(PipForkLevel) as unknown[]).includes(value.fork_level)) {
         throw new Error("Invalid Pip fork_level");
     }
     if (value.predicate_value !== undefined) {
@@ -83,7 +83,7 @@ export function assertPip(value: unknown, depth = 0): asserts value is Pip {
         ids.add(child.id);
         const allowed = value.fork_level === PipForkLevel.DOCUMENT ? [PipForkLevel.GRAPH, PipForkLevel.PIPE]
             : value.fork_level === PipForkLevel.GRAPH ? [PipForkLevel.NODE, PipForkLevel.PIPE] : [PipForkLevel.PIPE];
-        if (!(allowed as number[]).includes(child.fork_level)) {
+        if (!(allowed as PipForkLevel[]).includes(child.fork_level)) {
             throw new Error("Invalid nested Pip fork level");
         }
     }

@@ -13,10 +13,10 @@ const identity = { node_id: "pip.core.identity", pip_id: "identity" };
 
 const person = (id, name) => ({
   id,
-    fork_level: 2,
+    fork_level: "node",
     pips: [
-    { id: "identity", fork_level: 3, predicate_value: { predicate: identity, value: { kind: "const", value: id } }, pips: [] },
-    { id: "name", fork_level: 3, predicate_value: { predicate: identity, value: { kind: "const", value: name } }, pips: [] },
+    { id: "identity", fork_level: "pipe", predicate_value: { predicate: identity, value: { kind: "const", value: id } }, pips: [] },
+    { id: "name", fork_level: "pipe", predicate_value: { predicate: identity, value: { kind: "const", value: name } }, pips: [] },
   ]
 });
 
@@ -53,9 +53,9 @@ test("consumer-owned references are indexed in both directions", () => {
             ...person("event.target", "事件").pips,
             {
               id: "subject",
-                            fork_level: 3,
+                            fork_level: "pipe",
                             predicate_value: { predicate: identity, value: { kind: "ref", target: { node_id: "person.source", pip_id: "identity" } } },
-                            pips: [{ id: "confidence", fork_level: 3, predicate_value: { predicate: identity, value: { kind: "const", value: 1 } }, pips: [] }]
+                            pips: [{ id: "confidence", fork_level: "pipe", predicate_value: { predicate: identity, value: { kind: "const", value: 1 } }, pips: [] }]
                         },
           ],
         } },
@@ -79,10 +79,10 @@ test("patch rejects stale revisions and dangling references without changing sou
     baseRevision: 0,
     operations: [{ op: "put", parent_path: [], pip: {
         id: "broken",
-                    fork_level: 2,
+                    fork_level: "node",
                     pips: [{
           id: "identity",
-                            fork_level: 3,
+                            fork_level: "pipe",
                             predicate_value: { predicate: identity, value: { kind: "ref", target: { node_id: "missing", pip_id: "identity" } } },
                             pips: []
                         }]
@@ -101,10 +101,10 @@ test("removing a referenced node requires references to be removed in the same p
       { op: "put", parent_path: [], pip: person("person.source", "来源") },
       { op: "put", parent_path: [], pip: {
           id: "consumer",
-                    fork_level: 2,
+                    fork_level: "node",
                     pips: [
-            { id: "identity", fork_level: 3, predicate_value: { predicate: identity, value: { kind: "const", value: "consumer" } }, pips: [] },
-            { id: "input", fork_level: 3, predicate_value: { predicate: identity, value: { kind: "ref", target: { node_id: "person.source", pip_id: "identity" } } }, pips: [] },
+            { id: "identity", fork_level: "pipe", predicate_value: { predicate: identity, value: { kind: "const", value: "consumer" } }, pips: [] },
+            { id: "input", fork_level: "pipe", predicate_value: { predicate: identity, value: { kind: "ref", target: { node_id: "person.source", pip_id: "identity" } } }, pips: [] },
           ]
                 } },
     ],

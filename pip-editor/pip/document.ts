@@ -5,6 +5,7 @@ import { graphNodes, META, metadataPipe, metadataValue } from "./pip-model.ts";
 import { pipKey, pipValueRefs } from "./traversal.ts";
 import { PipForkLevel, type JsonValue, type Pip } from "./types.ts";
 import { legacyDocumentValues } from "./legacy-document.ts";
+import { migrate_fork_levels } from "./legacy-fork-level.ts";
 import { migrate_legacy_document } from "./legacy-semantics.ts";
 export type PipDocumentValues = {
     graph: Pip;
@@ -44,6 +45,7 @@ export function pipDocumentValues(document: Pip): PipDocumentValues {
     };
 }
 export function loadPipDocument(value: unknown): Pip {
+    value = migrate_fork_levels(value);
     const legacy = legacyDocumentValues(value);
     if (legacy) {
         return createPipDocument(legacy.graph, legacy.rootNodeIds, legacy.workspace);
