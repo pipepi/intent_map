@@ -42,6 +42,10 @@ export async function runPreparedPipBatch(
   };
   options.onUpdate(current);
 
+  // A5 可以解析同批次中比自身更大的 A4；授权边界仍限定为用户所选文件。
+  const selected_package_limit = prepared.files.reduce(
+    (maximum, file) => Math.max(maximum, file.bytes.length), 0,
+  );
   for (const file of prepared.files) {
     current = updateImportStatus(current, file.id, {
       layer: file.layer,
@@ -55,7 +59,7 @@ export async function runPreparedPipBatch(
         ...options.context(),
         fileName: file.file.name,
         ioOptions: {
-          policy: selectedPipFilePolicy(file.bytes.length),
+          policy: selectedPipFilePolicy(selected_package_limit),
         },
         resolvePackage: (reference) =>
           prepared.bytesBySha.get(reference.sha256) ??
@@ -76,4 +80,3 @@ export async function runPreparedPipBatch(
 
   return current;
 }
-

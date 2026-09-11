@@ -94,7 +94,7 @@ export async function buildIntentPluginSuite() {
   const elementManifest = { ...baseElementManifest(INTENT_ELEMENT_PLUGIN_ID, "Intent Elements"), packageVersion: "3.0.0", elements: [{ id: "node", tag: "intent-pip-node", purpose: "node" as const }] };
   const elementPip = await encodeElementPackage(elementManifest, elementSource, { "source/index.js": elementSource }), element = await decodeElementPackage(elementPip);
   const nodeManifest = { ...baseNodeTypeManifest(INTENT_NODE_PLUGIN_ID, "Intent Pip Types", INTENT_TYPES, [await exactPackageRef(elementPip, element.manifest)]), packageVersion: "3.0.0" };
-  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, intentOntology, nodeTypeSource, { "source/index.js": nodeTypeSource }), nodeType = await decodeNodeTypePackage(nodeTypePip);
+  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, intentOntology, nodeTypeSource, { "source/index.js": nodeTypeSource }, [element]), nodeType = await decodeNodeTypePackage(nodeTypePip);
   const nodeMap: NodeMap = {
     manifest: { ...baseNodeMapManifest(INTENT_NODE_MAP_ID, "Intent Workspace", [], [await exactPackageRef(support.nodeTypePip, support.nodeType.manifest), await exactPackageRef(nodeTypePip, nodeType.manifest)]), packageVersion: "3.0.0" },
     graph: intentNodeMapGraph,

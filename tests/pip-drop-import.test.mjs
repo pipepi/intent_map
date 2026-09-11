@@ -144,7 +144,7 @@ test("a thin A5 resolves exact A3 and A4 dependencies from the same batch", asyn
     resolveInstalled: () => undefined,
   });
 
-  assert.equal(result.files.every((file) => file.state === "succeeded"), true);
+  assert.equal(result.files.every((file) => file.state === "succeeded"), true, JSON.stringify(result.files));
   assert.equal(openedNodeMaps, 1);
 });
 

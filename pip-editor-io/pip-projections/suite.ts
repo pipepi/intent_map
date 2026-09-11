@@ -35,6 +35,6 @@ export async function buildPipProjectionPlugins() {
   };
   const elementPip = await encodeElementPackage(elementManifest, elementSource, elementSources), element = await decodeElementPackage(elementPip);
   const nodeManifest = baseNodeTypeManifest(PIP_NODE_PLUGIN_ID, "Pip Projection and Flow Types", [PROJECTION_INSTANCE_TYPE, ...FLOW_TYPES, ...TRIGGER_TYPES, ...EXECUTION_TYPES], [await exactPackageRef(elementPip, element.manifest)], Object.keys(runtimeSources));
-  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, pipFlowOntology, nodeTypeSource, runtimeSources), nodeType = await decodeNodeTypePackage(nodeTypePip);
+  const nodeTypePip = await encodeNodeTypePackage(nodeManifest, pipFlowOntology, nodeTypeSource, runtimeSources, [element]), nodeType = await decodeNodeTypePackage(nodeTypePip);
   return { element, elementPip, nodeType, nodeTypePip };
 }
